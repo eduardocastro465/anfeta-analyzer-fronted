@@ -1,28 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { fetchColaboradores, fetchActividadesByUser } from "@/lib/api";
+import { fetchColaboradores, SignIn, validateSession } from "@/lib/api";
 import type { Colaborador, Actividad } from "@/lib/types";
 import {
-  User,
   Mail,
-  ListTodo,
   ArrowRight,
   Loader2,
   AlertCircle,
@@ -31,7 +13,7 @@ import {
   Sun,
   ChevronDown,
 } from "lucide-react";
-import Image from "next/image"
+import Image from "next/image";
 
 interface LoginFormProps {
   onLogin: (colaborador: Colaborador, actividades: Actividad[]) => void;
@@ -40,19 +22,63 @@ interface LoginFormProps {
 export function LoginForm({ onLogin }: LoginFormProps) {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [colaboradorInfo, setColaboradorInfo] = useState<Colaborador | null>(null);
+  const [colaboradorInfo, setColaboradorInfo] = useState<Colaborador | null>(
+    null,
+  );
   const [isLoadingColaboradores, setIsLoadingColaboradores] = useState(true);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    loadColaboradores();
-
     // Detectar tema del sistema
     const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     setTheme(isDark ? "dark" : "light");
     document.documentElement.classList.toggle("dark", isDark);
+
+    // Verificar sesión existente
+    checkExistingSession();
   }, []);
+
+  const checkExistingSession = async () => {
+    setIsCheckingSession(true);
+    try {
+      const user = await validateSession();
+      console.log("Sesión validada:", user);
+
+      if (user && user.email) {
+        // Usuario tiene sesión activa, cargar colaboradores para encontrar sus datos
+        const colaboradoresData = await fetchColaboradores();
+        setColaboradores(colaboradoresData);
+
+        // Buscar el colaborador que coincida con el email de la sesión
+        const colaboradorActivo = colaboradoresData.find(
+          (c) => c.email === user.email,
+        );
+
+        if (colaboradorActivo) {
+          // Guardar en localStorage y hacer login automático
+          localStorage.setItem(
+            "colaborador",
+            JSON.stringify(colaboradorActivo),
+          );
+          localStorage.setItem("actividades", JSON.stringify([]));
+
+          // Redirigir al chatbot
+          onLogin(colaboradorActivo, []);
+          return;
+        }
+      }
+
+      // No hay sesión válida, cargar colaboradores normalmente
+      await loadColaboradores();
+    } catch (err) {
+      console.error("Error al verificar sesión:", err);
+      await loadColaboradores();
+    } finally {
+      setIsCheckingSession(false);
+    }
+  };
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
@@ -84,10 +110,13 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   }, [selectedId, colaboradores]);
 
   const handleAcceder = () => {
-    if (colaboradorInfo) {
-      // Pasar un array vacío de actividades ya que no necesitamos cargarlas
-      onLogin(colaboradorInfo, []);
-    }
+    SignIn(colaboradorInfo?.email || "").then((user) => {
+      if (colaboradorInfo && user) {
+        localStorage.setItem("colaborador", JSON.stringify(colaboradorInfo));
+        localStorage.setItem("actividades", JSON.stringify([]));
+        onLogin(colaboradorInfo, []);
+      }
+    });
   };
 
   const getDisplayName = (colaborador: Colaborador) => {
@@ -96,6 +125,20 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     }
     return colaborador.email.split("@")[0];
   };
+
+  // Mostrar pantalla de carga mientras se verifica la sesión
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-neutral-900 font-['Arial'] flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-[#6841ea] mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400 text-sm">
+            Verificando sesión...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white dark:bg-neutral-900 font-['Arial']">
@@ -149,7 +192,9 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <p className="text-red-700 dark:text-red-300 text-xs mb-1">{error}</p>
+                    <p className="text-red-700 dark:text-red-300 text-xs mb-1">
+                      {error}
+                    </p>
                     <button
                       onClick={loadColaboradores}
                       className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 text-xs font-medium flex items-center gap-1"
@@ -182,9 +227,15 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                     onChange={(e) => setSelectedId(e.target.value)}
                     className="w-full h-12 px-3 bg-white/70 dark:bg-neutral-800/70 backdrop-blur-sm border-0 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#6841ea] shadow-sm appearance-none text-sm"
                   >
-                    <option value="" className="text-gray-400">Selecciona tu usuario...</option>
+                    <option value="" className="text-gray-400">
+                      Selecciona tu usuario...
+                    </option>
                     {colaboradores.map((colaborador) => (
-                      <option key={colaborador._id} value={colaborador._id} className="bg-white dark:bg-neutral-800">
+                      <option
+                        key={colaborador._id}
+                        value={colaborador._id}
+                        className="bg-white dark:bg-neutral-800"
+                      >
                         {getDisplayName(colaborador)}
                       </option>
                     ))}
@@ -213,7 +264,9 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                       ) : (
                         <div className="w-10 h-10 bg-[#6841ea]/10 dark:bg-[#6841ea]/20 rounded-full flex items-center justify-center">
                           <span className="text-[#6841ea] dark:text-[#9270ff] font-bold text-sm">
-                            {getDisplayName(colaboradorInfo).charAt(0).toUpperCase()}
+                            {getDisplayName(colaboradorInfo)
+                              .charAt(0)
+                              .toUpperCase()}
                           </span>
                         </div>
                       )}
@@ -235,7 +288,6 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                           Correo: {colaboradorInfo.email}
                         </span>
                       </div>
-                    
                     </div>
                   </div>
                 </div>

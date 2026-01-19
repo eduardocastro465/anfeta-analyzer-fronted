@@ -9,8 +9,11 @@ export function getColaboradores(): Colaborador[] {
     act.assignees.forEach((email) => emailsSet.add(email))
   })
 
-  return Array.from(emailsSet).map((email) => ({
+  return Array.from(emailsSet).map((email, index) => ({
+    _id: `colaborador-${index}`,
     email,
+    firstName: extractNameFromEmail(email),
+    lastName: "",
     nombre: extractNameFromEmail(email),
   }))
 }
