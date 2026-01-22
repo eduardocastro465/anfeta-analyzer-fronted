@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { validateSession } from "../lib/api";
+import { validateSession, obtenerHistorialSession } from "../lib/api";
+import { HistorialSessionResponse } from "../lib/types";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -45,7 +46,6 @@ import {
   CalendarDays,
 } from "lucide-react";
 import Image from "next/image";
-import { verify } from "crypto";
 
 interface ChatBotProps {
   colaborador: Colaborador;
@@ -114,7 +114,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [step, setStep] = useState<ChatStep>("welcome");
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
@@ -362,6 +361,320 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setIsTyping(false);
     }
   };
+
+  const checkExistingConversation = async () => {
+    try {
+      const historial: HistorialSessionResponse =
+        await obtenerHistorialSession();
+
+      if (!historial.success || !historial.data) {
+        return false;
+      }
+
+      console.log("Sesión existente encontrada:", historial);
+
+      const proyectos = historial.proyectos;
+
+      if (!proyectos || !proyectos.actividades) {
+        return false;
+      }
+
+      // Obtener todos los pendientes
+      const todosPendientes = proyectos.actividades.flatMap(
+        (act: any) => act.pendientes || [],
+      );
+
+      const pendientesActivos = todosPendientes.filter(
+        (p: any) => p.estado === "pendiente",
+      );
+
+      // Calcular métricas
+      const totalPendientes = pendientesActivos.length;
+      const pendientesAlta = pendientesActivos.filter(
+        (p: any) => p.prioridad === "ALTA",
+      ).length;
+      const tiempoTotal = pendientesActivos.reduce(
+        (sum: number, p: any) => sum + (p.duracionMin || 0),
+        0,
+      );
+      const horasTotales = Math.floor(tiempoTotal / 60);
+      const minutosTotales = tiempoTotal % 60;
+      const tiempoFormateado = `${horasTotales}h ${minutosTotales}m`;
+
+      // Mostrar información del usuario
+      await addMessageWithTyping(
+        "bot",
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10">
+            <div className="p-2 rounded-full bg-[#6841ea]/10">
+              <User className="w-5 h-5 text-[#6841ea]" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">
+                ¡Hola de nuevo, {displayName}! 👋
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                <Mail className="w-3 h-3" />
+                {colaborador.email}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 mt-3">
+            <div className="p-2 rounded-full bg-[#6841ea]/10">
+              <Brain className="w-5 h-5 text-[#6841ea]" />
+            </div>
+            <div>
+              <h3 className="font-bold text-md">📋 Resumen de tu día</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {new Date().toLocaleDateString("es-MX", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}{" "}
+                • Sesión restaurada
+              </p>
+            </div>
+          </div>
+        </div>,
+        400,
+      );
+
+      // Mostrar métricas (igual que el original)
+      setTimeout(() => {
+        addMessage(
+          "bot",
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div
+                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Target className="w-3 h-3 text-red-500" />
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Alta
+                  </span>
+                </div>
+                <div className="text-xl font-bold text-red-500">
+                  {pendientesAlta}
+                </div>
+              </div>
+
+              <div
+                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-3 h-3 text-green-500" />
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Total
+                  </span>
+                </div>
+                <div className="text-xl font-bold">{totalPendientes}</div>
+              </div>
+
+              <div
+                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="w-3 h-3 text-yellow-500" />
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Tiempo
+                  </span>
+                </div>
+                <div className="text-xl font-bold text-yellow-500">
+                  {tiempoFormateado}
+                </div>
+              </div>
+            </div>
+
+            <div
+              className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
+            >
+              <div className="flex items-start gap-2">
+                <Bot className="w-4 h-4 text-[#6841ea] mt-0.5" />
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Para tu proyecto '<strong>{proyectos.nombre}</strong>', tienes{" "}
+                  {totalPendientes} tareas asignadas con un total de{" "}
+                  {tiempoFormateado}.
+                </p>
+              </div>
+            </div>
+          </div>,
+        );
+
+        // Mostrar tabla de tareas
+        setTimeout(() => {
+          if (pendientesActivos.length === 0) {
+            addMessage(
+              "bot",
+              <div
+                className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
+              >
+                <div className="text-center py-4">
+                  <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                  <h4 className="font-semibold mb-1">
+                    ¡Sin tareas pendientes!
+                  </h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Todas las tareas han sido completadas.
+                  </p>
+                </div>
+              </div>,
+            );
+          } else {
+            // Tabla igual que el diseño original
+            addMessage(
+              "bot",
+              <div
+                className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-gray-200"}`}
+              >
+                <div className="p-3 border-b border-[#2a2a2a] bg-[#6841ea]/10">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <Target className="w-4 h-4" />
+                      Tareas Planificadas ({pendientesActivos.length})
+                    </h4>
+                    <Badge variant="outline" className="text-xs">
+                      {tiempoFormateado}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto max-h-[300px]">
+                  <table className="w-full text-xs">
+                    <thead
+                      className={`sticky top-0 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+                    >
+                      <tr>
+                        <th className="p-2 text-left font-medium">#</th>
+                        <th className="p-2 text-left font-medium">Tarea</th>
+                        <th className="p-2 text-left font-medium">Tiempo</th>
+                        <th className="p-2 text-left font-medium">Prioridad</th>
+                        <th className="p-2 text-left font-medium">Días</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendientesActivos.map((tarea: any, idx: number) => {
+                        const diasPendiente = tarea.fechaCreacion
+                          ? Math.floor(
+                              (new Date().getTime() -
+                                new Date(tarea.fechaCreacion).getTime()) /
+                                (1000 * 60 * 60 * 24),
+                            )
+                          : 0;
+
+                        return (
+                          <tr
+                            key={tarea._id || idx}
+                            className={`border-t ${theme === "dark" ? "border-[#2a2a2a] hover:bg-[#252527]" : "border-gray-200 hover:bg-gray-50"}`}
+                          >
+                            <td className="p-2">
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium
+                              ${
+                                tarea.prioridad === "ALTA"
+                                  ? "bg-red-500/10 text-red-500"
+                                  : tarea.prioridad === "MEDIA"
+                                    ? "bg-yellow-500/10 text-yellow-500"
+                                    : "bg-green-500/10 text-green-500"
+                              }`}
+                              >
+                                {idx + 1}
+                              </div>
+                            </td>
+                            <td className="p-2">
+                              <div className="max-w-[180px]">
+                                <p className="font-medium truncate">
+                                  {tarea.nombre}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="p-2">
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-xs"
+                              >
+                                {tarea.duracionMin || 0}min
+                              </Badge>
+                            </td>
+                            <td className="p-2">
+                              <Badge
+                                className={`text-xs ${
+                                  tarea.prioridad === "ALTA"
+                                    ? "bg-red-500 hover:bg-red-600"
+                                    : tarea.prioridad === "MEDIA"
+                                      ? "bg-yellow-500 hover:bg-yellow-600"
+                                      : "bg-green-500 hover:bg-green-600"
+                                } text-white`}
+                              >
+                                {tarea.prioridad || "BAJA"}
+                              </Badge>
+                            </td>
+                            <td className="p-2">
+                              <div
+                                className={`px-2 py-1 rounded text-xs ${diasPendiente > 3 ? "bg-red-500/10 text-red-500" : "bg-gray-500/10 text-gray-500"}`}
+                              >
+                                {diasPendiente}d
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div
+                  className={`p-3 border-t ${theme === "dark" ? "border-[#2a2a2a] bg-[#252527]" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <div className="flex justify-between items-center text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <Target className="w-3 h-3 text-red-500" />
+                        <span>Alta: {pendientesAlta}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <FileText className="w-3 h-3 text-green-500" />
+                        <span>Total: {pendientesActivos.length}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 font-bold">
+                      <Clock className="w-3 h-3 text-yellow-500" />
+                      <span>{tiempoFormateado}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>,
+            );
+          }
+
+          // Mensaje final
+          setTimeout(() => {
+            addMessage(
+              "bot",
+              <div
+                className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#1a1a1a] border border-[#2a2a2a]" : "bg-gray-50 border border-gray-200"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#6841ea]" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    ¿Por cuál de estas tareas quieres comenzar?
+                  </span>
+                </div>
+              </div>,
+            );
+            setStep("finished");
+          }, 600);
+        }, 800);
+      }, 800);
+
+      return true;
+    } catch (error) {
+      console.error("Error al verificar conversación existente:", error);
+      return false;
+    }
+  };
+
   const showAssistantAnalysis = async (analysis: AssistantAnalysis) => {
     // Obtener las tareas planificadas
     const tareas = analysis.data.revisionesPorActividad[0]?.pendientes || [];
@@ -385,20 +698,23 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         </div>
 
         {/* Encabezado del análisis - Más corto */}
-        <div className="flex items-center gap-3 mt-3">
-          <div className="p-2 rounded-full bg-[#6841ea]/10">
-            <Brain className="w-5 h-5 text-[#6841ea]" />
-          </div>
-          <div>
-            <h3 className="font-bold text-md">📋 Resumen de tu día</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {new Date().toLocaleDateString("es-MX", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-            </p>
-          </div>
+        <div>
+          <h3 className="font-bold text-md flex items-center gap-2">
+            📋 Resumen de tu día
+            <Badge
+              variant="outline"
+              className="text-xs bg-[#6841ea]/10 text-[#6841ea] border-[#6841ea]/30"
+            >
+              Restaurado
+            </Badge>
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {new Date().toLocaleDateString("es-MX", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })}
+          </p>
         </div>
       </div>,
       400,
@@ -957,10 +1273,18 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       const user = await validateSession();
 
       if (!user) {
-        router.replace("/"); // 🔁 sin sesión → home
+        router.replace("/");
         return;
       }
 
+      // NUEVO: Verificar si hay sesión existente primero
+      const hasExistingSession = await checkExistingConversation();
+
+      if (hasExistingSession) {
+        return; // Ya se manejó en checkExistingConversation
+      }
+
+      // Si no hay sesión previa, flujo normal
       setTimeout(() => {
         addMessageWithTyping(
           "bot",
@@ -984,7 +1308,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     init();
   }, [router]);
-
   const handleUserInput = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userInput.trim()) return;
@@ -1561,20 +1884,3 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     </div>
   );
 }
-<style jsx>{`
-  @keyframes shake-x {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    25% {
-      transform: translateX(-5px);
-    }
-    75% {
-      transform: translateX(5px);
-    }
-  }
-  .animate-shake-x {
-    animation: shake-x 0.5s infinite;
-  }
-`}</style>;

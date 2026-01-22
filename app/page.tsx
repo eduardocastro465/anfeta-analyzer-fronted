@@ -5,7 +5,7 @@ import { LoginForm } from "@/components/login-form";
 import { ChatBot } from "@/components/chat-bot";
 
 import type { Colaborador, Actividad } from "@/lib/types";
-import { logout, validateSession } from "../lib/api";
+import { logout } from "../lib/api";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);

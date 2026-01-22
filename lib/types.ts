@@ -102,3 +102,45 @@ export interface AssistantAnalysis {
     }>;
   };
 }
+
+interface HistorialMensaje {
+  role: "usuario" | "bot";
+  contenido: string;
+  timestamp: string;
+  _id: string;
+}
+
+
+export interface HistorialSessionResponse {
+  success: boolean;
+  data: {
+    _id: string;
+    userId: string;
+    sessionId: string;
+    __v: number;
+    createdAt: string;
+    estadoAnterior: string | null;
+    estadoConversacion: string;
+    mensajes: HistorialMensaje[];
+    updatedAt: string;
+  } | null;
+  proyectos: {
+    _id: string;
+    userId: string;
+    nombre: string;
+    actividades: Array<{
+      ActividadId: string;
+      estado: string;
+      pendientes: Array<{
+        pendienteId: string;
+        nombre: string;
+        descripcion: string;
+        estado: string;
+        _id: string;
+      }>;
+      _id: string;
+    }>;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+}
