@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+// Agregar en los imports
 import { validateSession, obtenerHistorialSession } from "../lib/api";
 import { HistorialSessionResponse } from "../lib/types";
 import { Input } from "@/components/ui/input";
@@ -79,11 +80,10 @@ interface AssistantAnalysis {
   proyectoPrincipal: string;
   metrics: {
     totalActividades: number;
-    actividadesConTiempoTotal: number;
-    actividadesFinales: number;
-    tareasConTiempo: number;
-    tareasAltaPrioridad: number;
+    totalPendientes: number;
+    pendientesAltaPrioridad: number;
     tiempoEstimadoTotal: string;
+    actividadesConPendientes: number;
   };
   data: {
     actividades: Array<{
@@ -92,14 +92,15 @@ interface AssistantAnalysis {
       horario: string;
       status: string;
       proyecto: string;
-      esHorarioLaboral: boolean;
-      tieneRevisionesConTiempo: boolean;
+      tieneRevisiones: boolean;
     }>;
     revisionesPorActividad: Array<{
       actividadId: string;
       actividadTitulo: string;
-      actividadHorario: string;
-      tareasConTiempo: Array<{
+      totalPendientes: number;
+      pendientesAlta: number;
+      tiempoTotal: number;
+      pendientes: Array<{
         id: string;
         nombre: string;
         terminada: boolean;
@@ -107,16 +108,10 @@ interface AssistantAnalysis {
         duracionMin: number;
         fechaCreacion: string;
         fechaFinTerminada: string | null;
-        diasPendiente: number;
         prioridad: string;
       }>;
-      totalTareasConTiempo: number;
-      tareasAltaPrioridad: number;
-      tiempoTotal: number;
-      tiempoFormateado: string;
     }>;
   };
-  multiActividad: boolean;
 }
 
 // ========== MÁQUINA DE ESTADOS MEJORADA ==========
@@ -141,11 +136,11 @@ interface TaskExplanation {
   timestamp: Date;
 }
 
-// ========== Hook de síntesis de voz MÁS RÁPIDA ==========
+// ========== Hook de síntesis de voz FEMENINA (default) ==========
 const useVoiceSynthesis = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const speak = useCallback((text: string, rate = 1.2, pitch = 1.15) => {
+  const speak = useCallback((text: string, rate = 0.9, pitch = 1.15) => {
     if (!("speechSynthesis" in window)) {
       console.warn("Tu navegador no soporta síntesis de voz");
       return;
@@ -155,23 +150,28 @@ const useVoiceSynthesis = () => {
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "es-MX";
-    utterance.rate = rate;   // Aumentada a 1.2 para más velocidad
-    utterance.pitch = pitch;
+    utterance.rate = rate;   // Velocidad natural
+    utterance.pitch = pitch; // Más juvenil/femenino
     utterance.volume = 1;
 
     const voices = window.speechSynthesis.getVoices();
-    
-    // Priorizar voces femeninas rápidas
+
+    // 1️⃣ PRIORIDAD ABSOLUTA: Microsoft Sabina (MX)
     let selectedVoice =
       voices.find(v => v.name.includes("Microsoft Sabina")) ||
-      voices.find(v => v.name.includes("Google español") && !v.name.toLowerCase().includes("male")) ||
-      voices.find(v => v.name.includes("Helena") && v.lang.startsWith("es")) ||
-      voices.find(v => v.name.includes("Monica") && v.lang.startsWith("es")) ||
+
+      // 2️⃣ Google español femenino
+      voices.find(v =>
+        v.name.includes("Google español") &&
+        !v.name.toLowerCase().includes("male")
+      ) ||
+
+      // 3️⃣ Cualquier voz en español
       voices.find(v => v.lang.startsWith("es"));
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
-      console.log(" Voz seleccionada:", selectedVoice.name, "Velocidad:", rate);
+      console.log(" Voz seleccionada:", selectedVoice.name);
     }
 
     utterance.onstart = () => setIsSpeaking(true);
@@ -188,6 +188,7 @@ const useVoiceSynthesis = () => {
 
   return { speak, stop, isSpeaking };
 };
+
 
 const getDisplayName = (colaborador: Colaborador) => {
   if (colaborador.firstName || colaborador.lastName) {
@@ -217,10 +218,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const pipWindowRef = useRef<Window | null>(null);
   const recognitionRef = useRef<any>(null);
+  // Dentro del componente, agregar estos estados:
   const [isCheckingHistory, setIsCheckingHistory] = useState(false);
   const [hasExistingSession, setHasExistingSession] = useState(false);
-  const [isCheckingAfterHours, setIsCheckingAfterHours] = useState(false);
-  
   // ========== NUEVO: Estados para Modo Voz Mejorado ==========
   const [voiceMode, setVoiceMode] = useState<boolean>(false);
   const [voiceStep, setVoiceStep] = useState<VoiceModeStep>("idle");
@@ -240,21 +240,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
   // ========== NUEVO: Filtrado y ordenamiento de tareas ==========
   const { uniqueTasks, sortedTasks } = useMemo(() => {
-    if (!assistantAnalysis?.data?.revisionesPorActividad) {
+    if (!assistantAnalysis?.data?.revisionesPorActividad?.[0]?.pendientes) {
       return { uniqueTasks: [], sortedTasks: [] };
     }
 
-    // Obtener todas las tareas de todas las actividades
-    const allTasks = assistantAnalysis.data.revisionesPorActividad.flatMap(
-      actividad => actividad.tareasConTiempo.map(tarea => ({
-        ...tarea,
-        actividadId: actividad.actividadId,
-        actividadTitulo: actividad.actividadTitulo,
-        actividadHorario: actividad.actividadHorario
-      }))
-    );
+    const allTasks = assistantAnalysis.data.revisionesPorActividad[0].pendientes;
 
-    // Eliminar duplicados por ID
     const taskMap = new Map();
     allTasks.forEach(task => {
       if (!taskMap.has(task.id)) {
@@ -264,84 +255,24 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     const uniqueTasks = Array.from(taskMap.values());
 
-    // Ordenar por prioridad y duración
     const priorityOrder = { ALTA: 0, MEDIA: 1, BAJA: 2 };
     const sortedTasks = [...uniqueTasks].sort((a, b) => {
-      const priorityDiff = priorityOrder[a.prioridad as keyof typeof priorityOrder] - 
-                         priorityOrder[b.prioridad as keyof typeof priorityOrder];
+      const priorityDiff = priorityOrder[a.prioridad] - priorityOrder[b.prioridad];
       if (priorityDiff !== 0) return priorityDiff;
+
       return b.duracionMin - a.duracionMin;
     });
 
     return { uniqueTasks, sortedTasks };
   }, [assistantAnalysis]);
 
-  // ========== NUEVO: Función para verificar si es después de las 17:30 ==========
-  const checkIfAfterHours = () => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    
-    // Verificar si es después de las 17:30
-    return currentHour > 17 || (currentHour === 17 && currentMinute >= 30);
-  };
-
-  // ========== NUEVO: Función para verificar actividades al final del día ==========
-  const checkEndOfDayActivities = async () => {
-    try {
-      setIsCheckingAfterHours(true);
-      
-      const response = await fetch(
-        "http://localhost:4000/api/v1/assistant/verificar-actividades-finalizadas",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: colaborador.email,
-            timestamp: new Date().toISOString()
-          })
-        }
-      );
-
-      if (!response.ok) throw new Error(`Error: ${response.status}`);
-      const data = await response.json();
-
-      if (data.success && data.todasValidadas) {
-        // Mostrar mensaje de que todas las actividades han sido validadas
-        addMessage(
-          "bot",
-          <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-green-900/20 border-green-500/20" : "bg-green-50 border-green-200"}`}>
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              <div>
-                <span className="font-medium">¡Jornada completada! 🎉</span>
-                <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                  Todas tus actividades han sido revisadas y validadas correctamente. 
-                  ¡Buen trabajo! Puedes cerrar sesión.
-                </p>
-              </div>
-            </div>
-          </div>
-        );
-        
-        // Opcional: Hablar el mensaje
-        speakText("¡Perfecto! Todas tus actividades han sido revisadas y validadas. Buen trabajo, puedes cerrar sesión.");
-      }
-      
-      setIsCheckingAfterHours(false);
-    } catch (error) {
-      console.error("Error al verificar actividades finalizadas:", error);
-      setIsCheckingAfterHours(false);
-    }
-  };
-
-  // ========== MÁQUINA DE ESTADOS MEJORADA ==========
+  // ========== NUEVO: MÁQUINA DE ESTADOS MEJORADA ==========
   const startVoiceMode = () => {
     console.log("Iniciando modo voz");
     setVoiceMode(true);
     setVoiceStep("confirm-start");
     setExpectedInputType("none");
-    speakText("Para comenzar con el modo guiado por voz, di 'empezar' o presiona el botón.", 1.3);
+    speakText("explica tus tareas usando el modo guiado por voz.");
   };
 
   const cancelVoiceMode = () => {
@@ -363,55 +294,67 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setVoiceStep("task-presentation");
     setExpectedInputType("none");
 
+    // IMPORTANTE: Iniciar con índice 0 explícitamente
     setTimeout(() => {
-      speakTaskByIndex(0);
+      speakTaskByIndex(0); // Usar la nueva función
     }, 300);
   };
 
+  // ========== FUNCIÓN CORREGIDA: speakTaskByIndex ==========
   const speakTaskByIndex = useCallback((taskIndex: number) => {
     console.log("========== speakTaskByIndex ==========");
     console.log("Índice recibido:", taskIndex);
     console.log("Total tareas:", sortedTasks?.length);
+    console.log("voiceStep actual:", voiceStep);
 
+    // Verificar que tenemos tareas
     if (!sortedTasks || sortedTasks.length === 0) {
       console.error("ERROR: No hay tareas para hablar");
       return;
     }
 
+    // Verificar que el índice es válido
     if (taskIndex < 0 || taskIndex >= sortedTasks.length) {
       console.log("Índice fuera de rango, mostrando resumen");
       setVoiceStep("summary");
       setExpectedInputType("confirmation");
 
       setTimeout(() => {
-        speakText("¡Perfecto! Has explicado todas tus tareas. ¿Quieres enviar este reporte?", 1.3);
+        speakText("¡Perfecto! Has explicado todas tus tareas. Aquí tienes un resumen de lo que comentaste. ¿Quieres enviar este reporte?");
       }, 500);
       return;
     }
 
+    // Asegurarnos de que la tarea existe
     const task = sortedTasks[taskIndex];
     if (!task) {
       console.error(`ERROR: No se encontró la tarea en índice ${taskIndex}`);
       return;
     }
 
-    const diasPendiente = task.diasPendiente || Math.floor(
+    const diasPendiente = Math.floor(
       (new Date().getTime() - new Date(task.fechaCreacion).getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Texto más corto y directo para mayor velocidad
-    const taskText = `Tarea ${taskIndex + 1}: ${task.nombre}. Prioridad ${task.prioridad}, ${task.duracionMin} minutos. ¿Cómo la resolverás?`;
+    const taskText = `Tarea ${taskIndex + 1} de ${sortedTasks.length}: ${task.nombre}. 
+                    Prioridad ${task.prioridad}, ${task.duracionMin} minutos, 
+                    ${diasPendiente} días pendiente. 
+                    ¿Cómo planeas resolver esta tarea?`;
 
     console.log("Texto a hablar:", taskText);
 
+    // Primero actualizar el paso visual
     setVoiceStep("task-presentation");
     setExpectedInputType("none");
 
+    // Esperar un momento para que la UI se actualice antes de hablar
     setTimeout(() => {
-      speakText(taskText, 1.3); // Velocidad aumentada
+      speakText(taskText);
 
-      const estimatedSpeechTime = taskText.length * 40 + 800; // Tiempo reducido
+      // Calcular el tiempo de habla más preciso
+      const estimatedSpeechTime = taskText.length * 50 + 1000;
 
+      // Después de terminar de hablar, cambiar al estado de espera
       setTimeout(() => {
         console.log("Habla completada, cambiando a waiting-for-explanation");
         setVoiceStep("waiting-for-explanation");
@@ -420,29 +363,53 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }, 100);
   }, [sortedTasks, speakText]);
 
+  // ========== speakNextTask corregida para usar índice ==========
+  const speakNextTask = useCallback(() => {
+    console.log("========== speakNextTask ==========");
+    console.log("currentTaskIndex:", currentTaskIndex);
+
+    // Usar speakTaskByIndex con el índice actual
+    speakTaskByIndex(currentTaskIndex);
+  }, [currentTaskIndex, speakTaskByIndex]);
+
   const startTaskExplanation = () => {
     console.log("========== INICIANDO startTaskExplanation ==========");
-    console.log("Estado actual:", voiceStep);
+    console.log("Estado actual al iniciar:");
+    console.log("   • voiceStep:", voiceStep);
+    console.log("   • isSpeaking:", isSpeaking);
+    console.log("   • voiceMode:", voiceMode);
+    console.log("   • expectedInputType:", expectedInputType);
+    console.log("   • currentTaskIndex:", currentTaskIndex);
 
+    // Permitir desde más estados
     const allowedStates = ["waiting-for-explanation", "confirmation", "task-presentation"];
 
     if (!allowedStates.includes(voiceStep)) {
       console.log("ERROR: Estado no permitido para explicar.");
+      console.log("Estado actual:", voiceStep);
+      console.log("Estados permitidos:", allowedStates);
       return;
     }
 
     console.log("OK: Estado correcto, iniciando explicación...");
+    // Detener cualquier síntesis en curso
     stopVoice();
 
+    // Detener grabación global si está activa
     if (isRecording) {
       console.log("Deteniendo grabación global activa");
       stopRecording();
     }
 
+    // Cambiar al estado de escucha
     setVoiceStep("listening-explanation");
     setExpectedInputType("explanation");
     setVoiceTranscript("");
 
+    console.log("Estado actualizado: voiceStep = 'listening-explanation'");
+    console.log("Estado actualizado: expectedInputType = 'explanation'");
+
+    // Pequeño delay para asegurar que React ha actualizado el estado
     setTimeout(() => {
       console.log("Iniciando grabación para explicación...");
       startRecordingForExplanation();
@@ -454,7 +421,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
       console.error("ERROR: Navegador no soporta reconocimiento de voz");
-      speakText("Tu navegador no soporta reconocimiento de voz. Por favor, usa el teclado.", 1.3);
+      speakText("Tu navegador no soporta reconocimiento de voz. Por favor, usa el teclado.");
       setTimeout(() => {
         setVoiceStep("waiting-for-explanation");
       }, 1000);
@@ -495,10 +462,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       if (event.error === "no-speech") {
         console.log("No se detectó voz");
-        speakText("No escuché tu explicación. Por favor, intenta de nuevo.", 1.3);
+        speakText("No escuché tu explicación. Por favor, intenta de nuevo.");
       } else {
         console.log("Error de micrófono");
-        speakText("Hubo un error con el micrófono. Por favor, intenta de nuevo.", 1.3);
+        speakText("Hubo un error con el micrófono. Por favor, intenta de nuevo.");
       }
 
       setTimeout(() => {
@@ -512,33 +479,44 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setIsListening(false);
       setIsRecording(false);
 
+      // IMPORTANTE: NO procesar automáticamente aquí
+      // Solo cambiar el estado si no hay transcripción
       if (!voiceTranscript.trim()) {
         console.log("No hay transcripción, volviendo a estado anterior");
         setTimeout(() => {
           setVoiceStep("waiting-for-explanation");
         }, 500);
       }
+      // Si hay transcripción, mantenerla en pantalla para que el usuario confirme
     };
 
     console.log("Iniciando reconocimiento de voz...");
     recognition.start();
+
+    // NO detener automáticamente después de tiempo
+    // Dejar que el usuario hable el tiempo que necesite
   };
 
   const processVoiceExplanation = (transcript: string) => {
     const trimmedTranscript = transcript.trim();
     console.log("Procesando explicación de voz:", trimmedTranscript);
+    console.log("Longitud del texto:", trimmedTranscript.length);
 
+    // **MEJORA**: Filtrar comandos comunes que puedan aparecer en explicaciones
     const cleanedTranscript = trimmedTranscript
       .replace(/\b(terminar|listo|fin|confirmar|sí|si|no)\b/gi, '')
       .trim();
 
     if (!cleanedTranscript || cleanedTranscript.length < 10) {
-      console.log("Transcripción muy corta o solo contiene comandos");
+      console.log("Transcripción muy corta o solo contiene comandos, volviendo a esperar explicación");
 
+      // Verificar si realmente era un comando "terminar"
       if (isClearCommand(trimmedTranscript.toLowerCase(), ["terminar", "listo", "fin"])) {
+        // Si realmente era un comando, procesarlo
         console.log("Es realmente un comando TERMINAR, procesando explicación");
+        // Continuar con la explicación actual
       } else {
-        speakText("La explicación es muy corta. Por favor, da más detalles sobre cómo resolverás esta tarea.", 1.3);
+        speakText("La explicación es muy corta. Por favor, da más detalles sobre cómo resolverás esta tarea.");
         setTimeout(() => {
           setVoiceStep("waiting-for-explanation");
           setExpectedInputType("explanation");
@@ -548,12 +526,15 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
 
     const task = sortedTasks[currentTaskIndex];
+
+    // Eliminar explicación anterior si existe
     const updatedExplanations = taskExplanations.filter(exp => exp.taskId !== task.id);
 
+    // **IMPORTANTE**: Guardar el transcript original, no el limpiado
     const explanation: TaskExplanation = {
       taskId: task.id,
       taskName: task.nombre,
-      explanation: trimmedTranscript,
+      explanation: trimmedTranscript, // Usar el transcript original
       confirmed: false,
       priority: task.prioridad,
       duration: task.duracionMin,
@@ -565,21 +546,26 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setTaskExplanations([...updatedExplanations, explanation]);
     setVoiceConfirmationText(trimmedTranscript);
 
-    // Cambiar DIRECTAMENTE a confirmación sin preguntar
+    // Cambiar directamente a confirmación
     setVoiceStep("confirmation");
     setExpectedInputType("confirmation");
 
-    // Pregunta directa para confirmar
-    const confirmationText = `¿Confirmas esta explicación? Di 'sí' para confirmar o 'no' para corregir.`;
+    // **MEJORA**: Crear un resumen más corto para la confirmación
+    const maxLength = 80;
+    const confirmationText = trimmedTranscript.length > maxLength
+      ? `Tu explicación: "${trimmedTranscript.substring(0, maxLength)}..."`
+      : `Tu explicación: "${trimmedTranscript}"`;
+
+    const fullConfirmation = `${confirmationText}. ¿Confirmas que esta es tu estrategia?`;
 
     console.log("Preguntando confirmación");
-    speakText(confirmationText, 1.3);
+    speakText(fullConfirmation);
   };
-
   const confirmExplanation = () => {
     console.log("========== CONFIRMANDO EXPLICACIÓN ==========");
     console.log("Estado actual: voiceStep =", voiceStep, "expectedInputType =", expectedInputType);
 
+    // Solo permitir si estamos en estado de confirmación
     if (voiceStep !== "confirmation" || expectedInputType !== "confirmation") {
       console.log("ERROR: No se puede confirmar en este estado");
       return;
@@ -593,57 +579,119 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     console.log("Confirmando tarea:", task.nombre);
 
+    // Marcar la explicación como confirmada
     setTaskExplanations(prev =>
       prev.map(exp =>
         exp.taskId === task.id ? { ...exp, confirmed: true } : exp
       )
     );
 
+    // Avanzar a la siguiente tarea
     const nextIndex = currentTaskIndex + 1;
     console.log("Nuevo índice de tarea:", nextIndex);
     console.log("Total tareas:", sortedTasks.length);
 
+    // IMPORTANTE: Actualizar el índice primero
     setCurrentTaskIndex(nextIndex);
     setRetryCount(0);
     setPendingConfirmation(false);
 
+    // Primero verificar si ya completamos todas las tareas
     if (nextIndex >= sortedTasks.length) {
       console.log("Todas las tareas completadas, mostrando resumen");
       setVoiceStep("summary");
       setExpectedInputType("confirmation");
 
       setTimeout(() => {
-        speakText("¡Perfecto! Has explicado todas tus tareas. ¿Quieres enviar este reporte?", 1.3);
+        speakText("¡Perfecto! Has explicado todas tus tareas. Aquí tienes un resumen de lo que comentaste. ¿Quieres enviar este reporte?");
       }, 500);
     } else {
+      // Si hay más tareas, mostrar la siguiente
       console.log("Pasando a la siguiente tarea...");
       setVoiceStep("task-presentation");
       setExpectedInputType("none");
 
+      // IMPORTANTE: Usar speakTaskByIndex con el nuevo índice
       setTimeout(() => {
         speakTaskByIndex(nextIndex);
       }, 1000);
     }
   };
+  // const confirmExplanation = () => {
+  //   console.log("========== CONFIRMANDO EXPLICACIÓN ==========");
+  //   console.log("Estado actual: voiceStep =", voiceStep, "expectedInputType =", expectedInputType);
+
+  //   // Solo permitir si estamos en estado de confirmación
+  //   if (voiceStep !== "confirmation" || expectedInputType !== "confirmation") {
+  //     console.log("ERROR: No se puede confirmar en este estado");
+  //     return;
+  //   }
+
+  //   const task = sortedTasks[currentTaskIndex];
+  //   console.log("Confirmando tarea:", task.nombre);
+
+  //   // Marcar la explicación como confirmada
+  //   setTaskExplanations(prev =>
+  //     prev.map(exp =>
+  //       exp.taskId === task.id ? { ...exp, confirmed: true } : exp
+  //     )
+  //   );
+
+  //   // Avanzar a la siguiente tarea
+  //   const nextIndex = currentTaskIndex + 1;
+  //   console.log("Nuevo índice de tarea:", nextIndex);
+
+  //   // IMPORTANTE: Actualizar el índice primero
+  //   setCurrentTaskIndex(nextIndex);
+  //   setRetryCount(0);
+  //   setPendingConfirmation(false);
+
+  //   // Primero verificar si ya completamos todas las tareas
+  //   if (nextIndex >= sortedTasks.length) {
+  //     console.log("Todas las tareas completadas, mostrando resumen");
+  //     setVoiceStep("summary");
+  //     setExpectedInputType("confirmation");
+
+  //     setTimeout(() => {
+  //       speakText("¡Perfecto! Has explicado todas tus tareas. Aquí tienes un resumen de lo que comentaste. ¿Quieres enviar este reporte ?");
+  //     }, 500);
+  //   } else {
+  //     // Si hay más tareas, mostrar la siguiente
+  //     console.log("Pasando a la siguiente tarea...");
+  //     setVoiceStep("task-presentation");
+  //     setExpectedInputType("none");
+
+  //     // IMPORTANTE: Usar speakTaskByIndex con el nuevo índice
+  //     setTimeout(() => {
+  //       speakTaskByIndex(nextIndex); // ← CORRECCIÓN: Usar nextIndex explícitamente
+  //     }, 1000);
+  //   }
+  // };
 
   const retryExplanation = () => {
     console.log("========== REINTENTANDO EXPLICACIÓN ==========");
     console.log("Estado actual: voiceStep =", voiceStep, "expectedInputType =", expectedInputType);
 
+    // Solo permitir si estamos en estado de confirmación
     if (voiceStep !== "confirmation" || expectedInputType !== "confirmation") {
       console.log("ERROR: No se puede reintentar en este estado");
       return;
     }
 
     const task = sortedTasks[currentTaskIndex];
+
+    // Eliminar la explicación actual
     setTaskExplanations(prev => prev.filter(exp => exp.taskId !== task.id));
     setRetryCount(prev => prev + 1);
 
     console.log("Reintento número:", retryCount + 1);
+
+    // Detener cualquier síntesis en curso
     stopVoice();
 
+    // Cambiar a estado de espera para nueva explicación
     setTimeout(() => {
-      speakText("Por favor, explica nuevamente cómo resolverás esta tarea.", 1.3);
+      speakText("Por favor, explica nuevamente cómo resolverás esta tarea.");
       setTimeout(() => {
         setVoiceStep("waiting-for-explanation");
         setExpectedInputType("explanation");
@@ -651,6 +699,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }, 300);
   };
 
+  // 
   const checkExistingConversation = async () => {
     try {
       setIsCheckingHistory(true);
@@ -670,6 +719,34 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         setIsCheckingHistory(false);
         return false;
       }
+
+      // Obtener todos los pendientes
+      const todosPendientes = proyectos.actividades.flatMap(
+        (act: any) => act.pendientes || []
+      );
+
+      const pendientesActivos = todosPendientes.filter(
+        (p: any) => p.estado === "pendiente"
+      );
+
+      // Calcular métricas
+      const totalPendientes = pendientesActivos.length;
+      const pendientesAlta = pendientesActivos.filter(
+        (p: any) => p.prioridad === "ALTA"
+      ).length;
+      const tiempoTotal = pendientesActivos.reduce(
+        (sum: number, p: any) => sum + (p.duracionMin || 0),
+        0
+      );
+      const horasTotales = Math.floor(tiempoTotal / 60);
+      const minutosTotales = tiempoTotal % 60;
+      const tiempoFormateado = `${horasTotales}h ${minutosTotales}m`;
+
+      console.log("Sesión existente encontrada:", {
+        totalPendientes,
+        pendientesAlta,
+        tiempoFormateado
+      });
 
       // Mostrar información al usuario
       addMessageWithTyping(
@@ -695,14 +772,14 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               <Brain className="w-5 h-5 text-[#6841ea]" />
             </div>
             <div>
-              <h3 className="font-bold text-md">📋 Sesión restaurada</h3>
+              <h3 className="font-bold text-md">📋 Resumen de tu sesión anterior</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {new Date().toLocaleDateString("es-MX", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",
                 })}
-                • Continuando donde te quedaste
+                • Sesión restaurada
               </p>
             </div>
           </div>
@@ -710,12 +787,57 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         400
       );
 
-      // Cargar directamente las actividades con revisiones
+      // Mostrar métricas
       setTimeout(() => {
-        fetchAssistantAnalysis(false, true); // true indica que es restauración
-      }, 1000);
+        addMessage(
+          "bot",
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Target className="w-3 h-3 text-red-500" />
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Alta</span>
+                </div>
+                <div className="text-xl font-bold text-red-500">{pendientesAlta}</div>
+              </div>
 
-      setHasExistingSession(true);
+              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-3 h-3 text-green-500" />
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Total</span>
+                </div>
+                <div className="text-xl font-bold">{totalPendientes}</div>
+              </div>
+
+              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="w-3 h-3 text-yellow-500" />
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Tiempo</span>
+                </div>
+                <div className="text-xl font-bold text-yellow-500">{tiempoFormateado}</div>
+              </div>
+            </div>
+          </div>
+        );
+
+        // Mostrar mensaje de continuación
+        setTimeout(() => {
+          addMessage(
+            "bot",
+            <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#1a1a1a] border border-[#2a2a2a]" : "bg-gray-50 border border-gray-200"}`}>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#6841ea]" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Tu sesión ha sido restaurada. ¿Deseas continuar con las tareas pendientes?
+                </span>
+              </div>
+            </div>
+          );
+          setStep("finished");
+          setHasExistingSession(true);
+        }, 800);
+      }, 800);
+
       setIsCheckingHistory(false);
       return true;
 
@@ -730,6 +852,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     console.log("========== SALTANDO TAREA ==========");
     console.log("Estado actual: voiceStep =", voiceStep);
 
+    // Solo permitir en estados apropiados
     if (!["task-presentation", "waiting-for-explanation", "confirmation"].includes(voiceStep)) {
       console.log("ERROR: No se puede saltar en este estado");
       return;
@@ -756,20 +879,21 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setRetryCount(0);
     setPendingConfirmation(false);
 
+    // Verificar si ya completamos todas las tareas
     if (nextIndex >= sortedTasks.length) {
       console.log("Todas las tareas completadas, mostrando resumen");
       setVoiceStep("summary");
       setExpectedInputType("confirmation");
 
       setTimeout(() => {
-        speakText("¡Perfecto! Has explicado todas tus tareas. ¿Quieres enviar este reporte?", 1.3);
+        speakText("¡Perfecto! Has explicado todas tus tareas. Aquí tienes un resumen de lo que comentaste. ¿Quieres enviar este reporte?");
       }, 500);
     } else {
       setVoiceStep("task-presentation");
       setExpectedInputType("none");
 
       setTimeout(() => {
-        speakTaskByIndex(nextIndex);
+        speakTaskByIndex(nextIndex); // ← CORRECCIÓN: Usar nextIndex explícitamente
       }, 500);
     }
   };
@@ -781,13 +905,16 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     console.log("Procesando comando de voz:", lowerTranscript);
     console.log("Estado actual - voiceMode:", voiceMode, "voiceStep:", voiceStep, "expectedInputType:", expectedInputType);
 
+    // ========== PRIMERO: Procesar comandos del modo voz guiado ==========
     if (voiceMode) {
       console.log("Modo voz guiado ACTIVO - procesando comando específico");
 
+      // Procesar según el estado actual y tipo de entrada esperado
       switch (expectedInputType) {
         case "confirmation":
           console.log("Estado: confirmation - voiceStep:", voiceStep);
           if (voiceStep === "confirmation" || voiceStep === "summary") {
+            // Comandos de confirmación para explicaciones de tareas
             if (lowerTranscript.includes("sí") ||
               lowerTranscript.includes("si ") ||
               lowerTranscript.includes("confirm") ||
@@ -808,6 +935,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               return true;
             }
 
+            // Comandos para corregir
             if (lowerTranscript.includes("no") ||
               lowerTranscript.includes("corregir") ||
               lowerTranscript.includes("cambiar") ||
@@ -826,7 +954,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
         case "explanation":
           console.log("Estado: explanation - voiceStep:", voiceStep);
+          // **MODIFICACIÓN IMPORTANTE**: Sólo procesar "terminar" cuando sea un comando claro y aislado
           if (voiceStep === "listening-explanation") {
+            // Verificar si es realmente un comando "terminar" y no parte de una frase
             if (isClearCommand(lowerTranscript, ["terminar", "listo", "fin"])) {
               console.log("Comando TERMINAR explicación detectado");
               if (voiceTranscript.trim()) {
@@ -842,6 +972,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           break;
       }
 
+      // Comandos globales que funcionan en cualquier estado del modo voz
       if (isClearCommand(lowerTranscript, ["saltar", "skip"])) {
         console.log("Comando SALTAR tarea detectado");
         skipTask();
@@ -854,6 +985,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         return true;
       }
 
+      // Comando especial para empezar a explicar
       if ((voiceStep === "waiting-for-explanation" || voiceStep === "confirmation") &&
         isClearCommand(lowerTranscript, ["explicar", "empezar", "comenzar"])) {
         console.log("Comando INICIAR explicación detectado");
@@ -870,16 +1002,20 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     return false;
   };
 
+  // ========== NUEVA FUNCIÓN: Detectar comandos claros ==========
   const isClearCommand = (transcript: string, commands: string[]) => {
     const lowerTranscript = transcript.toLowerCase().trim();
 
+    // Si el transcript es largo, probablemente no es un comando aislado
     if (lowerTranscript.length > 30) return false;
 
+    // Verificar si el transcript coincide exactamente con algún comando
     const isExactMatch = commands.some(cmd =>
       lowerTranscript === cmd ||
       lowerTranscript === ` ${cmd}` ||
       lowerTranscript === `${cmd} ` ||
       lowerTranscript === ` ${cmd} ` ||
+      // Verificar con puntuación común
       lowerTranscript === `${cmd}.` ||
       lowerTranscript === `${cmd},` ||
       lowerTranscript === `${cmd}!`
@@ -887,17 +1023,19 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     if (isExactMatch) return true;
 
+    // Verificar si termina con un comando (última palabra)
     const words = lowerTranscript.split(/\s+/);
     const lastWord = words[words.length - 1];
 
     return commands.some(cmd =>
+      // Comparar con la última palabra exacta
       lastWord === cmd ||
+      // También considerar si termina con puntuación
       lastWord === `${cmd}.` ||
       lastWord === `${cmd},` ||
       lastWord === `${cmd}!`
     );
   };
-
   const sendExplanationsToBackend = async () => {
     console.log("========== ENVIANDO EXPLICACIONES AL BACKEND ==========");
 
@@ -909,16 +1047,16 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     try {
       setVoiceStep("sending");
       setExpectedInputType("none");
-      speakText("Enviando tu reporte...", 1.3);
+      speakText("Enviando tu reporte...");
 
       const payload = {
         sessionId: assistantAnalysis.sessionId,
         userId: colaborador.email,
-        projectId: assistantAnalysis.proyectoPrincipal,
+        projectId: assistantAnalysis.proyectoPrincipal,//<--- Antividad id proyecto
         explanations: taskExplanations
           .filter(exp => exp.explanation !== "[Tarea saltada]")
           .map(exp => ({
-            taskId: exp.taskId,
+            taskId: exp.taskId,//<--- pendiente id tarea
             taskName: exp.taskName,
             explanation: exp.explanation,
             priority: exp.priority,
@@ -930,20 +1068,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       console.log("Payload a enviar:", payload);
 
-      // Nuevo endpoint para guardar explicaciones
-      const response = await fetch(
-        "http://localhost:4000/api/v1/assistant/guardar-explicaciones",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        }
-      );
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      if (!response.ok) throw new Error(`Error: ${response.status}`);
-      const result = await response.json();
-
-      speakText("¡Correcto! Tu reporte ha sido enviado. Gracias, puedes comenzar tu día.", 1.3);
+      speakText("¡Correcto! Tu reporte ha sido enviado. Gracias, puedes comenzar tu día.");
 
       setTimeout(() => {
         setVoiceStep("idle");
@@ -970,12 +1097,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     } catch (error) {
       console.error("Error al enviar explicaciones:", error);
-      speakText("Hubo un error al enviar tu reporte. Puedes intentar nuevamente.", 1.3);
+      speakText("Hubo un error al enviar tu reporte. Puedes intentar nuevamente.");
       setVoiceStep("summary");
       setExpectedInputType("confirmation");
     }
   };
 
+  // ========== NUEVO: Efecto para manejar comandos de voz MEJORADO ==========
   useEffect(() => {
     if (!voiceTranscript) {
       return;
@@ -990,16 +1118,18 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       return;
     }
 
+    // Procesar el comando de voz en el modo guiado
     const processed = processVoiceCommand(voiceTranscript);
 
     if (processed) {
       console.log("Comando procesado exitosamente");
-      setVoiceTranscript("");
+      setVoiceTranscript(""); // Limpiar transcript después de procesar
     } else {
       console.log("Comando NO fue procesado");
     }
   }, [voiceTranscript, voiceMode]);
 
+  // ========== NUEVO: Cargar voces al iniciar ==========
   useEffect(() => {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
@@ -1008,24 +1138,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
-  }, []);
-
-  // ========== Efecto para verificar después de horas ==========
-  useEffect(() => {
-    const checkTimeAndVerifyActivities = () => {
-      if (checkIfAfterHours()) {
-        console.log("Es después de las 17:30, verificando actividades...");
-        checkEndOfDayActivities();
-      }
-    };
-
-    // Verificar inmediatamente al cargar
-    checkTimeAndVerifyActivities();
-
-    // Verificar cada 5 minutos
-    const interval = setInterval(checkTimeAndVerifyActivities, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
   }, []);
 
   // ========== Efecto principal ==========
@@ -1118,30 +1230,27 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       pipWindowRef.current = null;
     }
   };
-
-  const fetchAssistantAnalysis = async (showAll = false, isRestoration = false) => {
+  const fetchAssistantAnalysis = async (showAll = false) => {
     try {
       setIsTyping(true);
       setStep("loading-analysis");
 
-      if (!isRestoration) {
-        addMessage(
-          "system",
-          <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-            <Brain className="w-4 h-4 text-[#6841ea]" />
-            {showAll ? "Obteniendo todas tus actividades..." : "Obteniendo análisis de tus actividades..."}
-          </div>
-        );
-      }
+      addMessage(
+        "system",
+        <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+          <Brain className="w-4 h-4 text-[#6841ea]" />
+          {showAll ? "Obteniendo todas tus actividades..." : "Obteniendo análisis de tus actividades..."}
+        </div>
+      );
 
-      // USAR EL ENDPOINT CON REVISIONES (NO EL LOCAL)
+      // USAR EL ENDPOINT LOCAL en lugar del original
       const requestBody = {
         email: colaborador.email,
         showAll: showAll
       };
 
       const response = await fetch(
-        "http://localhost:4000/api/v1/assistant/actividades-con-revisiones",
+        "http://localhost:4000/api/v1/assistant/actividades-local",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1152,384 +1261,552 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       if (!response.ok) throw new Error(`Error: ${response.status}`);
       const data = await response.json();
 
-      console.log("Respuesta del endpoint con revisiones:", JSON.stringify(data, null, 2));
+      console.log("Respuesta completa del backend:", JSON.stringify(data, null, 2));
+      console.log("revisionesPorActividad:", data.data?.revisionesPorActividad);
 
-      // Adaptar la respuesta a la estructura esperada
+      // CORRECCIÓN: Crear pendientes combinando tareasConTiempo y tareasSinTiempo
+      const revisionesPorActividad = data.data?.revisionesPorActividad?.map((act: any) => {
+        // Combinar tareasConTiempo y tareasSinTiempo en un solo array de pendientes
+        const todasLasTareas = [
+          ...(act.tareasConTiempo || []),
+          ...(act.tareasSinTiempo || [])
+        ];
+
+        console.log(`Actividad ${act.actividadId}:`, {
+          tareasConTiempo: act.tareasConTiempo?.length || 0,
+          tareasSinTiempo: act.tareasSinTiempo?.length || 0,
+          totalCombinadas: todasLasTareas.length
+        });
+
+        return {
+          actividadId: act.actividadId.toString(),
+          actividadTitulo: act.actividadTitulo,
+          totalPendientes: act.totalTareas || 0,
+          pendientesAlta: (act.tareasConTiempo || []).filter((t: any) => t.prioridad === "ALTA").length,
+          tiempoTotal: (act.tareasConTiempo || []).reduce((sum: number, t: any) => sum + (t.duracionMin || 0), 0),
+          pendientes: todasLasTareas.map((p: any) => ({
+            id: p.id.toString(),
+            nombre: p.nombre,
+            terminada: p.terminada || false,
+            confirmada: p.confirmada || false,
+            duracionMin: p.duracionMin || 0,
+            fechaCreacion: p.fechaCreacion,
+            fechaFinTerminada: null,
+            prioridad: p.prioridad || "SIN TIEMPO"
+          }))
+        };
+      }) || [];
+
+      console.log("revisionesPorActividad procesada:", revisionesPorActividad);
+      console.log("Total de pendientes:", revisionesPorActividad.reduce((sum, act) => sum + act.pendientes.length, 0));
+
+      // Adaptar la respuesta local a la estructura esperada
       const adaptedData: AssistantAnalysis = {
         success: data.success,
         answer: data.answer,
-        provider: data.provider || "Gemini",
+        provider: data.source || "local_demo",
         sessionId: data.sessionId,
-        proyectoPrincipal: data.proyectoPrincipal || "Sin proyecto principal",
+        proyectoPrincipal: "Proyecto Local Alpha",
         metrics: {
-          totalActividades: data.metrics?.totalActividadesProgramadas || 0,
-          actividadesConTiempoTotal: data.metrics?.actividadesConTiempoTotal || 0,
-          actividadesFinales: data.metrics?.actividadesFinales || 0,
-          tareasConTiempo: data.metrics?.tareasConTiempo || 0,
-          tareasAltaPrioridad: data.metrics?.tareasAltaPrioridad || 0,
-          tiempoEstimadoTotal: data.metrics?.tiempoEstimadoTotal || "0h 0m"
+          totalActividades: data.metrics.totalActividades,
+          totalPendientes: data.metrics.tareasConTiempo + data.metrics.tareasSinTiempo,
+          pendientesAltaPrioridad: revisionesPorActividad.reduce((sum, act) =>
+            sum + (act.pendientes || []).filter((p: any) => p.prioridad === "ALTA").length, 0),
+          tiempoEstimadoTotal: data.metrics.tiempoEstimadoTotal,
+          actividadesConPendientes: revisionesPorActividad.filter(act => act.pendientes.length > 0).length
         },
         data: {
-          actividades: data.data?.actividades?.map((a: any) => ({
-            id: a.id,
+          actividades: data.data.actividades.map((a: any) => ({
+            id: a.id.toString(),
             titulo: a.titulo,
             horario: a.horario,
             status: a.status,
             proyecto: a.proyecto,
-            esHorarioLaboral: a.esHorarioLaboral || false,
-            tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false
-          })) || [],
-          revisionesPorActividad: data.data?.revisionesPorActividad?.map((act: any) => ({
-            actividadId: act.actividadId,
-            actividadTitulo: act.actividadTitulo,
-            actividadHorario: act.actividadHorario,
-            tareasConTiempo: act.tareasConTiempo?.map((t: any) => ({
-              id: t.id,
-              nombre: t.nombre,
-              terminada: t.terminada || false,
-              confirmada: t.confirmada || false,
-              duracionMin: t.duracionMin || 0,
-              fechaCreacion: t.fechaCreacion,
-              fechaFinTerminada: t.fechaFinTerminada || null,
-              diasPendiente: t.diasPendiente || 0,
-              prioridad: t.prioridad || "BAJA"
-            })) || [],
-            totalTareasConTiempo: act.totalTareasConTiempo || 0,
-            tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
-            tiempoTotal: act.tiempoTotal || 0,
-            tiempoFormateado: act.tiempoFormateado || "0h 0m"
-          })) || []
-        },
-        multiActividad: data.multiActividad || false
+            tieneRevisiones: true
+          })),
+          revisionesPorActividad: revisionesPorActividad
+        }
       };
 
       console.log("Datos adaptados:", {
-        actividades: adaptedData.data.actividades.length,
-        revisiones: adaptedData.data.revisionesPorActividad.length,
-        tareasTotales: adaptedData.data.revisionesPorActividad.reduce((sum, act) => sum + act.tareasConTiempo.length, 0)
+        totalPendientes: adaptedData.metrics.totalPendientes,
+        totalActividades: adaptedData.data.revisionesPorActividad.length,
+        tareasPorActividad: adaptedData.data.revisionesPorActividad.map(a =>
+          `${a.actividadTitulo}: ${a.pendientes.length} tareas`
+        )
       });
 
       setAssistantAnalysis(adaptedData);
-      showAssistantAnalysis(adaptedData, isRestoration);
+      showAssistantAnalysis(adaptedData);
     } catch (error) {
       console.error("Error al obtener análisis del asistente:", error);
       setIsTyping(false);
 
-      // Datos de ejemplo basados en el JSON que proporcionaste
+      // Crear datos de ejemplo con la estructura CORRECTA
+      // Crear datos de ejemplo con la estructura CORRECTA
       const ejemploData: AssistantAnalysis = {
         success: true,
-        answer: "En tu horario laboral (09:00-17:30), tienes 2 actividades con tareas que tienen tiempo estimado.\n\nEn \"RESPALDO NOTION MIGRACION\" (14:30-17:30) tienes 1 tarea de alta prioridad de 180min.\nEn \"ANFETA WL PRUEBAS RAPIDAS\" (14:30-17:30) tienes 1 tarea de alta prioridad de 180min.\nAmbas actividades tienen la misma tarea de alta prioridad y un tiempo estimado de 180 minutos cada una.\nTe recomiendo priorizar estas tareas de alta prioridad, ya que suman un total de 6 horas estimadas. Dada la hora de inicio (14:30), deberías enfocarte en completarlas.",
-        provider: "Gemini",
-        sessionId: "act_aavel_pprin_com_1769198804438",
-        proyectoPrincipal: "RESPALDO NOTION MIGRACION  aavel aapli aanfe .com ddici ccale ccola resp nnoti mmigr rrapi wwebl Anfe",
+        answer: "Hola Usuario,\n\nTienes 2 actividades locales programadas para hoy:\n\n1. Revisar documentación técnica (09:00-10:30)\n   • 2 tareas: 1 pendiente (45min), 1 completada\n\n2. Corregir errores en formulario (11:00-12:00)\n   • 1 tarea sin tiempo estimado\n\nTotal: 2 tareas con tiempo (1h 15m), 1 tarea sin tiempo.\n\n¿En qué actividad te gustaría enfocarte primero?",
+        provider: "local_demo",
+        sessionId: "local_" + Date.now(),
+        proyectoPrincipal: "Proyecto Local Alpha",
         metrics: {
-          totalActividades: 13,
-          actividadesConTiempoTotal: 2,
-          actividadesFinales: 2,
-          tareasConTiempo: 2,
-          tareasAltaPrioridad: 2,
-          tiempoEstimadoTotal: "6h 0m"
+          totalActividades: 2,
+          totalPendientes: 3, // 2 con tiempo + 1 sin tiempo
+          pendientesAltaPrioridad: 0,
+          tiempoEstimadoTotal: "1h 15m",
+          actividadesConPendientes: 2
         },
         data: {
           actividades: [
             {
-              id: "2edabd7d91b7817d8b23cbf2653f05e1",
-              titulo: "RESPALDO NOTION MIGRACION 00act aavel aapli aanfe .com ddici ccale ccola resp nnoti mmigr rrapi wwebl Anfe",
-              horario: "14:30 - 17:30",
-              status: "POR HACER",
-              proyecto: "Sin proyecto",
-              esHorarioLaboral: true,
-              tieneRevisionesConTiempo: true
+              id: "101",
+              titulo: "Revisar documentación técnica",
+              horario: "09:00 - 10:30",
+              status: "Pendiente",
+              proyecto: "Proyecto Local Alpha",
+              tieneRevisiones: true
             },
             {
-              id: "2efabd7d91b7810a8790c233ac5de6ac",
-              titulo: "ANFETA WL PRUEBAS RAPIDAS 00act aavel aapli aanfe .com ddici ccale ccola pprue rrapi wwebl Anfe",
-              horario: "14:30 - 17:30",
-              status: "POR HACER",
-              proyecto: "Sin proyecto",
-              esHorarioLaboral: true,
-              tieneRevisionesConTiempo: true
+              id: "102",
+              titulo: "Corregir errores en formulario",
+              horario: "11:00 - 12:00",
+              status: "En progreso",
+              proyecto: "Proyecto Local Beta",
+              tieneRevisiones: true
             }
           ],
           revisionesPorActividad: [
             {
-              actividadId: "2edabd7d91b7817d8b23cbf2653f05e1",
-              actividadTitulo: "RESPALDO NOTION MIGRACION 00act aavel aapli aanfe .com ddici ccale ccola resp nnoti mmigr rrapi wwebl Anfe",
-              actividadHorario: "14:30 - 17:30",
-              tareasConTiempo: [
+              actividadId: "101",
+              actividadTitulo: "Revisar documentación técnica",
+              totalPendientes: 2,
+              pendientesAlta: 0,
+              tiempoTotal: 75,
+              pendientes: [
                 {
-                  id: "2eeabd7d91b781b3abcdcef777671db3",
-                  nombre: "Hacer el script de prueba para clonar una actividad con reviiones al nuevo notion",
+                  id: "201",
+                  nombre: "Revisar API endpoints",
                   terminada: false,
                   confirmada: false,
-                  duracionMin: 180,
-                  fechaCreacion: "2026-01-19T08:51:00-06:00",
+                  duracionMin: 45,
+                  fechaCreacion: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Cambiado de 2 días a 1 día
                   fechaFinTerminada: null,
-                  diasPendiente: 4,
-                  prioridad: "ALTA"
+                  prioridad: "MEDIA"
+                },
+                {
+                  id: "202",
+                  nombre: "Actualizar diagramas",
+                  terminada: true,
+                  confirmada: true,
+                  duracionMin: 30,
+                  fechaCreacion: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Cambiado de 4 días a 1 día
+                  fechaFinTerminada: null,
+                  prioridad: "BAJA"
                 }
-              ],
-              totalTareasConTiempo: 1,
-              tareasAltaPrioridad: 1,
-              tiempoTotal: 180,
-              tiempoFormateado: "3h 0m"
+              ]
             },
             {
-              actividadId: "2efabd7d91b7810a8790c233ac5de6ac",
-              actividadTitulo: "ANFETA WL PRUEBAS RAPIDAS 00act aavel aapli aanfe .com ddici ccale ccola pprue rrapi wwebl Anfe",
-              actividadHorario: "14:30 - 17:30",
-              tareasConTiempo: [
+              actividadId: "102",
+              actividadTitulo: "Corregir errores en formulario",
+              totalPendientes: 1,
+              pendientesAlta: 0,
+              tiempoTotal: 0,
+              pendientes: [
                 {
-                  id: "2eeabd7d91b781b3abcdcef777671db3",
-                  nombre: "Hacer el script de prueba para clonar una actividad con reviiones al nuevo notion",
+                  id: "203",
+                  nombre: "Validar inputs del formulario",
                   terminada: false,
                   confirmada: false,
-                  duracionMin: 180,
-                  fechaCreacion: "2026-01-19T08:51:00-06:00",
+                  duracionMin: 0,
+                  fechaCreacion: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Ya estaba en 1 día
                   fechaFinTerminada: null,
-                  diasPendiente: 4,
-                  prioridad: "ALTA"
+                  prioridad: "SIN TIEMPO"
                 }
-              ],
-              totalTareasConTiempo: 1,
-              tareasAltaPrioridad: 1,
-              tiempoTotal: 180,
-              tiempoFormateado: "3h 0m"
+              ]
             }
           ]
-        },
-        multiActividad: true
+        }
       };
 
-      console.log("Usando datos de ejemplo del JSON proporcionado");
+      console.log("Usando datos de ejemplo:", {
+        totalTareas: ejemploData.data.revisionesPorActividad.reduce((sum, act) => sum + act.pendientes.length, 0),
+        tareas: ejemploData.data.revisionesPorActividad.flatMap(act => act.pendientes)
+      });
+
       setAssistantAnalysis(ejemploData);
-      showAssistantAnalysis(ejemploData, isRestoration);
+      showAssistantAnalysis(ejemploData);
     } finally {
       setIsTyping(false);
     }
   };
 
-  const showAssistantAnalysis = async (analysis: AssistantAnalysis, isRestoration = false) => {
-    // Obtener todas las tareas de todas las actividades
-    const todasLasTareas = analysis.data.revisionesPorActividad.flatMap(
-      actividad => actividad.tareasConTiempo
-    );
-    
-    const hayTareas = todasLasTareas.length > 0;
+  // const fetchAssistantAnalysis = async (showAll = false) => {
+  //   try {
+  //     setIsTyping(true);
+  //     setStep("loading-analysis");
 
-    if (!isRestoration) {
+  //     addMessage(
+  //       "system",
+  //       <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+  //         <Brain className="w-4 h-4 text-[#6841ea]" />
+  //         {showAll ? "Obteniendo todas tus actividades..." : "Obteniendo análisis de tus actividades..."}
+  //       </div>
+  //     );
+
+  //     const requestBody = {
+  //       email: colaborador.email,
+  //       showAll: showAll
+  //     };
+
+  //     const response = await fetch(
+  //       "http://localhost:4000/api/v1/assistant/actividades-con-revisiones",
+  //       {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify(requestBody)
+  //       }
+  //     );
+
+  //     if (!response.ok) throw new Error(`Error: ${response.status}`);
+  //     const data: AssistantAnalysis = await response.json();
+
+  //     if (!data.success || !data.data || data.data.actividades.length === 0) {
+  //       setIsTyping(false);
+  //       addMessage(
+  //         "bot",
+  //         <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+  //           <div className="text-center py-4">
+  //             <AlertCircle className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+  //             <h4 className="font-semibold mb-1">Sin actividades</h4>
+  //             <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+  //               {showAll ? "No tienes actividades registradas para hoy." : "No tienes actividades registradas en el horario de 09:30 a 16:30."}
+  //             </p>
+  //             {!showAll && (
+  //               <Button size="sm" variant="outline" onClick={() => fetchAssistantAnalysis(true)} className="mt-2">
+  //                 Ver todas las actividades del día
+  //               </Button>
+  //             )}
+  //           </div>
+  //         </div>
+  //       );
+  //       setStep("finished");
+  //       return;
+  //     }
+
+  //     setAssistantAnalysis(data);
+  //     showAssistantAnalysis(data);
+  //   } catch (error) {
+  //     console.error("Error al obtener análisis del asistente:", error);
+  //     setIsTyping(false);
+  //     addMessage(
+  //       "system",
+  //       <div className="flex items-center gap-2 text-red-500">
+  //         <AlertCircle className="w-4 h-4" />
+  //         Error al obtener el análisis
+  //       </div>
+  //     );
+  //     addMessage(
+  //       "bot",
+  //       <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+  //         <div className="text-center py-3">
+  //           <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
+  //           <h4 className="font-semibold mb-1">Error de conexión</h4>
+  //           <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+  //             No se pudo obtener el análisis en este momento.
+  //           </p>
+  //           <div className="flex justify-center gap-2">
+  //             <Button size="sm" variant="outline" onClick={() => fetchAssistantAnalysis(showAll)}>
+  //               Reintentar
+  //             </Button>
+  //             <Button size="sm" className="bg-[#6841ea] hover:bg-[#5a36d4]" onClick={onLogout}>
+  //               Cerrar sesión
+  //             </Button>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     );
+  //     setStep("finished");
+  //   } finally {
+  //     setIsTyping(false);
+  //   }
+  // };
+
+  const showAssistantAnalysis = async (analysis: AssistantAnalysis) => {
+    const tareas = analysis.data.revisionesPorActividad[0]?.pendientes || [];
+    const hayTareas = tareas.length > 0;
+
+    addMessageWithTyping(
+      "bot",
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10">
+          <div className="p-2 rounded-full bg-[#6841ea]/10">
+            <User className="w-5 h-5 text-[#6841ea]" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">Hola, {displayName}!</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+              <Mail className="w-3 h-3" />
+              {colaborador.email}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mt-3">
+          <div className="p-2 rounded-full bg-[#6841ea]/10">
+            <Brain className="w-5 h-5 text-[#6841ea]" />
+          </div>
+          <div>
+            <h3 className="font-bold text-md">📋 Resumen de tu día</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {new Date().toLocaleDateString("es-MX", {
+                weekday: "short",
+                month: "short",
+                day: "numeric"
+              })}
+            </p>
+          </div>
+        </div>
+      </div>,
+      400
+    );
+
+    setTimeout(async () => {
       addMessageWithTyping(
         "bot",
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10">
-            <div className="p-2 rounded-full bg-[#6841ea]/10">
-              <User className="w-5 h-5 text-[#6841ea]" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Target className="w-3 h-3 text-red-500" />
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Alta</span>
+              </div>
+              <div className="text-xl font-bold text-red-500">{analysis.metrics.pendientesAltaPrioridad || 0}</div>
             </div>
-            <div>
-              <p className="font-medium text-sm">Hola, {displayName}!</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <Mail className="w-3 h-3" />
-                {colaborador.email}
-              </p>
+            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-3 h-3 text-green-500" />
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Total</span>
+              </div>
+              <div className="text-xl font-bold">{analysis.metrics.totalPendientes || 0}</div>
+            </div>
+            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-3 h-3 text-yellow-500" />
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Tiempo</span>
+              </div>
+              <div className="text-xl font-bold text-yellow-500">{analysis.metrics.tiempoEstimadoTotal || "0h 0m"}</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 mt-3">
-            <div className="p-2 rounded-full bg-[#6841ea]/10">
-              <Brain className="w-5 h-5 text-[#6841ea]" />
+          {analysis.answer && (
+            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+              <div className="flex items-start gap-2">
+                <Bot className="w-4 h-4 text-[#6841ea] mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {analysis.answer.split("\n\n")[0]}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-md">📋 Resumen de tu día</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {new Date().toLocaleDateString("es-MX", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric"
-                })}
-              </p>
-            </div>
-          </div>
+          )}
         </div>,
-        400
+        600
       );
 
       setTimeout(async () => {
-        addMessageWithTyping(
-          "bot",
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Target className="w-3 h-3 text-red-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Alta</span>
-                </div>
-                <div className="text-xl font-bold text-red-500">{analysis.metrics.tareasAltaPrioridad || 0}</div>
+        if (!hayTareas) {
+          addMessageWithTyping(
+            "bot",
+            <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
+              <div className="text-center py-4">
+                <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                <h4 className="font-semibold mb-1">Sin tareas planificadas</h4>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No hay tareas con tiempo estimado para hoy.</p>
               </div>
-              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText className="w-3 h-3 text-green-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Total</span>
-                </div>
-                <div className="text-xl font-bold">{analysis.metrics.tareasConTiempo || 0}</div>
+            </div>,
+            800
+          );
+        } else if (tareas.length <= 3) {
+          addMessageWithTyping(
+            "bot",
+            <div className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-gray-200"}`}>
+              <div className="p-3 border-b border-[#2a2a2a] bg-[#6841ea]/10">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Tareas para Hoy ({tareas.length})
+                </h4>
               </div>
-              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock className="w-3 h-3 text-yellow-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Tiempo</span>
-                </div>
-                <div className="text-xl font-bold text-yellow-500">{analysis.metrics.tiempoEstimadoTotal || "0h 0m"}</div>
-              </div>
-            </div>
-
-            {analysis.answer && (
-              <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
-                <div className="flex items-start gap-2">
-                  <Bot className="w-4 h-4 text-[#6841ea] mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                      {analysis.answer.split("\n\n")[0]}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>,
-          600
-        );
-      }, 800);
-    }
-
-    setTimeout(async () => {
-      if (!hayTareas) {
-        addMessageWithTyping(
-          "bot",
-          <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}>
-            <div className="text-center py-4">
-              <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
-              <h4 className="font-semibold mb-1">Sin tareas planificadas</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">No hay tareas con tiempo estimado para hoy.</p>
-            </div>
-          </div>,
-          800
-        );
-      } else {
-        // Mostrar las actividades con sus tareas
-        addMessageWithTyping(
-          "bot",
-          <div className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-gray-200"}`}>
-            <div className="p-3 border-b border-[#2a2a2a] bg-[#6841ea]/10">
-              <h4 className="font-semibold text-sm flex items-center gap-2">
-                <Target className="w-4 h-4" />
-                Actividades del Día ({analysis.data.actividades.length})
-              </h4>
-            </div>
-            <div className="p-3 space-y-4">
-              {analysis.data.actividades.map((actividad, idx) => {
-                const revisiones = analysis.data.revisionesPorActividad.find(
-                  rev => rev.actividadId === actividad.id
-                );
-                const tareas = revisiones?.tareasConTiempo || [];
-                
-                return (
-                  <div key={actividad.id} className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                          ${idx % 3 === 0 ? "bg-blue-500/20 text-blue-500" : 
-                            idx % 3 === 1 ? "bg-purple-500/20 text-purple-500" : 
-                            "bg-pink-500/20 text-pink-500"}`}>
+              <div className="p-3 space-y-2">
+                {tareas.map((tarea, idx) => {
+                  const diasPendiente = Math.floor(
+                    (new Date().getTime() - new Date(tarea.fechaCreacion).getTime()) / (1000 * 60 * 60 * 24)
+                  );
+                  return (
+                    <div key={tarea.id} className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"} flex items-center justify-between`}>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold
+                          ${tarea.prioridad === "ALTA" ? "bg-red-500/20 text-red-500" :
+                            tarea.prioridad === "MEDIA" ? "bg-yellow-500/20 text-yellow-500" :
+                              "bg-green-500/20 text-green-500"}`}>
                           {idx + 1}
                         </div>
-                        <h5 className="font-medium text-sm">{actividad.titulo}</h5>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{tarea.nombre}</p>
+                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {tarea.duracionMin} min
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {diasPendiente}d
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <Badge variant="outline" className="text-xs">
-                        {actividad.horario}
+                      <Badge variant={tarea.prioridad === "ALTA" ? "destructive" : "secondary"} className="text-xs">
+                        {tarea.prioridad}
                       </Badge>
                     </div>
-                    
-                    {tareas.length > 0 && (
-                      <div className="ml-8 mt-2 space-y-2">
-                        {tareas.map((tarea, tIdx) => (
-                          <div key={tarea.id} className={`p-2 rounded ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs
-                                  ${tarea.prioridad === "ALTA" ? "bg-red-500/20 text-red-500" :
-                                    tarea.prioridad === "MEDIA" ? "bg-yellow-500/20 text-yellow-500" :
-                                    "bg-green-500/20 text-green-500"}`}>
-                                  {tIdx + 1}
-                                </div>
-                                <span className="text-sm">{tarea.nombre}</span>
-                              </div>
-                              <Badge variant={tarea.prioridad === "ALTA" ? "destructive" : "secondary"} className="text-xs">
-                                {tarea.prioridad}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 ml-7">
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {tarea.duracionMin} min
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {tarea.diasPendiente || 0}d
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className={`p-3 border-t ${theme === "dark" ? "border-[#2a2a2a] bg-[#252527]" : "border-gray-200 bg-gray-50"}`}>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-gray-500">Total tiempo estimado:</span>
-                <span className="font-bold">{analysis.metrics.tiempoEstimadoTotal}</span>
+                  );
+                })}
               </div>
-            </div>
-          </div>,
-          800
-        );
-      }
-
-      setTimeout(async () => {
-        await addMessageWithTyping(
-          "bot",
-          <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#1a1a1a] border border-[#2a2a2a]" : "bg-gray-50 border border-gray-200"}`}>
-            <div className="space-y-3">
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                {hayTareas
-                  ? "¿Te gustaría explicar tus tareas usando el modo guiado por voz?"
-                  : "¿Necesitas ayuda para planificar nuevas tareas?"}
-              </p>
-              {hayTareas && (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={startVoiceMode}
-                    className="bg-[#6841ea] hover:bg-[#5a36d4] flex items-center gap-2"
-                  >
-                    <Headphones className="w-4 h-4" />
-                    Modo Voz Guiado
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setStep("finished")}
-                  >
-                    Continuar en chat
-                  </Button>
+              <div className={`p-3 border-t ${theme === "dark" ? "border-[#2a2a2a] bg-[#252527]" : "border-gray-200 bg-gray-50"}`}>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-500">Total tiempo:</span>
+                  <span className="font-bold">{analysis.metrics.tiempoEstimadoTotal}</span>
                 </div>
-              )}
-            </div>
-          </div>,
-          600
-        );
-        setStep("finished");
-      }, 1000);
-    }, isRestoration ? 500 : 800);
+              </div>
+            </div>,
+            800
+          );
+        } else {
+          addMessageWithTyping(
+            "bot",
+            <div className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-gray-200"}`}>
+              <div className="p-3 border-b border-[#2a2a2a] bg-[#6841ea]/10">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Tareas Planificadas ({tareas.length})
+                  </h4>
+                  <Badge variant="outline" className="text-xs">{analysis.metrics.tiempoEstimadoTotal}</Badge>
+                </div>
+              </div>
+              <div className="overflow-x-auto max-h-[300px]">
+                <table className="w-full text-xs">
+                  <thead className={`sticky top-0 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+                    <tr>
+                      <th className="p-2 text-left font-medium">#</th>
+                      <th className="p-2 text-left font-medium">Tarea</th>
+                      <th className="p-2 text-left font-medium">Tiempo</th>
+                      <th className="p-2 text-left font-medium">Prioridad</th>
+                      <th className="p-2 text-left font-medium">Días</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tareas.map((tarea, idx) => {
+                      const diasPendiente = Math.floor(
+                        (new Date().getTime() - new Date(tarea.fechaCreacion).getTime()) / (1000 * 60 * 60 * 24)
+                      );
+                      return (
+                        <tr key={tarea.id} className={`border-t ${theme === "dark" ? "border-[#2a2a2a] hover:bg-[#252527]" : "border-gray-200 hover:bg-gray-50"}`}>
+                          <td className="p-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium
+                              ${tarea.prioridad === "ALTA" ? "bg-red-500/10 text-red-500" :
+                                tarea.prioridad === "MEDIA" ? "bg-yellow-500/10 text-yellow-500" :
+                                  "bg-green-500/10 text-green-500"}`}>
+                              {idx + 1}
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <div className="max-w-[180px]">
+                              <p className="font-medium truncate">{tarea.nombre}</p>
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <Badge variant="outline" className="font-mono text-xs">{tarea.duracionMin}min</Badge>
+                          </td>
+                          <td className="p-2">
+                            <Badge className={`text-xs ${tarea.prioridad === "ALTA" ? "bg-red-500 hover:bg-red-600" :
+                              tarea.prioridad === "MEDIA" ? "bg-yellow-500 hover:bg-yellow-600" :
+                                "bg-green-500 hover:bg-green-600"} text-white`}>
+                              {tarea.prioridad}
+                            </Badge>
+                          </td>
+                          <td className="p-2">
+                            <div className={`px-2 py-1 rounded text-xs ${diasPendiente > 3 ? "bg-red-500/10 text-red-500" : "bg-gray-500/10 text-gray-500"}`}>
+                              {diasPendiente}d
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className={`p-3 border-t ${theme === "dark" ? "border-[#2a2a2a] bg-[#252527]" : "border-gray-200 bg-gray-50"}`}>
+                <div className="flex justify-between items-center text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <Target className="w-3 h-3 text-red-500" />
+                      <span>Alta: {analysis.metrics.pendientesAltaPrioridad}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <FileText className="w-3 h-3 text-green-500" />
+                      <span>Total: {tareas.length}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 font-bold">
+                    <Clock className="w-3 h-3 text-yellow-500" />
+                    <span>{analysis.metrics.tiempoEstimadoTotal}</span>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            800
+          );
+        }
+
+        setTimeout(async () => {
+          await addMessageWithTyping(
+            "bot",
+            <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#1a1a1a] border border-[#2a2a2a]" : "bg-gray-50 border border-gray-200"}`}>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  {hayTareas
+                    ? "explica tus tareas usando el modo guiado por voz"
+                    : "¿Necesitas ayuda para planificar nuevas tareas?"}
+                </p>
+                {hayTareas && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={startVoiceMode}
+                      className="bg-[#6841ea] hover:bg-[#5a36d4] flex items-center gap-2"
+                    >
+                      <Headphones className="w-4 h-4" />
+                      Modo Voz Guiado
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setStep("finished")}
+                    >
+                      Continuar en chat
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>,
+            600
+          );
+          setStep("finished");
+        }, 1000);
+      }, 800);
+    }, 800);
   };
 
   const startRecording = () => {
@@ -1543,8 +1820,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       return;
     }
 
+    // Detener cualquier síntesis de voz activa
     window.speechSynthesis.cancel();
 
+    // Detener reconocimiento previo si existe
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -1566,6 +1845,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
+    // GUARDAR la referencia ANTES de asignar listeners
     recognitionRef.current = recognition;
 
     recognition.onstart = () => {
@@ -1588,17 +1868,31 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     recognition.onerror = (event: any) => {
       console.warn("⚠️ SpeechRecognition error:", event.error);
 
+      // IGNORAR errores de "aborted" - son normales cuando detenemos manualmente
       if (event.error === "aborted") {
-        console.log("🔄 Abortado intencionalmente");
+        console.log("🔄 Abortado intencionalmente (cambio de estado/tarea)");
         setIsListening(false);
         setIsRecording(false);
         setShowVoiceOverlay(false);
-        return;
+        return; // ← NO procesar como error real
+      }
+
+      if (event.error === "no-speech") {
+        console.log("🔇 No se detectó voz");
+      } else if (event.error === "audio-capture") {
+        console.log("🎤 Error de captura de audio");
+      } else if (event.error === "not-allowed") {
+        console.log("🚫 Permiso de micrófono denegado");
       }
 
       setIsListening(false);
       setIsRecording(false);
       setShowVoiceOverlay(false);
+
+      // Solo mostrar alerta para errores graves (no "aborted")
+      if (event.error !== "aborted" && event.error !== "no-speech") {
+        console.error("Error en reconocimiento de voz:", event.error);
+      }
     };
 
     recognition.onend = () => {
@@ -1608,6 +1902,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setShowVoiceOverlay(false);
     };
 
+    // Pequeño delay para asegurar que todo está listo
     setTimeout(() => {
       try {
         recognition.start();
@@ -1618,6 +1913,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         setIsRecording(false);
         setShowVoiceOverlay(false);
 
+        // Si falla, volver a intentar una vez
         setTimeout(() => {
           try {
             recognition.start();
@@ -1643,12 +1939,14 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setIsListening(false);
     setShowVoiceOverlay(false);
 
+    // IMPORTANTE: Solo procesar si estamos en modo voz guiado y tenemos transcripción
     if (voiceMode && voiceStep === "listening-explanation" && voiceTranscript.trim()) {
       console.log("Procesando explicación después de detener grabación");
       processVoiceExplanation(voiceTranscript);
     } else if (voiceMode && voiceStep === "listening-explanation" && !voiceTranscript.trim()) {
+      // Si no hay transcripción, volver a esperar
       console.log("No hay transcripción, volviendo a waiting-for-explanation");
-      speakText("No escuché tu explicación. Por favor, intenta de nuevo.", 1.3);
+      speakText("No escuché tu explicación. Por favor, intenta de nuevo.");
       setTimeout(() => {
         setVoiceStep("waiting-for-explanation");
       }, 1000);
@@ -1787,22 +2085,26 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       // PRIMERO: Verificar si hay sesión de historial existente
       const hasExistingSession = await checkExistingConversation();
 
-      if (!hasExistingSession) {
-        // SEGUNDO: Solo si NO hay historial, hacer flujo normal
-        setTimeout(() => {
-          addMessageWithTyping("bot", `¡Hola ${displayName}! 👋 Soy tu asistente.`, 500);
-          setTimeout(() => {
-            addMessage(
-              "system",
-              <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                <Mail className="w-4 h-4 text-[#6841ea]" />
-                Buscando tus actividades para el día de hoy...
-              </div>
-            );
-            fetchAssistantAnalysis(false);
-          }, 1500);
-        }, 500);
+      if (hasExistingSession) {
+        // Si hay historial, ya se mostró en checkExistingConversation()
+        // No hacer el flujo normal
+        return;
       }
+
+      // SEGUNDO: Solo si NO hay historial, hacer flujo normal
+      setTimeout(() => {
+        addMessageWithTyping("bot", `¡Hola ${displayName}! 👋 Soy tu asistente.`, 500);
+        setTimeout(() => {
+          addMessage(
+            "system",
+            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+              <Mail className="w-4 h-4 text-[#6841ea]" />
+              Buscando tus actividades para el día de hoy...
+            </div>
+          );
+          fetchAssistantAnalysis(false);
+        }, 1500);
+      }, 500);
     };
 
     init();
@@ -1836,13 +2138,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   // ========== Componente VoiceGuidanceFlow Mejorado ==========
+  // ========== Componente VoiceGuidanceFlow Mejorado ==========
   const VoiceGuidanceFlow = () => {
     if (!voiceMode) return null;
 
+    // AGREGAR ESTOS LOGS PARA DEBUG
     console.log("=== VOICE GUIDANCE FLOW ===");
     console.log("sortedTasks length:", sortedTasks?.length);
     console.log("currentTaskIndex:", currentTaskIndex);
+    console.log("sortedTasks:", sortedTasks?.map(t => t.nombre));
 
+    // VALIDAR ÍNDICE ANTES DE USARLO
     if (!sortedTasks || sortedTasks.length === 0) {
       console.log("No hay tareas disponibles");
       return (
@@ -1859,6 +2165,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       );
     }
 
+    // Asegurar que el índice sea válido
     const validIndex = Math.min(currentTaskIndex, sortedTasks.length - 1);
     if (currentTaskIndex !== validIndex) {
       console.log(`Corrigiendo índice de ${currentTaskIndex} a ${validIndex}`);
@@ -1877,11 +2184,20 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     console.log(`Mostrando: Tarea ${validIndex + 1} de ${totalTasks}: ${currentTask.nombre}`);
 
+    // Obtener la ÚLTIMA explicación para la tarea actual usando useMemo
     const currentExplanation = useMemo(() => {
       if (!currentTask?.id) return null;
+
+      // Filtrar todas las explicaciones para esta tarea
       const explanationsForTask = taskExplanations.filter(exp => exp.taskId === currentTask.id);
+
+      // Si no hay explicaciones, retornar null
       if (explanationsForTask.length === 0) return null;
+
+      // Tomar la última explicación (la más reciente)
       const lastExplanation = explanationsForTask[explanationsForTask.length - 1];
+
+      // Retornar null si la tarea fue saltada, de lo contrario retornar la explicación
       return lastExplanation.explanation === "[Tarea saltada]" ? null : lastExplanation;
     }, [currentTask?.id, taskExplanations]);
 
@@ -1900,7 +2216,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   <p className="text-xs text-gray-500">
                     {isSpeaking ? "Asistente hablando..." :
                       voiceStep === "confirm-start" ? "Confirmar inicio" :
-                        voiceStep === "task-presentation" ? `Tarea ${validIndex + 1} de ${totalTasks}` :
+                        voiceStep === "task-presentation" ? `Tarea ${validIndex + 1} de ${totalTasks}` : // CAMBIADO de "Tareas" a "Tarea"
                           voiceStep === "waiting-for-explanation" ? "Esperando explicación" :
                             voiceStep === "listening-explanation" ? "Escuchando tu explicación" :
                               voiceStep === "processing-explanation" ? "Procesando explicación" :
@@ -1996,7 +2312,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {currentTask.diasPendiente || 0} días
+                          {Math.floor((new Date().getTime() - new Date(currentTask.fechaCreacion).getTime()) / (1000 * 60 * 60 * 24))} días
                         </span>
                       </div>
                     </div>
@@ -2008,6 +2324,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     </Badge>
                   </div>
 
+                  {/* Mostrar la última explicación si existe y no es "[Tarea saltada]" */}
                   {currentExplanation && (
                     <div className={`mt-3 p-3 rounded ${theme === "dark" ? "bg-green-900/20 border border-green-500/20" : "bg-green-50 border border-green-200"}`}>
                       <div className="flex items-center gap-2 mb-1">
@@ -2033,6 +2350,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     disabled={isSpeaking || voiceStep === "listening-explanation"}
                   >
                     <Mic className="w-4 h-4 mr-2" />
+                    {/* Mostrar "Corregir explicación" si ya existe una, "Explicar esta tarea" si no */}
                     {currentExplanation ? "Corregir explicación" : "Explicar esta tarea"}
                   </Button>
                   <Button
@@ -2089,6 +2407,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   </Button>
                   <Button
                     onClick={() => {
+                      // Cancelar grabación sin procesar
                       if (recognitionRef.current) {
                         recognitionRef.current.stop();
                       }
@@ -2118,7 +2437,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   </p>
                 </div>
                 <p className={`text-sm text-center ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
-                  ¿Confirmas esta explicación? Di "sí" para confirmar o "no" para corregir.
+                  ¿Estás de acuerdo con esta estrategia?
                 </p>
                 <div className="flex gap-3">
                   <Button
@@ -2340,16 +2659,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Restaurando tu sesión anterior...
-              </div>
-            </div>
-          )}
-
-          {/* Indicador de verificación de fin de jornada */}
-          {isCheckingAfterHours && (
-            <div className="flex justify-center items-center py-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Verificando actividades al final del día...
               </div>
             </div>
           )}
