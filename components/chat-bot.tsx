@@ -52,6 +52,8 @@ import {
   X,
   Headphones,
   RotateCcw,
+  FolderOpen,
+  ListChecks,
 } from "lucide-react";
 import Image from "next/image";
 
@@ -123,6 +125,7 @@ interface AssistantAnalysis {
 type VoiceModeStep =
   | "idle"
   | "confirm-start"
+  | "activity-presentation"
   | "task-presentation"
   | "waiting-for-explanation"
   | "listening-explanation"
@@ -134,6 +137,7 @@ type VoiceModeStep =
 interface TaskExplanation {
   taskId: string;
   taskName: string;
+  activityTitle: string;
   explanation: string;
   confirmed: boolean;
   priority: string;
@@ -155,13 +159,12 @@ const useVoiceSynthesis = () => {
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "es-MX";
-    utterance.rate = rate;   // Aumentada a 1.2 para más velocidad
+    utterance.rate = rate;
     utterance.pitch = pitch;
     utterance.volume = 1;
 
     const voices = window.speechSynthesis.getVoices();
-    
-    // Priorizar voces femeninas rápidas
+
     let selectedVoice =
       voices.find(v => v.name.includes("Microsoft Sabina")) ||
       voices.find(v => v.name.includes("Google español") && !v.name.toLowerCase().includes("male")) ||
@@ -171,7 +174,6 @@ const useVoiceSynthesis = () => {
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
-      console.log(" Voz seleccionada:", selectedVoice.name, "Velocidad:", rate);
     }
 
     utterance.onstart = () => setIsSpeaking(true);
@@ -220,69 +222,70 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [isCheckingHistory, setIsCheckingHistory] = useState(false);
   const [hasExistingSession, setHasExistingSession] = useState(false);
   const [isCheckingAfterHours, setIsCheckingAfterHours] = useState(false);
-  
+
   // ========== NUEVO: Estados para Modo Voz Mejorado ==========
   const [voiceMode, setVoiceMode] = useState<boolean>(false);
   const [voiceStep, setVoiceStep] = useState<VoiceModeStep>("idle");
+  const [currentActivityIndex, setCurrentActivityIndex] = useState<number>(0);
   const [currentTaskIndex, setCurrentTaskIndex] = useState<number>(0);
   const [taskExplanations, setTaskExplanations] = useState<TaskExplanation[]>([]);
   const [voiceConfirmationText, setVoiceConfirmationText] = useState<string>("");
   const [showVoiceSummary, setShowVoiceSummary] = useState<boolean>(false);
   const [isVoiceSpeaking, setIsVoiceSpeaking] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
-  const [pendingRetry, setPendingRetry] = useState<boolean>(false);
-  const [pendingConfirmation, setPendingConfirmation] = useState<boolean>(false);
   const [expectedInputType, setExpectedInputType] = useState<"explanation" | "confirmation" | "none">("none");
+  const [currentListeningFor, setCurrentListeningFor] = useState<string>("");
 
   const displayName = getDisplayName(colaborador);
   const router = useRouter();
   const { speak: speakText, stop: stopVoice, isSpeaking } = useVoiceSynthesis();
 
-  // ========== NUEVO: Filtrado y ordenamiento de tareas ==========
-  const { uniqueTasks, sortedTasks } = useMemo(() => {
+  // ========== NUEVO: Reorganizar datos por actividades ==========
+  const activitiesWithTasks = useMemo(() => {
     if (!assistantAnalysis?.data?.revisionesPorActividad) {
-      return { uniqueTasks: [], sortedTasks: [] };
+      return [];
     }
 
-    // Obtener todas las tareas de todas las actividades
-    const allTasks = assistantAnalysis.data.revisionesPorActividad.flatMap(
-      actividad => actividad.tareasConTiempo.map(tarea => ({
-        ...tarea,
+    return assistantAnalysis.data.revisionesPorActividad
+      .filter(actividad => actividad.tareasConTiempo.length > 0)
+      .map(actividad => ({
         actividadId: actividad.actividadId,
         actividadTitulo: actividad.actividadTitulo,
-        actividadHorario: actividad.actividadHorario
-      }))
-    );
-
-    // Eliminar duplicados por ID
-    const taskMap = new Map();
-    allTasks.forEach(task => {
-      if (!taskMap.has(task.id)) {
-        taskMap.set(task.id, task);
-      }
-    });
-
-    const uniqueTasks = Array.from(taskMap.values());
-
-    // Ordenar por prioridad y duración
-    const priorityOrder = { ALTA: 0, MEDIA: 1, BAJA: 2 };
-    const sortedTasks = [...uniqueTasks].sort((a, b) => {
-      const priorityDiff = priorityOrder[a.prioridad as keyof typeof priorityOrder] - 
-                         priorityOrder[b.prioridad as keyof typeof priorityOrder];
-      if (priorityDiff !== 0) return priorityDiff;
-      return b.duracionMin - a.duracionMin;
-    });
-
-    return { uniqueTasks, sortedTasks };
+        actividadHorario: actividad.actividadHorario,
+        tareas: actividad.tareasConTiempo.map(tarea => ({
+          ...tarea,
+          actividadId: actividad.actividadId,
+          actividadTitulo: actividad.actividadTitulo
+        }))
+      }));
   }, [assistantAnalysis]);
+
+  // ========== NUEVO: Calcular estadísticas ==========
+  const totalActivities = activitiesWithTasks.length;
+  const totalTasks = activitiesWithTasks.reduce((sum, activity) => sum + activity.tareas.length, 0);
+
+  // ========== NUEVO: Función para obtener actividad actual ==========
+  const getCurrentActivity = () => {
+    if (currentActivityIndex >= 0 && currentActivityIndex < activitiesWithTasks.length) {
+      return activitiesWithTasks[currentActivityIndex];
+    }
+    return null;
+  };
+
+  const getCurrentTask = () => {
+    const currentActivity = getCurrentActivity();
+    if (currentActivity && currentTaskIndex >= 0 && currentTaskIndex < currentActivity.tareas.length) {
+      return currentActivity.tareas[currentTaskIndex];
+    }
+    return null;
+  };
 
   // ========== NUEVO: Función para verificar si es después de las 17:30 ==========
   const checkIfAfterHours = () => {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
-    
-    // Verificar si es después de las 17:30
+
     return currentHour > 17 || (currentHour === 17 && currentMinute >= 30);
   };
 
@@ -290,7 +293,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const checkEndOfDayActivities = async () => {
     try {
       setIsCheckingAfterHours(true);
-      
+
       const response = await fetch(
         "http://localhost:4000/api/v1/assistant/verificar-actividades-finalizadas",
         {
@@ -307,7 +310,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       const data = await response.json();
 
       if (data.success && data.todasValidadas) {
-        // Mostrar mensaje de que todas las actividades han sido validadas
         addMessage(
           "bot",
           <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-green-900/20 border-green-500/20" : "bg-green-50 border-green-200"}`}>
@@ -316,18 +318,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               <div>
                 <span className="font-medium">¡Jornada completada! 🎉</span>
                 <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                  Todas tus actividades han sido revisadas y validadas correctamente. 
+                  Todas tus actividades han sido revisadas y validadas correctamente.
                   ¡Buen trabajo! Puedes cerrar sesión.
                 </p>
               </div>
             </div>
           </div>
         );
-        
-        // Opcional: Hablar el mensaje
-        speakText("¡Perfecto! Todas tus actividades han sido revisadas y validadas. Buen trabajo, puedes cerrar sesión.");
+
+        speakText("¡Perfecto! Todas tus actividades han sido revisadas y validadas. Buen trabajo, puedes cerrar sesión.", 1.3);
       }
-      
+
       setIsCheckingAfterHours(false);
     } catch (error) {
       console.error("Error al verificar actividades finalizadas:", error);
@@ -350,67 +351,135 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     stopRecording();
     setVoiceMode(false);
     setVoiceStep("idle");
+    setCurrentActivityIndex(0);
     setCurrentTaskIndex(0);
     setTaskExplanations([]);
     setRetryCount(0);
-    setPendingRetry(false);
-    setPendingConfirmation(false);
     setExpectedInputType("none");
+    setCurrentListeningFor("");
   };
 
   const confirmStartVoiceMode = () => {
     console.log("Confirmando inicio modo voz");
-    setVoiceStep("task-presentation");
-    setExpectedInputType("none");
 
-    setTimeout(() => {
-      speakTaskByIndex(0);
-    }, 300);
-  };
-
-  const speakTaskByIndex = useCallback((taskIndex: number) => {
-    console.log("========== speakTaskByIndex ==========");
-    console.log("Índice recibido:", taskIndex);
-    console.log("Total tareas:", sortedTasks?.length);
-
-    if (!sortedTasks || sortedTasks.length === 0) {
-      console.error("ERROR: No hay tareas para hablar");
+    if (activitiesWithTasks.length === 0) {
+      speakText("No hay actividades con tareas para explicar.", 1.3);
+      setTimeout(() => cancelVoiceMode(), 1000);
       return;
     }
 
-    if (taskIndex < 0 || taskIndex >= sortedTasks.length) {
-      console.log("Índice fuera de rango, mostrando resumen");
+    setVoiceStep("activity-presentation");
+    setExpectedInputType("none");
+
+    setTimeout(() => {
+      speakActivityByIndex(0);
+    }, 300);
+  };
+
+  const speakActivityByIndex = useCallback((activityIndex: number) => {
+    console.log("========== speakActivityByIndex ==========");
+    console.log("Índice recibido:", activityIndex);
+    console.log("Total actividades:", activitiesWithTasks.length);
+
+    if (!activitiesWithTasks || activitiesWithTasks.length === 0) {
+      console.error("ERROR: No hay actividades para hablar");
+      return;
+    }
+
+    if (activityIndex < 0 || activityIndex >= activitiesWithTasks.length) {
+      console.log("Todas las actividades completadas");
       setVoiceStep("summary");
       setExpectedInputType("confirmation");
 
       setTimeout(() => {
-        speakText("¡Perfecto! Has explicado todas tus tareas. ¿Quieres enviar este reporte?", 1.3);
+        speakText("¡Perfecto! Has explicado todas las tareas de todas las actividades. ¿Quieres enviar este reporte?", 1.3);
       }, 500);
       return;
     }
 
-    const task = sortedTasks[taskIndex];
+    const activity = activitiesWithTasks[activityIndex];
+    if (!activity) {
+      console.error(`ERROR: No se encontró la actividad en índice ${activityIndex}`);
+      return;
+    }
+
+    const activityText = `Actividad ${activityIndex + 1} de ${activitiesWithTasks.length}: ${activity.actividadTitulo}. Horario: ${activity.actividadHorario}. Tiene ${activity.tareas.length} tarea${activity.tareas.length !== 1 ? 's' : ''} pendiente${activity.tareas.length !== 1 ? 's' : ''}.`;
+
+    console.log("Texto de actividad a hablar:", activityText);
+
+    setVoiceStep("activity-presentation");
+    setExpectedInputType("none");
+
+    setTimeout(() => {
+      speakText(activityText, 1.3);
+
+      const estimatedSpeechTime = activityText.length * 40 + 1000;
+
+      setTimeout(() => {
+        console.log("Actividad presentada, pasando a primera tarea");
+        setCurrentTaskIndex(0);
+        speakTaskByIndices(activityIndex, 0);
+      }, estimatedSpeechTime);
+    }, 100);
+  }, [activitiesWithTasks, speakText]);
+
+  const speakTaskByIndices = useCallback((activityIndex: number, taskIndex: number) => {
+    console.log("========== speakTaskByIndices ==========");
+    console.log("Actividad índice:", activityIndex, "Tarea índice:", taskIndex);
+
+    if (!activitiesWithTasks || activitiesWithTasks.length === 0) {
+      console.error("ERROR: No hay actividades");
+      return;
+    }
+
+    if (activityIndex >= activitiesWithTasks.length) {
+      console.log("Todas las actividades completadas");
+      setVoiceStep("summary");
+      setExpectedInputType("confirmation");
+
+      setTimeout(() => {
+        speakText("¡Perfecto! Has explicado todas las tareas de todas las actividades. ¿Quieres enviar este reporte?", 1.3);
+      }, 500);
+      return;
+    }
+
+    const activity = activitiesWithTasks[activityIndex];
+    if (!activity) {
+      console.error(`ERROR: No se encontró la actividad en índice ${activityIndex}`);
+      return;
+    }
+
+    if (taskIndex >= activity.tareas.length) {
+      console.log("Todas las tareas de esta actividad completadas, pasando a siguiente actividad");
+      const nextActivityIndex = activityIndex + 1;
+      setCurrentActivityIndex(nextActivityIndex);
+      setCurrentTaskIndex(0);
+
+      setTimeout(() => {
+        speakActivityByIndex(nextActivityIndex);
+      }, 500);
+      return;
+    }
+
+    const task = activity.tareas[taskIndex];
     if (!task) {
       console.error(`ERROR: No se encontró la tarea en índice ${taskIndex}`);
       return;
     }
 
-    const diasPendiente = task.diasPendiente || Math.floor(
-      (new Date().getTime() - new Date(task.fechaCreacion).getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    // Texto más corto y directo para mayor velocidad
-    const taskText = `Tarea ${taskIndex + 1}: ${task.nombre}. Prioridad ${task.prioridad}, ${task.duracionMin} minutos. ¿Cómo la resolverás?`;
+    const taskText = `Tarea ${taskIndex + 1} de ${activity.tareas.length} en esta actividad: ${task.nombre}. Prioridad ${task.prioridad}, ${task.duracionMin} minutos, ${task.diasPendiente || 0} días pendiente. ¿Cómo planeas resolver esta tarea?`;
 
     console.log("Texto a hablar:", taskText);
 
     setVoiceStep("task-presentation");
     setExpectedInputType("none");
 
-    setTimeout(() => {
-      speakText(taskText, 1.3); // Velocidad aumentada
+    setCurrentListeningFor(`Tarea: ${task.nombre}`);
 
-      const estimatedSpeechTime = taskText.length * 40 + 800; // Tiempo reducido
+    setTimeout(() => {
+      speakText(taskText, 1.3);
+
+      const estimatedSpeechTime = taskText.length * 40 + 800;
 
       setTimeout(() => {
         console.log("Habla completada, cambiando a waiting-for-explanation");
@@ -418,7 +487,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         setExpectedInputType("explanation");
       }, estimatedSpeechTime);
     }, 100);
-  }, [sortedTasks, speakText]);
+  }, [activitiesWithTasks, speakText, speakActivityByIndex]);
 
   const startTaskExplanation = () => {
     console.log("========== INICIANDO startTaskExplanation ==========");
@@ -439,6 +508,11 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       stopRecording();
     }
 
+    const currentTask = getCurrentTask();
+    if (currentTask) {
+      setCurrentListeningFor(`Explicación para: ${currentTask.nombre}`);
+    }
+
     setVoiceStep("listening-explanation");
     setExpectedInputType("explanation");
     setVoiceTranscript("");
@@ -457,6 +531,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       speakText("Tu navegador no soporta reconocimiento de voz. Por favor, usa el teclado.", 1.3);
       setTimeout(() => {
         setVoiceStep("waiting-for-explanation");
+        setCurrentListeningFor("");
       }, 1000);
       return;
     }
@@ -492,6 +567,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       console.error("ERROR en reconocimiento de voz:", event.error);
       setIsListening(false);
       setIsRecording(false);
+      setCurrentListeningFor("");
 
       if (event.error === "no-speech") {
         console.log("No se detectó voz");
@@ -511,6 +587,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       console.log("Transcripción final:", voiceTranscript);
       setIsListening(false);
       setIsRecording(false);
+      setCurrentListeningFor("");
 
       if (!voiceTranscript.trim()) {
         console.log("No hay transcripción, volviendo a estado anterior");
@@ -547,16 +624,24 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       }
     }
 
-    const task = sortedTasks[currentTaskIndex];
-    const updatedExplanations = taskExplanations.filter(exp => exp.taskId !== task.id);
+    const currentTask = getCurrentTask();
+    const currentActivity = getCurrentActivity();
+
+    if (!currentTask || !currentActivity) {
+      console.error("ERROR: No hay tarea o actividad actual");
+      return;
+    }
+
+    const updatedExplanations = taskExplanations.filter(exp => exp.taskId !== currentTask.id);
 
     const explanation: TaskExplanation = {
-      taskId: task.id,
-      taskName: task.nombre,
+      taskId: currentTask.id,
+      taskName: currentTask.nombre,
+      activityTitle: currentActivity.actividadTitulo,
       explanation: trimmedTranscript,
       confirmed: false,
-      priority: task.prioridad,
-      duration: task.duracionMin,
+      priority: currentTask.prioridad,
+      duration: currentTask.duracionMin,
       timestamp: new Date()
     };
 
@@ -565,12 +650,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setTaskExplanations([...updatedExplanations, explanation]);
     setVoiceConfirmationText(trimmedTranscript);
 
-    // Cambiar DIRECTAMENTE a confirmación sin preguntar
     setVoiceStep("confirmation");
     setExpectedInputType("confirmation");
 
-    // Pregunta directa para confirmar
-    const confirmationText = `¿Confirmas esta explicación? Di 'sí' para confirmar o 'no' para corregir.`;
+    const confirmationText = `¿Confirmas esta explicación para la tarea "${currentTask.nombre}"? Di 'sí' para confirmar o 'no' para corregir.`;
 
     console.log("Preguntando confirmación");
     speakText(confirmationText, 1.3);
@@ -585,44 +668,50 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       return;
     }
 
-    const task = sortedTasks[currentTaskIndex];
-    if (!task) {
-      console.error("ERROR: No hay tarea en el índice actual");
+    const currentTask = getCurrentTask();
+    const currentActivity = getCurrentActivity();
+
+    if (!currentTask || !currentActivity) {
+      console.error("ERROR: No hay tarea o actividad en el índice actual");
       return;
     }
 
-    console.log("Confirmando tarea:", task.nombre);
+    console.log("Confirmando tarea:", currentTask.nombre);
 
     setTaskExplanations(prev =>
       prev.map(exp =>
-        exp.taskId === task.id ? { ...exp, confirmed: true } : exp
+        exp.taskId === currentTask.id ? { ...exp, confirmed: true } : exp
       )
     );
 
-    const nextIndex = currentTaskIndex + 1;
-    console.log("Nuevo índice de tarea:", nextIndex);
-    console.log("Total tareas:", sortedTasks.length);
+    const nextTaskIndex = currentTaskIndex + 1;
 
-    setCurrentTaskIndex(nextIndex);
-    setRetryCount(0);
-    setPendingConfirmation(false);
-
-    if (nextIndex >= sortedTasks.length) {
-      console.log("Todas las tareas completadas, mostrando resumen");
-      setVoiceStep("summary");
-      setExpectedInputType("confirmation");
+    if (nextTaskIndex < currentActivity.tareas.length) {
+      setCurrentTaskIndex(nextTaskIndex);
+      setRetryCount(0);
 
       setTimeout(() => {
-        speakText("¡Perfecto! Has explicado todas tus tareas. ¿Quieres enviar este reporte?", 1.3);
-      }, 500);
-    } else {
-      console.log("Pasando a la siguiente tarea...");
-      setVoiceStep("task-presentation");
-      setExpectedInputType("none");
-
-      setTimeout(() => {
-        speakTaskByIndex(nextIndex);
+        speakTaskByIndices(currentActivityIndex, nextTaskIndex);
       }, 1000);
+    } else {
+      const nextActivityIndex = currentActivityIndex + 1;
+      setCurrentActivityIndex(nextActivityIndex);
+      setCurrentTaskIndex(0);
+      setRetryCount(0);
+
+      if (nextActivityIndex < activitiesWithTasks.length) {
+        setTimeout(() => {
+          speakActivityByIndex(nextActivityIndex);
+        }, 1000);
+      } else {
+        console.log("Todas las actividades completadas, mostrando resumen");
+        setVoiceStep("summary");
+        setExpectedInputType("confirmation");
+
+        setTimeout(() => {
+          speakText("¡Perfecto! Has explicado todas las tareas de todas las actividades. ¿Quieres enviar este reporte?", 1.3);
+        }, 500);
+      }
     }
   };
 
@@ -635,8 +724,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       return;
     }
 
-    const task = sortedTasks[currentTaskIndex];
-    setTaskExplanations(prev => prev.filter(exp => exp.taskId !== task.id));
+    const currentTask = getCurrentTask();
+    if (!currentTask) {
+      console.error("ERROR: No hay tarea actual");
+      return;
+    }
+
+    setTaskExplanations(prev => prev.filter(exp => exp.taskId !== currentTask.id));
     setRetryCount(prev => prev + 1);
 
     console.log("Reintento número:", retryCount + 1);
@@ -671,7 +765,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         return false;
       }
 
-      // Mostrar información al usuario
       addMessageWithTyping(
         "bot",
         <div className="space-y-3">
@@ -710,9 +803,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         400
       );
 
-      // Cargar directamente las actividades con revisiones
       setTimeout(() => {
-        fetchAssistantAnalysis(false, true); // true indica que es restauración
+        fetchAssistantAnalysis(false, true);
       }, 1000);
 
       setHasExistingSession(true);
@@ -735,42 +827,58 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       return;
     }
 
-    const task = sortedTasks[currentTaskIndex];
-    console.log("Saltando tarea:", task.nombre);
+    const currentTask = getCurrentTask();
+    const currentActivity = getCurrentActivity();
+
+    if (!currentTask || !currentActivity) {
+      console.error("ERROR: No hay tarea o actividad actual");
+      return;
+    }
+
+    console.log("Saltando tarea:", currentTask.nombre);
 
     const explanation: TaskExplanation = {
-      taskId: task.id,
-      taskName: task.nombre,
+      taskId: currentTask.id,
+      taskName: currentTask.nombre,
+      activityTitle: currentActivity.actividadTitulo,
       explanation: "[Tarea saltada]",
       confirmed: true,
-      priority: task.prioridad,
-      duration: task.duracionMin,
+      priority: currentTask.prioridad,
+      duration: currentTask.duracionMin,
       timestamp: new Date()
     };
 
-    const updatedExplanations = taskExplanations.filter(exp => exp.taskId !== task.id);
+    const updatedExplanations = taskExplanations.filter(exp => exp.taskId !== currentTask.id);
     setTaskExplanations([...updatedExplanations, explanation]);
 
-    const nextIndex = currentTaskIndex + 1;
-    setCurrentTaskIndex(nextIndex);
-    setRetryCount(0);
-    setPendingConfirmation(false);
+    const nextTaskIndex = currentTaskIndex + 1;
 
-    if (nextIndex >= sortedTasks.length) {
-      console.log("Todas las tareas completadas, mostrando resumen");
-      setVoiceStep("summary");
-      setExpectedInputType("confirmation");
+    if (nextTaskIndex < currentActivity.tareas.length) {
+      setCurrentTaskIndex(nextTaskIndex);
+      setRetryCount(0);
 
       setTimeout(() => {
-        speakText("¡Perfecto! Has explicado todas tus tareas. ¿Quieres enviar este reporte?", 1.3);
+        speakTaskByIndices(currentActivityIndex, nextTaskIndex);
       }, 500);
     } else {
-      setVoiceStep("task-presentation");
-      setExpectedInputType("none");
+      const nextActivityIndex = currentActivityIndex + 1;
+      setCurrentActivityIndex(nextActivityIndex);
+      setCurrentTaskIndex(0);
+      setRetryCount(0);
 
-      setTimeout(() => {
-        speakTaskByIndex(nextIndex);
-      }, 500);
+      if (nextActivityIndex < activitiesWithTasks.length) {
+        setTimeout(() => {
+          speakActivityByIndex(nextActivityIndex);
+        }, 500);
+      } else {
+        console.log("Todas las actividades completadas, mostrando resumen");
+        setVoiceStep("summary");
+        setExpectedInputType("confirmation");
+
+        setTimeout(() => {
+          speakText("¡Perfecto! Has explicado todas las tareas. ¿Quieres enviar este reporte?", 1.3);
+        }, 500);
+      }
     }
   };
 
@@ -779,7 +887,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     const lowerTranscript = transcript.toLowerCase().trim();
     console.log("Procesando comando de voz:", lowerTranscript);
-    console.log("Estado actual - voiceMode:", voiceMode, "voiceStep:", voiceStep, "expectedInputType:", expectedInputType);
 
     if (voiceMode) {
       console.log("Modo voz guiado ACTIVO - procesando comando específico");
@@ -920,6 +1027,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           .map(exp => ({
             taskId: exp.taskId,
             taskName: exp.taskName,
+            activityTitle: exp.activityTitle,
             explanation: exp.explanation,
             priority: exp.priority,
             duration: exp.duration,
@@ -930,7 +1038,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       console.log("Payload a enviar:", payload);
 
-      // Nuevo endpoint para guardar explicaciones
       const response = await fetch(
         "http://localhost:4000/api/v1/assistant/guardar-explicaciones",
         {
@@ -1010,7 +1117,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
-  // ========== Efecto para verificar después de horas ==========
   useEffect(() => {
     const checkTimeAndVerifyActivities = () => {
       if (checkIfAfterHours()) {
@@ -1019,16 +1125,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       }
     };
 
-    // Verificar inmediatamente al cargar
     checkTimeAndVerifyActivities();
 
-    // Verificar cada 5 minutos
     const interval = setInterval(checkTimeAndVerifyActivities, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // ========== Efecto principal ==========
   useEffect(() => {
     document.documentElement.classList.add("dark");
 
@@ -1134,7 +1237,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         );
       }
 
-      // USAR EL ENDPOINT CON REVISIONES (NO EL LOCAL)
       const requestBody = {
         email: colaborador.email,
         showAll: showAll
@@ -1154,7 +1256,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       console.log("Respuesta del endpoint con revisiones:", JSON.stringify(data, null, 2));
 
-      // Adaptar la respuesta a la estructura esperada
       const adaptedData: AssistantAnalysis = {
         success: data.success,
         answer: data.answer,
@@ -1214,107 +1315,31 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     } catch (error) {
       console.error("Error al obtener análisis del asistente:", error);
       setIsTyping(false);
-
-      // Datos de ejemplo basados en el JSON que proporcionaste
-      const ejemploData: AssistantAnalysis = {
-        success: true,
-        answer: "En tu horario laboral (09:00-17:30), tienes 2 actividades con tareas que tienen tiempo estimado.\n\nEn \"RESPALDO NOTION MIGRACION\" (14:30-17:30) tienes 1 tarea de alta prioridad de 180min.\nEn \"ANFETA WL PRUEBAS RAPIDAS\" (14:30-17:30) tienes 1 tarea de alta prioridad de 180min.\nAmbas actividades tienen la misma tarea de alta prioridad y un tiempo estimado de 180 minutos cada una.\nTe recomiendo priorizar estas tareas de alta prioridad, ya que suman un total de 6 horas estimadas. Dada la hora de inicio (14:30), deberías enfocarte en completarlas.",
-        provider: "Gemini",
-        sessionId: "act_aavel_pprin_com_1769198804438",
-        proyectoPrincipal: "RESPALDO NOTION MIGRACION  aavel aapli aanfe .com ddici ccale ccola resp nnoti mmigr rrapi wwebl Anfe",
-        metrics: {
-          totalActividades: 13,
-          actividadesConTiempoTotal: 2,
-          actividadesFinales: 2,
-          tareasConTiempo: 2,
-          tareasAltaPrioridad: 2,
-          tiempoEstimadoTotal: "6h 0m"
-        },
-        data: {
-          actividades: [
-            {
-              id: "2edabd7d91b7817d8b23cbf2653f05e1",
-              titulo: "RESPALDO NOTION MIGRACION 00act aavel aapli aanfe .com ddici ccale ccola resp nnoti mmigr rrapi wwebl Anfe",
-              horario: "14:30 - 17:30",
-              status: "POR HACER",
-              proyecto: "Sin proyecto",
-              esHorarioLaboral: true,
-              tieneRevisionesConTiempo: true
-            },
-            {
-              id: "2efabd7d91b7810a8790c233ac5de6ac",
-              titulo: "ANFETA WL PRUEBAS RAPIDAS 00act aavel aapli aanfe .com ddici ccale ccola pprue rrapi wwebl Anfe",
-              horario: "14:30 - 17:30",
-              status: "POR HACER",
-              proyecto: "Sin proyecto",
-              esHorarioLaboral: true,
-              tieneRevisionesConTiempo: true
-            }
-          ],
-          revisionesPorActividad: [
-            {
-              actividadId: "2edabd7d91b7817d8b23cbf2653f05e1",
-              actividadTitulo: "RESPALDO NOTION MIGRACION 00act aavel aapli aanfe .com ddici ccale ccola resp nnoti mmigr rrapi wwebl Anfe",
-              actividadHorario: "14:30 - 17:30",
-              tareasConTiempo: [
-                {
-                  id: "2eeabd7d91b781b3abcdcef777671db3",
-                  nombre: "Hacer el script de prueba para clonar una actividad con reviiones al nuevo notion",
-                  terminada: false,
-                  confirmada: false,
-                  duracionMin: 180,
-                  fechaCreacion: "2026-01-19T08:51:00-06:00",
-                  fechaFinTerminada: null,
-                  diasPendiente: 4,
-                  prioridad: "ALTA"
-                }
-              ],
-              totalTareasConTiempo: 1,
-              tareasAltaPrioridad: 1,
-              tiempoTotal: 180,
-              tiempoFormateado: "3h 0m"
-            },
-            {
-              actividadId: "2efabd7d91b7810a8790c233ac5de6ac",
-              actividadTitulo: "ANFETA WL PRUEBAS RAPIDAS 00act aavel aapli aanfe .com ddici ccale ccola pprue rrapi wwebl Anfe",
-              actividadHorario: "14:30 - 17:30",
-              tareasConTiempo: [
-                {
-                  id: "2eeabd7d91b781b3abcdcef777671db3",
-                  nombre: "Hacer el script de prueba para clonar una actividad con reviiones al nuevo notion",
-                  terminada: false,
-                  confirmada: false,
-                  duracionMin: 180,
-                  fechaCreacion: "2026-01-19T08:51:00-06:00",
-                  fechaFinTerminada: null,
-                  diasPendiente: 4,
-                  prioridad: "ALTA"
-                }
-              ],
-              totalTareasConTiempo: 1,
-              tareasAltaPrioridad: 1,
-              tiempoTotal: 180,
-              tiempoFormateado: "3h 0m"
-            }
-          ]
-        },
-        multiActividad: true
-      };
-
-      console.log("Usando datos de ejemplo del JSON proporcionado");
-      setAssistantAnalysis(ejemploData);
-      showAssistantAnalysis(ejemploData, isRestoration);
+      // sin datos de ejemplo ni estatico
+      addMessage(
+        "bot",
+        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <div>
+              <span className="font-medium">Error al obtener actividades</span>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                Hubo un problema al obtener tus actividades. Por favor, intenta nuevamente más tarde.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
     } finally {
       setIsTyping(false);
     }
   };
 
   const showAssistantAnalysis = async (analysis: AssistantAnalysis, isRestoration = false) => {
-    // Obtener todas las tareas de todas las actividades
     const todasLasTareas = analysis.data.revisionesPorActividad.flatMap(
       actividad => actividad.tareasConTiempo
     );
-    
+
     const hayTareas = todasLasTareas.length > 0;
 
     if (!isRestoration) {
@@ -1413,7 +1438,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           800
         );
       } else {
-        // Mostrar las actividades con sus tareas
         addMessageWithTyping(
           "bot",
           <div className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-gray-200"}`}>
@@ -1429,15 +1453,15 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   rev => rev.actividadId === actividad.id
                 );
                 const tareas = revisiones?.tareasConTiempo || [];
-                
+
                 return (
                   <div key={actividad.id} className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                          ${idx % 3 === 0 ? "bg-blue-500/20 text-blue-500" : 
-                            idx % 3 === 1 ? "bg-purple-500/20 text-purple-500" : 
-                            "bg-pink-500/20 text-pink-500"}`}>
+                          ${idx % 3 === 0 ? "bg-blue-500/20 text-blue-500" :
+                            idx % 3 === 1 ? "bg-purple-500/20 text-purple-500" :
+                              "bg-pink-500/20 text-pink-500"}`}>
                           {idx + 1}
                         </div>
                         <h5 className="font-medium text-sm">{actividad.titulo}</h5>
@@ -1446,7 +1470,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                         {actividad.horario}
                       </Badge>
                     </div>
-                    
+
                     {tareas.length > 0 && (
                       <div className="ml-8 mt-2 space-y-2">
                         {tareas.map((tarea, tIdx) => (
@@ -1456,7 +1480,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs
                                   ${tarea.prioridad === "ALTA" ? "bg-red-500/20 text-red-500" :
                                     tarea.prioridad === "MEDIA" ? "bg-yellow-500/20 text-yellow-500" :
-                                    "bg-green-500/20 text-green-500"}`}>
+                                      "bg-green-500/20 text-green-500"}`}>
                                   {tIdx + 1}
                                 </div>
                                 <span className="text-sm">{tarea.nombre}</span>
@@ -1642,6 +1666,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setIsRecording(false);
     setIsListening(false);
     setShowVoiceOverlay(false);
+    setCurrentListeningFor("");
 
     if (voiceMode && voiceStep === "listening-explanation" && voiceTranscript.trim()) {
       console.log("Procesando explicación después de detener grabación");
@@ -1784,11 +1809,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         return;
       }
 
-      // PRIMERO: Verificar si hay sesión de historial existente
       const hasExistingSession = await checkExistingConversation();
 
       if (!hasExistingSession) {
-        // SEGUNDO: Solo si NO hay historial, hacer flujo normal
         setTimeout(() => {
           addMessageWithTyping("bot", `¡Hola ${displayName}! 👋 Soy tu asistente.`, 500);
           setTimeout(() => {
@@ -1835,23 +1858,23 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
   };
 
-  // ========== Componente VoiceGuidanceFlow Mejorado ==========
   const VoiceGuidanceFlow = () => {
     if (!voiceMode) return null;
 
     console.log("=== VOICE GUIDANCE FLOW ===");
-    console.log("sortedTasks length:", sortedTasks?.length);
+    console.log("activitiesWithTasks length:", activitiesWithTasks.length);
+    console.log("currentActivityIndex:", currentActivityIndex);
     console.log("currentTaskIndex:", currentTaskIndex);
 
-    if (!sortedTasks || sortedTasks.length === 0) {
-      console.log("No hay tareas disponibles");
+    if (!activitiesWithTasks || activitiesWithTasks.length === 0) {
+      console.log("No hay actividades disponibles");
       return (
         <div className={`fixed inset-0 z-50 flex items-center justify-center ${theme === "dark" ? "bg-black/80" : "bg-white/95"}`}>
           <div className={`max-w-2xl w-full mx-4 rounded-xl overflow-hidden shadow-2xl ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
             <div className="p-6 text-center">
               <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-              <h3 className="text-lg font-bold mb-2">No hay tareas disponibles</h3>
-              <p className="text-sm text-gray-500 mb-4">No se encontraron tareas para explicar.</p>
+              <h3 className="text-lg font-bold mb-2">No hay actividades disponibles</h3>
+              <p className="text-sm text-gray-500 mb-4">No se encontraron actividades con tareas para explicar.</p>
               <Button onClick={cancelVoiceMode}>Cerrar</Button>
             </div>
           </div>
@@ -1859,36 +1882,21 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       );
     }
 
-    const validIndex = Math.min(currentTaskIndex, sortedTasks.length - 1);
-    if (currentTaskIndex !== validIndex) {
-      console.log(`Corrigiendo índice de ${currentTaskIndex} a ${validIndex}`);
-      setCurrentTaskIndex(validIndex);
-    }
+    const currentActivity = getCurrentActivity();
+    const currentTask = getCurrentTask();
 
-    const currentTask = sortedTasks[validIndex];
-    const totalTasks = sortedTasks.length;
-
-    if (!currentTask) {
-      console.error("ERROR: No hay tarea en el índice actual");
+    if (!currentActivity) {
+      console.error("ERROR: No hay actividad en el índice actual");
       return null;
     }
 
-    const progressPercentage = totalTasks > 0 ? (validIndex / totalTasks) * 100 : 0;
-
-    console.log(`Mostrando: Tarea ${validIndex + 1} de ${totalTasks}: ${currentTask.nombre}`);
-
-    const currentExplanation = useMemo(() => {
-      if (!currentTask?.id) return null;
-      const explanationsForTask = taskExplanations.filter(exp => exp.taskId === currentTask.id);
-      if (explanationsForTask.length === 0) return null;
-      const lastExplanation = explanationsForTask[explanationsForTask.length - 1];
-      return lastExplanation.explanation === "[Tarea saltada]" ? null : lastExplanation;
-    }, [currentTask?.id, taskExplanations]);
+    const progressPercentage = totalActivities > 0 ?
+      ((currentActivityIndex * 100) / totalActivities) +
+      ((currentTaskIndex * 100) / (totalActivities * Math.max(currentActivity.tareas.length, 1))) : 0;
 
     return (
       <div className={`fixed inset-0 z-50 flex items-center justify-center ${theme === "dark" ? "bg-black/80" : "bg-white/95"}`}>
         <div className={`max-w-2xl w-full mx-4 rounded-xl overflow-hidden shadow-2xl ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
-          {/* Header */}
           <div className={`p-4 border-b ${theme === "dark" ? "border-[#2a2a2a] bg-[#252527]" : "border-gray-200 bg-gray-50"}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1900,10 +1908,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   <p className="text-xs text-gray-500">
                     {isSpeaking ? "Asistente hablando..." :
                       voiceStep === "confirm-start" ? "Confirmar inicio" :
-                        voiceStep === "task-presentation" ? `Tarea ${validIndex + 1} de ${totalTasks}` :
-                          voiceStep === "waiting-for-explanation" ? "Esperando explicación" :
-                            voiceStep === "listening-explanation" ? "Escuchando tu explicación" :
-                              voiceStep === "processing-explanation" ? "Procesando explicación" :
+                        voiceStep === "activity-presentation" ? `Presentando actividad ${currentActivityIndex + 1} de ${totalActivities}` :
+                          voiceStep === "task-presentation" ? `Tarea ${currentTaskIndex + 1} de ${currentActivity.tareas.length}` :
+                            voiceStep === "waiting-for-explanation" ? "Esperando explicación" :
+                              voiceStep === "listening-explanation" ? "Escuchando tu explicación" :
                                 voiceStep === "confirmation" ? "Confirmar explicación" :
                                   voiceStep === "summary" ? "Resumen final" :
                                     voiceStep === "sending" ? "Enviando..." : "Listo"}
@@ -1925,11 +1933,15 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               </div>
             </div>
 
-            {/* Progress bar */}
-            {totalTasks > 0 && (
+            {totalActivities > 0 && (
               <div className="mt-3">
                 <div className="flex justify-between text-xs mb-1">
-                  <span>Tarea {validIndex + 1} de {totalTasks}</span>
+                  <span>
+                    {voiceStep === "activity-presentation" ?
+                      `Actividad ${currentActivityIndex + 1} de ${totalActivities}` :
+                      `Actividad ${currentActivityIndex + 1}, Tarea ${currentTaskIndex + 1} de ${currentActivity.tareas.length}`
+                    }
+                  </span>
                   <span>{Math.round(progressPercentage)}%</span>
                 </div>
                 <div className={`h-1 rounded-full ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-200"}`}>
@@ -1942,24 +1954,39 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
             )}
           </div>
 
-          {/* Content */}
           <div className="p-6">
             {voiceStep === "confirm-start" && (
               <div className="text-center space-y-4">
                 <div className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${theme === "dark" ? "bg-[#6841ea]/20" : "bg-[#6841ea]/10"}`}>
                   <Headphones className="w-8 h-8 text-[#6841ea]" />
                 </div>
-                <h4 className="text-lg font-bold">Modo voz guiado</h4>
+                <h4 className="text-lg font-bold">Modo voz guiado por actividades</h4>
                 <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
-                  Te acompañaré tarea por tarea para que expliques tu plan de acción.
+                  Te guiaré por cada actividad y sus tareas pendientes para que expliques tu plan de acción.
                 </p>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">Actividades</span>
+                    </div>
+                    <div className="text-xl font-bold mt-1">{totalActivities}</div>
+                  </div>
+                  <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+                    <div className="flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-green-500" />
+                      <span className="text-sm">Tareas</span>
+                    </div>
+                    <div className="text-xl font-bold mt-1">{totalTasks}</div>
+                  </div>
+                </div>
                 <div className="flex gap-3 justify-center pt-4">
                   <Button
                     onClick={confirmStartVoiceMode}
                     className="bg-[#6841ea] hover:bg-[#5a36d4] px-6"
                   >
                     <Play className="w-4 h-4 mr-2" />
-                    Empezar
+                    Comenzar
                   </Button>
                   <Button
                     variant="outline"
@@ -1971,69 +1998,108 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               </div>
             )}
 
-            {(voiceStep === "task-presentation" || voiceStep === "waiting-for-explanation") && currentTask && (
+            {voiceStep === "activity-presentation" && currentActivity && (
               <div className="space-y-4">
-                <div className={`p-4 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                      ${currentTask.prioridad === "ALTA" ? "bg-red-500/20 text-red-500" :
-                            currentTask.prioridad === "MEDIA" ? "bg-yellow-500/20 text-yellow-500" :
-                              "bg-green-500/20 text-green-500"}`}>
-                          {validIndex + 1}
-                        </div>
-                        <h4 className="font-bold">{currentTask.nombre}</h4>
-                      </div>
-                      <div className="flex gap-3 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Target className="w-3 h-3" />
-                          {currentTask.prioridad}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {currentTask.duracionMin} min
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {currentTask.diasPendiente || 0} días
-                        </span>
-                      </div>
+                <div className={`p-4 rounded-lg ${theme === "dark" ? "bg-blue-900/20 border border-blue-500/20" : "bg-blue-50 border border-blue-200"}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-blue-500/20" : "bg-blue-100"}`}>
+                      <FolderOpen className="w-4 h-4 text-blue-500" />
                     </div>
-                    <Badge
-                      variant={currentTask.prioridad === "ALTA" ? "destructive" : "secondary"}
-                      className="text-xs shrink-0"
-                    >
-                      {currentTask.prioridad}
-                    </Badge>
+                    <div>
+                      <h4 className="font-bold">Actividad {currentActivityIndex + 1} de {totalActivities}</h4>
+                      <p className="text-xs text-gray-500">{currentActivity.actividadHorario}</p>
+                    </div>
+                  </div>
+                  <h3 className="font-bold text-lg mb-2">{currentActivity.actividadTitulo}</h3>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className={`px-2 py-1 rounded ${theme === "dark" ? "bg-blue-900/30" : "bg-blue-100"}`}>
+                      📋 {currentActivity.tareas.length} tarea{currentActivity.tareas.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className={`px-2 py-1 rounded ${theme === "dark" ? "bg-purple-900/30" : "bg-purple-100"}`}>
+                      ⏱️ {currentActivity.tareas.reduce((sum, t) => sum + t.duracionMin, 0)} min
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mb-4`}>
+                    Esta actividad tiene {currentActivity.tareas.length} tarea{currentActivity.tareas.length !== 1 ? 's' : ''} pendiente{currentActivity.tareas.length !== 1 ? 's' : ''}. Comenzaré a presentarlas.
+                  </p>
+                  <Button
+                    onClick={() => speakTaskByIndices(currentActivityIndex, 0)}
+                    className="bg-[#6841ea] hover:bg-[#5a36d4]"
+                    disabled={isSpeaking}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Ver primera tarea
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {(voiceStep === "task-presentation" || voiceStep === "waiting-for-explanation") && currentTask && currentActivity && (
+              <div className="space-y-4">
+                <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <FolderOpen className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium">{currentActivity.actividadTitulo}</span>
                   </div>
 
-                  {currentExplanation && (
-                    <div className={`mt-3 p-3 rounded ${theme === "dark" ? "bg-green-900/20 border border-green-500/20" : "bg-green-50 border border-green-200"}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Check className="w-4 h-4 text-green-500" />
-                        <span className="text-sm font-medium">Explicación guardada</span>
+                  <div className={`p-3 rounded ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                        ${currentTask.prioridad === "ALTA" ? "bg-red-500/20 text-red-500" :
+                              currentTask.prioridad === "MEDIA" ? "bg-yellow-500/20 text-yellow-500" :
+                                "bg-green-500/20 text-green-500"}`}>
+                            {currentTaskIndex + 1}
+                          </div>
+                          <h4 className="font-bold">{currentTask.nombre}</h4>
+                        </div>
+                        <div className="flex gap-3 text-sm text-gray-500 ml-8">
+                          <span className="flex items-center gap-1">
+                            <Target className="w-3 h-3" />
+                            {currentTask.prioridad}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {currentTask.duracionMin} min
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {currentTask.diasPendiente || 0} días
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-sm opacity-75">{currentExplanation.explanation}</p>
+                      <Badge
+                        variant={currentTask.prioridad === "ALTA" ? "destructive" : "secondary"}
+                        className="text-xs shrink-0"
+                      >
+                        {currentTask.prioridad}
+                      </Badge>
                     </div>
-                  )}
+
+                    {taskExplanations.find(exp => exp.taskId === currentTask.id)?.explanation !== "[Tarea saltada]" &&
+                      taskExplanations.find(exp => exp.taskId === currentTask.id) && (
+                        <div className={`mt-3 p-2 rounded ${theme === "dark" ? "bg-green-900/20 border border-green-500/20" : "bg-green-50 border border-green-200"}`}>
+                          <div className="flex items-center gap-2">
+                            <Check className="w-3 h-3 text-green-500" />
+                            <span className="text-xs font-medium">Explicación guardada</span>
+                          </div>
+                        </div>
+                      )}
+                  </div>
                 </div>
 
                 <div className="flex gap-3">
                   <Button
-                    onClick={() => {
-                      console.log("BOTON CLICKEADO - Estado actual:", voiceStep);
-                      console.log("isSpeaking:", isSpeaking);
-                      console.log("currentTaskIndex (válido):", validIndex);
-                      console.log("Total tareas:", totalTasks);
-                      console.log("Tarea actual:", currentTask.nombre);
-                      startTaskExplanation();
-                    }}
+                    onClick={startTaskExplanation}
                     className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4] h-12"
                     disabled={isSpeaking || voiceStep === "listening-explanation"}
                   >
                     <Mic className="w-4 h-4 mr-2" />
-                    {currentExplanation ? "Corregir explicación" : "Explicar esta tarea"}
+                    {taskExplanations.find(exp => exp.taskId === currentTask.id) ? "Corregir explicación" : "Explicar esta tarea"}
                   </Button>
                   <Button
                     variant="outline"
@@ -2047,7 +2113,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
                 {voiceStep === "waiting-for-explanation" && (
                   <div className="text-center text-sm text-gray-500">
-                    Presiona el botón para empezar a explicar, o di "saltar" para omitir esta tarea
+                    Presiona el botón para empezar a explicar esta tarea, o di "saltar" para omitirla
                   </div>
                 )}
               </div>
@@ -2069,16 +2135,28 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     ))}
                   </div>
                 </div>
+
                 <h4 className="text-lg font-bold">Escuchando...</h4>
+
+                {currentListeningFor && (
+                  <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-blue-900/20 border border-blue-500/20" : "bg-blue-50 border border-blue-200"}`}>
+                    <p className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}>
+                      🎤 Escuchando para: {currentListeningFor}
+                    </p>
+                  </div>
+                )}
+
                 <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
                   {retryCount > 0 ? "Corrige tu explicación, por favor." : "Por favor, explica cómo resolverás esta tarea."}
                 </p>
+
                 {voiceTranscript && (
                   <div className={`p-3 rounded ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}>
                     <p className="text-sm mb-2">{voiceTranscript}</p>
                     <p className="text-xs text-gray-500">Cuando termines de hablar, haz clic en "Terminar y Confirmar"</p>
                   </div>
                 )}
+
                 <div className="flex gap-3 justify-center">
                   <Button
                     onClick={stopRecording}
@@ -2095,6 +2173,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                       setIsRecording(false);
                       setIsListening(false);
                       setVoiceStep("waiting-for-explanation");
+                      setCurrentListeningFor("");
                     }}
                     variant="outline"
                     className="bg-red-500 hover:bg-red-600 text-white"
@@ -2106,26 +2185,28 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               </div>
             )}
 
-            {voiceStep === "confirmation" && (
+            {voiceStep === "confirmation" && currentTask && (
               <div className="space-y-4">
                 <div className={`p-4 rounded-lg ${theme === "dark" ? "bg-blue-900/20 border border-blue-500/20" : "bg-blue-50 border border-blue-200"}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <Volume2 className="w-5 h-5 text-blue-500" />
-                    <span className="font-medium">Tu explicación</span>
+                    <span className="font-medium">Tu explicación para:</span>
                   </div>
-                  <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
-                    {voiceConfirmationText}
-                  </p>
+                  <p className="text-sm font-medium mb-2">{currentTask.nombre}</p>
+                  <div className={`p-3 rounded ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}>
+                    <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+                      {voiceConfirmationText}
+                    </p>
+                  </div>
                 </div>
+
                 <p className={`text-sm text-center ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
                   ¿Confirmas esta explicación? Di "sí" para confirmar o "no" para corregir.
                 </p>
+
                 <div className="flex gap-3">
                   <Button
-                    onClick={() => {
-                      console.log("Confirmando explicación, índice actual:", validIndex);
-                      confirmExplanation();
-                    }}
+                    onClick={confirmExplanation}
                     className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4]"
                     disabled={isSpeaking}
                   >
@@ -2134,10 +2215,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      console.log("Reintentando explicación, índice actual:", validIndex);
-                      retryExplanation();
-                    }}
+                    onClick={retryExplanation}
                     className="flex-1"
                     disabled={isSpeaking}
                   >
@@ -2161,23 +2239,42 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                 </div>
 
                 <div className={`max-h-60 overflow-y-auto rounded-lg border ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"}`}>
-                  {taskExplanations
-                    .filter(exp => exp.explanation !== "[Tarea saltada]")
-                    .map((exp, idx) => (
-                      <div
-                        key={exp.taskId}
-                        className={`p-3 border-b ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"} ${idx % 2 === 0 ? (theme === "dark" ? "bg-[#252527]" : "bg-gray-50") : ""}`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <Check className={`w-3 h-3 ${exp.confirmed ? "text-green-500" : "text-yellow-500"}`} />
-                          <span className="font-medium text-sm truncate">{exp.taskName}</span>
-                          <Badge variant="outline" className="text-xs">{exp.priority}</Badge>
+                  {activitiesWithTasks.map((activity, aIdx) => {
+                    const activityExplanations = taskExplanations.filter(
+                      exp => exp.activityTitle === activity.actividadTitulo && exp.explanation !== "[Tarea saltada]"
+                    );
+
+                    if (activityExplanations.length === 0) return null;
+
+                    return (
+                      <div key={activity.actividadId} className="border-b border-[#2a2a2a]">
+                        <div className={`p-3 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+                          <div className="flex items-center gap-2">
+                            <FolderOpen className="w-4 h-4 text-blue-500" />
+                            <span className="font-medium text-sm">{activity.actividadTitulo}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {activityExplanations.length} de {activity.tareas.length}
+                            </Badge>
+                          </div>
                         </div>
-                        <p className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                          {exp.explanation}
-                        </p>
+                        {activityExplanations.map((exp, tIdx) => (
+                          <div
+                            key={exp.taskId}
+                            className={`p-3 ${tIdx % 2 === 0 ? (theme === "dark" ? "bg-[#1a1a1a]" : "bg-white") : (theme === "dark" ? "bg-[#252527]" : "bg-gray-50")}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Check className={`w-3 h-3 ${exp.confirmed ? "text-green-500" : "text-yellow-500"}`} />
+                              <span className="font-medium text-sm truncate">{exp.taskName}</span>
+                              <Badge variant="outline" className="text-xs">{exp.priority}</Badge>
+                            </div>
+                            <p className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-600"} ml-5`}>
+                              {exp.explanation}
+                            </p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-3">
@@ -2190,12 +2287,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      setShowVoiceSummary(false);
-                      setVoiceStep("idle");
-                      setVoiceMode(false);
-                      setExpectedInputType("none");
-                    }}
+                    onClick={cancelVoiceMode}
                     disabled={isSpeaking}
                   >
                     Ver más tarde
@@ -2211,7 +2303,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     <Loader2 className="w-12 h-12 text-[#6841ea] animate-spin" />
                   </div>
                 </div>
-                <h4 className="text-lg font-bold">guardando...</h4>
+                <h4 className="text-lg font-bold">Guardando...</h4>
                 <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
                   Tu reporte está siendo enviado.
                 </p>
@@ -2225,10 +2317,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
   return (
     <div className={`min-h-screen font-['Arial'] flex flex-col ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}>
-      {/* Modo Voz Guiado Overlay */}
       <VoiceGuidanceFlow />
 
-      {/* Overlay de reconocimiento de voz */}
       {showVoiceOverlay && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
           <div className={`p-8 rounded-2xl max-w-md w-full mx-4 ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
@@ -2242,8 +2332,16 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               </div>
 
               <h3 className={`text-xl font-bold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                {isListening ? "Escuchando..." : "Micrófono listo"}
+                {isListening ? "🎤 Escuchando..." : "Micrófono listo"}
               </h3>
+
+              {isListening && currentListeningFor && (
+                <div className={`p-3 rounded-lg mb-4 ${theme === "dark" ? "bg-blue-900/30" : "bg-blue-50"}`}>
+                  <p className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}>
+                    Para: {currentListeningFor}
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button
@@ -2256,6 +2354,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   onClick={() => {
                     stopRecording();
                     setVoiceTranscript("");
+                    setCurrentListeningFor("");
                   }}
                   className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600 transition"
                 >
@@ -2267,7 +2366,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         </div>
       )}
 
-      {/* Header fijo */}
       {!isInPiPWindow && (
         <div className="fixed top-0 left-0 right-0 z-50">
           <div className={`absolute top-0 left-0 right-0 h-25 bg-gradient-to-b ${theme === "dark" ? "from-[#101010]/90 via-[#101010]/90 to-transparent" : "from-white/70 via-white/40 to-transparent"}`} />
@@ -2307,7 +2405,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         </div>
       )}
 
-      {/* Encabezado para ventana PiP */}
       {isInPiPWindow && (
         <div className={`fixed top-0 left-0 right-0 z-50 ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
           <div className="max-w-full mx-auto p-3">
@@ -2331,10 +2428,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         </div>
       )}
 
-      {/* Contenido principal */}
       <div className={`flex-1 overflow-y-auto ${isInPiPWindow ? "pt-16" : "pt-20"} ${!isInPiPWindow ? "pb-24" : "pb-20"}`}>
         <div className="max-w-4xl mx-auto w-full px-4">
-          {/* Indicador de carga del historial */}
           {isCheckingHistory && (
             <div className="flex justify-center items-center py-4">
               <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -2344,7 +2439,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
             </div>
           )}
 
-          {/* Indicador de verificación de fin de jornada */}
           {isCheckingAfterHours && (
             <div className="flex justify-center items-center py-4">
               <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -2382,8 +2476,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
             )}
           </div>
 
-          {/* Botón para activar modo voz si hay tareas */}
-          {step === "finished" && assistantAnalysis && sortedTasks.length > 0 && !voiceMode && (
+          {step === "finished" && assistantAnalysis && activitiesWithTasks.length > 0 && !voiceMode && (
             <div className={`mt-4 rounded-lg p-4 border ${theme === "dark" ? "bg-[#1a1a1a] border-[#6841ea]/30" : "bg-white border-[#6841ea]/20"}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -2392,7 +2485,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   </div>
                   <div>
                     <h4 className="font-bold">¿Explicar tus tareas?</h4>
-                    <p className="text-sm text-gray-500">Usa el modo guiado por voz para explicar cada tarea</p>
+                    <p className="text-sm text-gray-500">Usa el modo guiado por voz para explicar cada actividad y sus tareas</p>
                   </div>
                 </div>
                 <Button onClick={startVoiceMode} className="bg-[#6841ea] hover:bg-[#5a36d4]">
@@ -2403,7 +2496,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
             </div>
           )}
 
-          {/* Botón para forzar nuevo análisis cuando hay historial */}
           {hasExistingSession && step === "finished" && (
             <div className="flex justify-center gap-2 mt-4">
               <Button
@@ -2423,7 +2515,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         </div>
       </div>
 
-      {/* Input (oculto en modo voz) */}
       {!voiceMode && (
         <div className={`fixed bottom-0 left-0 right-0 z-50 ${theme === "dark" ? "bg-[#101010]" : "bg-white"}`}>
           <div className="max-w-4xl mx-auto p-4">
@@ -2454,7 +2545,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         </div>
       )}
 
-      {/* Diálogos de confirmación */}
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent className={`${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border`}>
           <AlertDialogHeader>
