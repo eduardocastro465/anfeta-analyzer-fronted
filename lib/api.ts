@@ -132,3 +132,25 @@ export async function obtenerHistorialSession() {
     console.log(error);
   }
 }
+
+export async function sendTaskValidation(data: any) {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/validar-explicacion`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error enviando validación:", error);
+    return false;
+  }
+}
