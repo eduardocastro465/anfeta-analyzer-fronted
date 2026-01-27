@@ -423,6 +423,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
   const voiceTranscriptRef = useRef<string>(""); // <-- AGREGAR ESTE
   const explanationProcessedRef = useRef<boolean>(false); // <-- AGREGAR ESTE
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null); // Timer para detectar silencio
 
   const displayName = getDisplayName(colaborador);
   const router = useRouter();
@@ -569,6 +570,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setRetryCount(0);
     setExpectedInputType("none");
     setCurrentListeningFor("");
+
+    // Limpiar el timer de silencio
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
   };
 
   const confirmStartVoiceMode = () => {
@@ -783,6 +790,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     voiceTranscriptRef.current = ""; // <-- AGREGAR
     explanationProcessedRef.current = false; // <-- AGREGAR
 
+    // Limpiar cualquier timer de silencio previo
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
@@ -825,6 +838,35 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       voiceTranscriptRef.current = fullTranscript;
       setVoiceTranscript(fullTranscript);
+
+      // ========== NUEVO: Timer de silencio de 3 segundos ==========
+      // Limpiar el timer anterior si existe
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+
+      // Solo iniciar el timer si hay texto acumulado
+      if (fullTranscript.length > 0) {
+        silenceTimerRef.current = setTimeout(() => {
+          console.log(
+            "[v0] 3 segundos de silencio detectados, enviando explicación automáticamente",
+          );
+
+          // Verificar que no se haya procesado ya y que hay texto
+          if (
+            !explanationProcessedRef.current &&
+            voiceTranscriptRef.current.trim().length > 0
+          ) {
+            // Detener el reconocimiento de voz
+            if (recognitionRef.current) {
+              recognitionRef.current.stop();
+            }
+
+            // Procesar la explicación automáticamente
+            processVoiceExplanation(voiceTranscriptRef.current);
+          }
+        }, 3000); // 3 segundos de silencio
+      }
     };
 
     recognition.onerror = (event: any) => {
@@ -854,6 +896,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setIsListening(false);
       setIsRecording(false);
       setCurrentListeningFor("");
+
+      // Limpiar el timer de silencio
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
 
       if (!explanationProcessedRef.current) {
         console.log("No se procesó explicación, volviendo a estado anterior");
@@ -2718,49 +2766,48 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           <div className="p-6">
             {voiceStep === "confirm-start" && (
               <div className="space-y-4">
-                <div className="text-center">
+                <div className="grid grid-cols-2 gap-1.5">
                   <div
-                    className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${theme === "dark" ? "bg-[#6841ea]/20" : "bg-[#6841ea]/10"}`}
+                    className={`p-2 rounded-md ${
+                      theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
+                    }`}
                   >
-                    <Headphones className="w-8 h-8 text-[#6841ea]" />
-                  </div>
-                  <h4 className="text-lg font-bold mt-3">
-                    Modo voz guiado por actividades
-                  </h4>
-                  <p
-                    className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mt-1`}
-                  >
-                    Te guiaré por cada actividad y sus tareas pendientes para
-                    que expliques tu plan de acción.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div
-                    className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <FolderOpen className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm">Actividades</span>
+                    <div className="flex items-center gap-1">
+                      <FolderOpen className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="text-xs">Actividades</span>
                     </div>
-                    <div className="text-xl font-bold mt-1">
+                    <div className="text-lg font-semibold leading-tight">
                       {totalActivities}
                     </div>
                   </div>
+
                   <div
-                    className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+                    className={`p-2 rounded-md ${
+                      theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <ListChecks className="w-4 h-4 text-green-500" />
-                      <span className="text-sm">Tareas</span>
+                    <div className="flex items-center gap-1">
+                      <ListChecks className="w-3.5 h-3.5 text-green-500" />
+                      <span className="text-xs">Tareas</span>
                     </div>
-                    <div className="text-xl font-bold mt-1">{totalTasks}</div>
+                    <div className="text-lg font-semibold leading-tight">
+                      {totalTasks}
+                    </div>
                   </div>
                 </div>
 
                 {/* Lista de tareas con tiempo */}
                 <div
-                  className={`max-h-60 overflow-y-auto rounded-lg border ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"}`}
+                  className={`
+    max-h-72 overflow-y-auto rounded-lg border
+    scrollbar-thin scrollbar-thumb-rounded
+    scrollbar-thumb-gray-400/40 hover:scrollbar-thumb-gray-400/70
+    ${
+      theme === "dark"
+        ? "border-[#2a2a2a] scrollbar-thumb-white/20"
+        : "border-gray-200"
+    }
+  `}
                 >
                   {activitiesWithTasks.map((activity, aIdx) => (
                     <div
@@ -2788,13 +2835,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div
                               className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                                ${
-                                  tarea.prioridad === "ALTA"
-                                    ? "bg-red-500/20 text-red-500"
-                                    : tarea.prioridad === "MEDIA"
-                                      ? "bg-yellow-500/20 text-yellow-500"
-                                      : "bg-green-500/20 text-green-500"
-                                }`}
+                                  ${
+                                    tarea.prioridad === "ALTA"
+                                      ? "bg-red-500/20 text-red-500"
+                                      : tarea.prioridad === "MEDIA"
+                                        ? "bg-yellow-500/20 text-yellow-500"
+                                        : "bg-green-500/20 text-green-500"
+                                  }`}
                             >
                               {tIdx + 1}
                             </div>
@@ -2953,13 +3000,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                           <div className="flex items-center gap-2 mb-2">
                             <div
                               className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                        ${
-                          currentTask.prioridad === "ALTA"
-                            ? "bg-red-500/20 text-red-500"
-                            : currentTask.prioridad === "MEDIA"
-                              ? "bg-yellow-500/20 text-yellow-500"
-                              : "bg-green-500/20 text-green-500"
-                        }`}
+                          ${
+                            currentTask.prioridad === "ALTA"
+                              ? "bg-red-500/20 text-red-500"
+                              : currentTask.prioridad === "MEDIA"
+                                ? "bg-yellow-500/20 text-yellow-500"
+                                : "bg-green-500/20 text-green-500"
+                          }`}
                             >
                               {currentTaskIndex + 1}
                             </div>
@@ -3311,57 +3358,106 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     >
       <VoiceGuidanceFlow />
 
+      {/* OVERLAY DE MODO VOZ ULTRA-COMPACTO */}
       {showVoiceOverlay && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-[1px] p-4">
           <div
-            className={`p-8 rounded-2xl max-w-md w-full mx-4 ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}
+            className={`w-full max-w-sm overflow-hidden flex flex-col rounded-xl border shadow-xl transition-all ${
+              theme === "dark"
+                ? "bg-[#161616] border-[#2a2a2a]"
+                : "bg-white border-gray-200"
+            }`}
           >
-            <div className="text-center">
-              <div
-                className={`w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center ${isListening ? "bg-red-500 animate-pulse" : "bg-[#6841ea]"}`}
-              >
-                {isListening ? (
-                  <Volume2 className="w-10 h-10 text-white animate-pulse" />
-                ) : (
-                  <MicOff className="w-10 h-10 text-white" />
-                )}
+            {/* Header Minimalista (Sin bordes para ahorrar altura) */}
+            <div className="px-3 py-2 flex items-center justify-between bg-[#6841ea]/5">
+              <div className="flex items-center gap-1.5">
+                <Mic className="w-3.5 h-3.5 text-[#6841ea]" />
+                <span className="text-[10px] font-bold uppercase tracking-tighter opacity-70">
+                  Asistente
+                </span>
               </div>
-
-              <h3
-                className={`text-xl font-bold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+              <button
+                onClick={cancelVoiceMode}
+                className="hover:bg-red-500/10 p-0.5 rounded transition-colors"
               >
-                {isListening ? " Escuchando..." : "Micrófono listo"}
-              </h3>
+                <X className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            </div>
 
-              {isListening && currentListeningFor && (
-                <div
-                  className={`p-3 rounded-lg mb-4 ${theme === "dark" ? "bg-blue-900/30" : "bg-blue-50"}`}
-                >
-                  <p
-                    className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}
-                  >
-                    Para: {currentListeningFor}
-                  </p>
+            <div className="p-3 space-y-2">
+              {/* Tarea en una sola línea con elipse si es larga */}
+              {getCurrentTask() && (
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <Badge className="h-4 px-1 text-[9px] bg-[#6841ea] shrink-0">
+                    Tarea
+                  </Badge>
+                  <h3 className="text-[12px] font-bold truncate opacity-90">
+                    {getCurrentTask()?.nombre}
+                  </h3>
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <button
-                  onClick={stopRecording}
-                  className="flex-1 bg-[#6841ea] text-white py-3 rounded-lg font-semibold hover:bg-[#5a36d4] transition"
+              {/* Layout Horizontal: Micro + Transcripción */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="relative shrink-0">
+                  {isListening && (
+                    <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-20"></span>
+                  )}
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center z-10 relative ${
+                      isListening
+                        ? "bg-[#6841ea] shadow-inner"
+                        : "bg-gray-200 dark:bg-[#2a2a2a]"
+                    }`}
+                  >
+                    {isListening ? (
+                      <div className="flex gap-[2px] items-end h-3">
+                        <div className="w-[2px] bg-white animate-pulse h-full" />
+                        <div className="w-[2px] bg-white animate-pulse h-1/2" />
+                        <div className="w-[2px] bg-white animate-pulse h-3/4" />
+                      </div>
+                    ) : (
+                      <MicOff className="w-4 h-4 text-gray-500" />
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className={`flex-1 p-2 rounded-md h-12 text-[11px] italic overflow-y-auto border ${
+                    theme === "dark"
+                      ? "bg-black/20 border-white/5 text-gray-400"
+                      : "bg-gray-50 border-black/5 text-gray-500"
+                  }`}
                 >
-                  Aceptar
-                </button>
-                <button
-                  onClick={() => {
-                    stopRecording();
-                    setVoiceTranscript("");
-                    setCurrentListeningFor("");
-                  }}
-                  className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600 transition"
+                  {voiceTranscript || "Escuchando..."}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer en una sola línea */}
+            <div className="px-3 py-2 border-t flex items-center justify-between">
+              <p className="text-[9px] font-medium opacity-50 uppercase">
+                {voiceStep === "listening-explanation" ? "En vivo" : "Listo"}
+              </p>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancelVoiceMode}
+                  className="text-[10px] h-6 px-2"
                 >
-                  Cancelar
-                </button>
+                  Cerrar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-[#6841ea] hover:bg-[#5735c8] text-white text-[10px] h-6 px-3 rounded-md gap-1"
+                  onClick={startTaskExplanation}
+                  disabled={isListening}
+                >
+                  {isListening ? "Grabando" : "Grabar"}
+                  <Play className="w-2.5 h-2.5 fill-current" />
+                </Button>
               </div>
             </div>
           </div>
