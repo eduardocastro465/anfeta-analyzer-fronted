@@ -130,27 +130,65 @@ export async function obtenerHistorialSession() {
     return data || [];
   } catch (error) {
     console.log(error);
+    throw error;
   }
 }
 
-export async function sendTaskValidation(data: any) {
+// En lib/api.ts
+export async function sendTaskValidation(data: {
+  taskId: string;
+  taskName: string;
+  activityTitle: string;
+  explanation: string;
+  confirmed: boolean;
+  priority: string;
+  duration: number;
+}) {
   try {
     const response = await fetch(
-      `${BASE_URL_BACK}/assistant/validar-explicacion`,
+      "http://localhost:4000/api/v1/assistant/validar-explicacion",
       {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      },
+        body: JSON.stringify({
+          taskName: data.taskName,
+          explanation: data.explanation,
+          activityTitle: data.activityTitle,
+        }),
+      }
     );
+
     if (!response.ok) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`);
+      throw new Error(`Error: ${response.status}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error("Error enviando validación:", error);
-    return false;
+    console.error("Error validando explicación:", error);
+    return { valida: false, razon: "Error de conexión" };
   }
 }
+
+// // Nueva función para obtener siguiente tarea
+// export async function obtenerSiguienteTarea() {
+//   try {
+//     const response = await fetch(
+//       "http://localhost:4000/api/v1/assistant/siguiente-tarea",
+//       {
+//         method: "GET",
+//         credentials: "include",
+//         headers: { "Content-Type": "application/json" },
+//       }
+//     );
+
+//     if (!response.ok) {
+//       throw new Error(`Error: ${response.status}`);
+//     }
+
+//     return await response.json();
+//   } catch (error) {
+//     console.error("Error obteniendo siguiente tarea:", error);
+//     return { success: false, hayPendientes: false };
+//   }
+// }

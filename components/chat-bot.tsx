@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -7,8 +9,8 @@ import {
   validateSession,
   obtenerHistorialSession,
   sendTaskValidation,
-} from "../lib/api";
-import { HistorialSessionResponse } from "../lib/types";
+} from "@/lib/api";
+import type { HistorialSessionResponse } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -146,16 +148,22 @@ interface TaskExplanation {
 // ========== Hook de síntesis de voz MÁS RÁPIDA ==========
 const useVoiceSynthesis = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [rate, setRate] = useState(1.2);
+  const currentTextRef = useRef<string>("");
 
   const speak = useCallback(
-    (text: string, rate = 1.2, pitch = 1.15, onFinished?: () => void) => {
-      if (!("speechSynthesis" in window)) return;
+    (text: string, customRate?: number) => {
+      if (!("speechSynthesis" in window)) {
+        console.warn("Tu navegador no soporta síntesis de voz");
+        return;
+      }
+
       window.speechSynthesis.cancel();
+      currentTextRef.current = text;
 
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "es-MX";
-      utterance.rate = rate;
-      utterance.pitch = pitch;
+      utterance.rate = customRate ?? rate;
       utterance.volume = 1;
 
       const voices = window.speechSynthesis.getVoices();
@@ -180,24 +188,190 @@ const useVoiceSynthesis = () => {
       }
 
       utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        if (onFinished) onFinished(); // <--- EJECUTA EL CALLBACK AQUÍ
-      };
+      utterance.onend = () => setIsSpeaking(false);
       utterance.onerror = () => setIsSpeaking(false);
+
       window.speechSynthesis.speak(utterance);
     },
-    [],
+    [rate],
   );
 
   const stop = useCallback(() => {
     window.speechSynthesis.cancel();
+    currentTextRef.current = "";
     setIsSpeaking(false);
   }, []);
 
-  return { speak, stop, isSpeaking };
+  // Cambiar velocidad y reiniciar si está hablando
+  const changeRate = useCallback((newRate: number) => {
+    setRate(newRate);
+    if (currentTextRef.current && window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(currentTextRef.current);
+      utterance.lang = "es-MX";
+      utterance.rate = newRate;
+      utterance.volume = 1;
+
+      const voices = window.speechSynthesis.getVoices();
+      let selectedVoice =
+        voices.find((v) => v.name.includes("Microsoft Sabina")) ||
+        voices.find(
+          (v) =>
+            v.name.includes("Google español") &&
+            !v.name.toLowerCase().includes("male"),
+        ) ||
+        voices.find(
+          (v) => v.name.includes("Helena") && v.lang.startsWith("es"),
+        ) ||
+        voices.find(
+          (v) => v.name.includes("Monica") && v.lang.startsWith("es"),
+        ) ||
+        voices.find((v) => v.lang.startsWith("es"));
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  return { speak, stop, isSpeaking, rate, setRate, changeRate };
 };
 
+// ========== COMPONENTE SIMPLE DE CONTROL DE VELOCIDAD (para Header) ==========
+const SpeedControlHeader = ({
+  rate,
+  changeRate,
+  isSpeaking,
+  theme,
+}: {
+  rate: number;
+  changeRate: (rate: number) => void;
+  isSpeaking: boolean;
+  theme: "light" | "dark";
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        disabled={isSpeaking}
+        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+          theme === "dark"
+            ? "bg-[#2a2a2a] hover:bg-[#353535] disabled:opacity-50"
+            : "bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+        }`}
+        title="Control de velocidad"
+      >
+        <Volume2 className="w-4 h-4 text-[#6841ea]" />
+        <span className="text-xs font-bold text-[#6841ea] ml-0.5">
+          {rate.toFixed(1)}x
+        </span>
+      </button>
+
+      {isOpen && (
+        <div
+          className={`absolute right-0 top-12 w-56 rounded-lg border p-3 shadow-lg z-50 ${
+            theme === "dark"
+              ? "bg-[#1a1a1a] border-[#2a2a2a]"
+              : "bg-white border-gray-200"
+          }`}
+        >
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs font-semibold">
+                <span>Velocidad</span>
+                <span className="text-[#6841ea]">{rate.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={rate}
+                onChange={(e) => changeRate(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gradient-to-r from-[#6841ea]/30 to-[#6841ea] rounded-lg appearance-none cursor-pointer accent-[#6841ea] disabled:opacity-50"
+              />
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Lenta</span>
+                <span>Normal</span>
+                <span>Rápida</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#2a2a2a]">
+              <button
+                onClick={() => {
+                  changeRate(0.8);
+                  setIsOpen(false);
+                }}
+              ></button>
+              <button
+                onClick={() => {
+                  changeRate(1.2);
+                  setIsOpen(false);
+                }}
+              ></button>
+              <button
+                onClick={() => {
+                  changeRate(1.6);
+                  setIsOpen(false);
+                }}
+              ></button>
+              <button
+                onClick={() => {
+                  changeRate(2);
+                  setIsOpen(false);
+                }}
+              ></button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ========== COMPONENTE DE CONTROL PARA EL MODAL (Compacto Inline) ==========
+const SpeedControlModal = ({
+  rate,
+  changeRate,
+  theme,
+}: {
+  rate: number;
+  changeRate: (rate: number) => void;
+  theme: "light" | "dark";
+}) => {
+  return (
+    <div className="flex items-center gap-2">
+      <Volume2 className="w-4 h-4 text-[#6841ea] shrink-0" />
+      <div className="flex items-center gap-1">
+        {[0.8, 1.0, 1.2, 1.6, 2.0].map((speed) => (
+          <button
+            key={speed}
+            onClick={() => changeRate(speed)}
+            className={`px-2 py-1 text-xs rounded-md font-medium transition-all ${
+              Math.abs(rate - speed) < 0.05
+                ? "bg-[#6841ea] text-white"
+                : theme === "dark"
+                  ? "bg-[#2a2a2a] hover:bg-[#353535] text-gray-300"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+            }`}
+          >
+            {speed}x
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 const getDisplayName = (colaborador: Colaborador) => {
   if (colaborador.firstName || colaborador.lastName) {
     return `${colaborador.firstName || ""} ${colaborador.lastName || ""}`.trim();
@@ -229,7 +403,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [isCheckingHistory, setIsCheckingHistory] = useState(false);
   const [hasExistingSession, setHasExistingSession] = useState(false);
   const [isCheckingAfterHours, setIsCheckingAfterHours] = useState(false);
-  const accumulatedTranscriptRef = useRef<string>("");
 
   // ========== NUEVO: Estados para Modo Voz Mejorado ==========
   const [voiceMode, setVoiceMode] = useState<boolean>(false);
@@ -253,7 +426,14 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
   const displayName = getDisplayName(colaborador);
   const router = useRouter();
-  const { speak: speakText, stop: stopVoice, isSpeaking } = useVoiceSynthesis();
+  const {
+    speak: speakText,
+    stop: stopVoice,
+    isSpeaking,
+    rate,
+    setRate,
+    changeRate,
+  } = useVoiceSynthesis();
 
   // ========== NUEVO: Reorganizar datos por actividades ==========
   const activitiesWithTasks = useMemo(() => {
@@ -356,7 +536,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
         speakText(
           "¡Perfecto! Todas tus actividades han sido revisadas y validadas. Buen trabajo, puedes cerrar sesión.",
-          1.3,
         );
       }
 
@@ -375,7 +554,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setExpectedInputType("none");
     speakText(
       "Para comenzar con el modo guiado por voz, di 'empezar' o presiona el botón.",
-      1.3,
     );
   };
 
@@ -397,7 +575,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     console.log("Confirmando inicio modo voz");
 
     if (activitiesWithTasks.length === 0) {
-      speakText("No hay actividades con tareas para explicar.", 1.3);
+      speakText("No hay actividades con tareas para explicar.");
       setTimeout(() => cancelVoiceMode(), 1000);
       return;
     }
@@ -429,7 +607,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         setTimeout(() => {
           speakText(
             "¡Perfecto! Has explicado todas las tareas de todas las actividades. ¿Quieres enviar este reporte?",
-            1.3,
           );
         }, 500);
         return;
@@ -451,7 +628,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setExpectedInputType("none");
 
       setTimeout(() => {
-        speakText(activityText, 1.3);
+        speakText(activityText);
 
         const estimatedSpeechTime = activityText.length * 40 + 1000;
 
@@ -488,7 +665,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         setTimeout(() => {
           speakText(
             "¡Perfecto! Has explicado todas las tareas de todas las actividades. ¿Quieres enviar este reporte?",
-            1.3,
           );
         }, 500);
         return;
@@ -532,7 +708,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setCurrentListeningFor(`Tarea: ${task.nombre}`);
 
       setTimeout(() => {
-        speakText(taskText, 1.3);
+        speakText(taskText);
 
         const estimatedSpeechTime = taskText.length * 40 + 800;
 
@@ -584,256 +760,304 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }, 100);
   };
 
-const startRecordingForExplanation = () => {
-  console.log("Iniciando grabación específica para explicación...");
+  const startRecordingForExplanation = () => {
+    console.log("Iniciando grabación específica para explicación...");
 
-  if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-    speakText("Tu navegador no soporta reconocimiento de voz.", 1.3);
-    return;
-  }
-
-  // Si empezamos de cero (no es un reinicio por silencio), limpiamos el acumulador
-  if (voiceTranscriptRef.current === "") {
-    accumulatedTranscriptRef.current = "";
-  }
-
-  setIsRecording(true);
-  setIsListening(true);
-  explanationProcessedRef.current = false;
-
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-  
-  recognition.lang = "es-MX";
-  recognition.continuous = true; 
-  recognition.interimResults = true;
-
-  recognitionRef.current = recognition;
-
-  recognition.onstart = () => {
-    console.log("OK: Micrófono abierto. Acumulado previo:", accumulatedTranscriptRef.current);
-    setIsListening(true);
-  };
-
-  recognition.onresult = (event: any) => {
-    let sessionTranscript = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      sessionTranscript += event.results[i][0].transcript;
-    }
-    
-    // Unimos lo que ya teníamos antes del silencio con lo nuevo que se está escuchando
-    const fullTranscript = (accumulatedTranscriptRef.current + " " + sessionTranscript).trim();
-    
-    voiceTranscriptRef.current = fullTranscript;
-    setVoiceTranscript(fullTranscript);
-
-    // Palabras clave para forzar el fin del micro si el usuario no quiere esperar al silencio
-    if (sessionTranscript.toLowerCase().includes("listo") || sessionTranscript.toLowerCase().includes("terminar")) {
-      explanationProcessedRef.current = true;
-      recognition.stop();
-    }
-  };
-
-  recognition.onerror = (event: any) => {
-    // El error 'no-speech' es normal cuando te quedas pensando; lo ignoramos aquí 
-    // porque el evento 'onend' se encargará de reiniciar el micro.
-    if (event.error === "no-speech") return;
-    
-    console.error("Error de voz fatal:", event.error);
-    setIsListening(false);
-    setIsRecording(false);
-  };
-
-  recognition.onend = () => {
-    console.log("El ciclo de grabación terminó.");
-
-    // Escenario A: El usuario ya terminó de hablar y hay contenido suficiente
-    if (explanationProcessedRef.current || (voiceTranscriptRef.current.trim().length > 20)) {
-       // Si pasan 2 segundos de silencio y ya hay una frase larga, procesamos
-       if (!explanationProcessedRef.current) {
-          explanationProcessedRef.current = true;
-          processVoiceExplanation(voiceTranscriptRef.current);
-       }
-    } 
-    // Escenario B: El micro se cerró por silencio pero el usuario aún está en el paso de escucha
-    else if (!explanationProcessedRef.current && voiceStep === "listening-explanation") {
-      // Guardamos lo que se logró captar en esta sesión para no perderlo al reiniciar
-      accumulatedTranscriptRef.current = voiceTranscriptRef.current;
-      
-      console.log("Re-encendiendo micro para continuar la idea...");
+    if (
+      !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
+    ) {
+      console.error("ERROR: Navegador no soporta reconocimiento de voz");
+      speakText(
+        "Tu navegador no soporta reconocimiento de voz. Por favor, usa el teclado.",
+      );
       setTimeout(() => {
-        if (voiceStep === "listening-explanation") {
-          try { recognition.start(); } catch (e) { console.error("Error al re-iniciar:", e); }
+        setVoiceStep("waiting-for-explanation");
+        setCurrentListeningFor("");
+      }, 1000);
+      return;
+    }
+
+    setIsRecording(true);
+    setIsListening(true);
+    setVoiceTranscript("");
+    voiceTranscriptRef.current = ""; // <-- AGREGAR
+    explanationProcessedRef.current = false; // <-- AGREGAR
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "es-MX";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      console.log("OK: Reconocimiento de voz iniciado para explicación");
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      // Acumular TODOS los resultados, no solo desde resultIndex
+      // Esto evita que se pierda el texto cuando hay pausas
+      let finalTranscript = "";
+      let interimTranscript = "";
+
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript + " ";
+        } else {
+          interimTranscript += result[0].transcript;
         }
-      }, 250);
-    } else {
+      }
+
+      const fullTranscript = (finalTranscript + interimTranscript).trim();
+      console.log("[v0] Transcripción acumulada:", fullTranscript);
+      console.log(
+        "[v0] Final:",
+        finalTranscript.trim(),
+        "| Interim:",
+        interimTranscript,
+      );
+
+      voiceTranscriptRef.current = fullTranscript;
+      setVoiceTranscript(fullTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("ERROR en reconocimiento de voz:", event.error);
       setIsListening(false);
       setIsRecording(false);
-    }
-  };
+      setCurrentListeningFor("");
 
-  recognition.start();
-};
-
- const processVoiceExplanation = async (transcript: string) => { // Añade async
-  const trimmedTranscript = transcript.trim();
-  explanationProcessedRef.current = true;
-
-  // Limpieza básica
-  const cleanedTranscript = trimmedTranscript
-    .replace(/\b(terminar|listo|fin|confirmar)\b/gi, "")
-    .trim();
-
-  if (!cleanedTranscript || cleanedTranscript.length < 10) {
-    speakText("La explicación es muy corta, por favor detalla más.", 1.3);
-    setTimeout(() => {
-      setVoiceStep("waiting-for-explanation");
-      setExpectedInputType("explanation");
-    }, 1000);
-    return;
-  }
-
-  const currentTask = getCurrentTask();
-  const currentActivity = getCurrentActivity();
-
-  if (!currentTask || !currentActivity) return;
-
-  // Guardamos la explicación
-  const explanation: TaskExplanation = {
-    taskId: currentTask.id,
-    taskName: currentTask.nombre,
-    activityTitle: currentActivity.actividadTitulo,
-    explanation: cleanedTranscript, // Usamos el texto limpio
-    confirmed: true, // Lo marcamos como confirmado automáticamente
-    priority: currentTask.prioridad,
-    duration: currentTask.duracionMin,
-    timestamp: new Date(),
-  };
-
-  setTaskExplanations((prev) => [...prev.filter(e => e.taskId !== currentTask.id), explanation]);
-
-  // --- CAMBIO CLAVE: Saltamos la pregunta y validamos directo ---
-  setVoiceStep("sending");
-  handleDirectValidation(explanation, currentActivity, currentTask);
-};
-
-const handleDirectValidation = async (explanation: TaskExplanation, activity: any, task: any) => {
-  const result = await sendTaskValidation({
-    ...explanation,
-    activityTitle: activity.actividadTitulo,
-    taskName: task.nombre,
-  });
-
-  if (result && result.valida) {
-    speakText("Entendido, tarea validada.", 1.3);
-    
-    // Lógica para pasar a la siguiente tarea o actividad
-    const nextTaskIndex = currentTaskIndex + 1;
-    if (nextTaskIndex < activity.tareas.length) {
-      setCurrentTaskIndex(nextTaskIndex);
-      setTimeout(() => speakTaskByIndices(currentActivityIndex, nextTaskIndex), 1500);
-    } else {
-      const nextActivityIndex = currentActivityIndex + 1;
-      setCurrentActivityIndex(nextActivityIndex);
-      setCurrentTaskIndex(0);
-      if (nextActivityIndex < activitiesWithTasks.length) {
-        setTimeout(() => speakActivityByIndex(nextActivityIndex), 1500);
+      if (event.error === "no-speech") {
+        console.log("No se detectó voz");
+        speakText("No escuché tu explicación. Por favor, intenta de nuevo.");
       } else {
-        setVoiceStep("summary");
-        speakText("Has terminado todas las validaciones. ¿Quieres enviar el reporte final?", 1.3);
+        console.log("Error de micrófono");
+        speakText(
+          "Hubo un error con el micrófono. Por favor, intenta de nuevo.",
+        );
       }
-    }
-  } else {
-    // Si la IA lo rechaza, le dice la razón y REABRE el micro
-    const feedback = `${result.razon}. ${result.sugerencia || ""}`;
-    speakText(feedback, 1.2, 1.15, () => {
-      // Al terminar de hablar el bot, reseteamos para que el usuario vuelva a explicar
-      setVoiceStep("waiting-for-explanation");
-      setExpectedInputType("explanation");
-      // Opcional: una pequeña instrucción auditiva
-      speakText("Por favor, intenta explicarlo de nuevo con más detalle.", 1.2);
-    });
-  }
-};
 
-  const confirmExplanation = async () => {
-    if (voiceStep !== "confirmation" || expectedInputType !== "confirmation")
+      setTimeout(() => {
+        setVoiceStep("waiting-for-explanation");
+      }, 1000);
+    };
+
+    recognition.onend = () => {
+      console.log("Reconocimiento de voz finalizado");
+      console.log("explanationProcessedRef:", explanationProcessedRef.current);
+      setIsListening(false);
+      setIsRecording(false);
+      setCurrentListeningFor("");
+
+      if (!explanationProcessedRef.current) {
+        console.log("No se procesó explicación, volviendo a estado anterior");
+        setTimeout(() => {
+          setVoiceStep("waiting-for-explanation");
+        }, 500);
+      }
+    };
+
+    console.log("Iniciando reconocimiento de voz...");
+    recognition.start();
+  };
+
+  const processVoiceExplanation = async (transcript: string) => {
+    const trimmedTranscript = transcript.trim();
+    explanationProcessedRef.current = true;
+
+    // Limpieza de comandos
+    const cleanedTranscript = trimmedTranscript
+      .replace(/\b(terminar|listo|fin|confirmar|enviar)\b/gi, "")
+      .trim();
+
+    // Validación básica antes de enviar
+    if (!cleanedTranscript || cleanedTranscript.length < 5) {
+      speakText(
+        "La explicación es demasiado corta. Por favor, intenta dar más detalles.",
+      );
+      setTimeout(() => {
+        setVoiceStep("waiting-for-explanation");
+        setExpectedInputType("explanation");
+      }, 1000);
       return;
+    }
+
+    const currentTask = getCurrentTask();
+    const currentActivity = getCurrentActivity();
+    if (!currentTask || !currentActivity) return;
+
+    // 1. Mostrar estado de carga (NO guardamos en el estado todavía)
+    setVoiceStep("processing-explanation");
+    speakText("Validando...");
+
+    try {
+      const response = await sendTaskValidation({
+        taskId: currentTask.id,
+        taskName: currentTask.nombre,
+        activityTitle: currentActivity.actividadTitulo,
+        explanation: cleanedTranscript,
+        confirmed: true,
+        priority: currentTask.prioridad,
+        duration: currentTask.duracionMin,
+      });
+
+      if (response.valida) {
+        // 2. SOLO si es válida, la guardamos en el historial del estado
+        const newExplanation: TaskExplanation = {
+          taskId: currentTask.id,
+          taskName: currentTask.nombre,
+          activityTitle: currentActivity.actividadTitulo,
+          explanation: cleanedTranscript,
+          confirmed: true,
+          priority: currentTask.prioridad,
+          duration: currentTask.duracionMin,
+          timestamp: new Date(),
+        };
+
+        setTaskExplanations((prev) => [
+          ...prev.filter((exp) => exp.taskId !== currentTask.id),
+          newExplanation,
+        ]);
+
+        speakText("Tarea validada correctamente.");
+
+        // Navegación a la siguiente tarea/actividad
+        const nextTaskIndex = currentTaskIndex + 1;
+        if (nextTaskIndex < currentActivity.tareas.length) {
+          setCurrentTaskIndex(nextTaskIndex);
+          setTimeout(
+            () => speakTaskByIndices(currentActivityIndex, nextTaskIndex),
+            1000,
+          );
+        } else {
+          const nextActivityIndex = currentActivityIndex + 1;
+          setCurrentActivityIndex(nextActivityIndex);
+          setCurrentTaskIndex(0);
+
+          if (nextActivityIndex < activitiesWithTasks.length) {
+            setTimeout(() => speakActivityByIndex(nextActivityIndex), 1000);
+          } else {
+            setVoiceStep("summary");
+            speakText("Has completado todas las actividades.");
+          }
+        }
+      } else {
+        // 3. Si NO es válida, NO se guarda y pedimos corrección
+        console.log("Validación rechazada por la IA:", response.razon);
+        speakText(
+          `Es necesario corregir: ${response.razon || "La explicación no es suficiente"}.`,
+        );
+
+        // Regresamos al estado de espera para que el usuario hable de nuevo
+        setTimeout(() => {
+          setVoiceStep("waiting-for-explanation");
+          setExpectedInputType("explanation");
+        }, 1000);
+      }
+    } catch (error) {
+      console.error("Error en comunicación con API:", error);
+      speakText(
+        "Hubo un error de conexión. Por favor, intenta enviar la explicación nuevamente.",
+      );
+      setVoiceStep("waiting-for-explanation");
+    }
+  };
+  const confirmExplanation = async () => {
+    console.log("========== CONFIRMANDO Y ENVIANDO EXPLICACIÓN ==========");
+
+    if (voiceStep !== "confirmation" || expectedInputType !== "confirmation") {
+      console.log("ERROR: No se puede confirmar en este estado");
+      return;
+    }
 
     const currentTask = getCurrentTask();
     const currentActivity = getCurrentActivity();
 
-    if (!currentTask || !currentActivity) {
-      console.error("No se pudo obtener la tarea o actividad actual");
+    // Buscamos la explicación que acabamos de guardar en el estado local
+    const explanationToSend = taskExplanations.find(
+      (exp) => exp.taskId === currentTask?.id,
+    );
+
+    if (!currentTask || !currentActivity || !explanationToSend) {
+      console.error("ERROR: Faltan datos para el envío");
       return;
     }
 
-    const currentExplanation = taskExplanations.find(
-      (exp) => exp.taskId === currentTask.id,
-    );
+    // Cambiamos el estado visual para mostrar que estamos procesando
+    setVoiceStep("processing-explanation");
+    speakText("Validando tu explicación, un momento...");
 
-    if (currentExplanation) {
-      setVoiceStep("sending");
-
-      // CAMBIO AQUÍ: 'result' ahora contiene el JSON del backend { valida, razon }
-      const result = await sendTaskValidation({
-        ...currentExplanation,
-        activityTitle: currentActivity.actividadTitulo,
+    try {
+      const response = await sendTaskValidation({
+        taskId: currentTask.id,
         taskName: currentTask.nombre,
+        activityTitle: currentActivity.actividadTitulo,
+        explanation: explanationToSend.explanation,
         confirmed: true,
+        priority: currentTask.prioridad,
+        duration: currentTask.duracionMin,
       });
 
-      // VALIDACIÓN DE LA IA
-      if (result && result.valida === true) {
-        // --- CASO: EXPLICACIÓN APROBADA ---
+      if (response.valida) {
+        // Marcamos como confirmada localmente
         setTaskExplanations((prev) =>
           prev.map((exp) =>
             exp.taskId === currentTask.id ? { ...exp, confirmed: true } : exp,
           ),
         );
 
-        speakText("Excelente, explicación validada.", 1.3);
+        // Feedback positivo de voz
+        speakText("Excelente. Explicación validada correctamente.");
 
+        // Lógica de navegación a la siguiente tarea/actividad
         const nextTaskIndex = currentTaskIndex + 1;
+
         if (nextTaskIndex < currentActivity.tareas.length) {
           setCurrentTaskIndex(nextTaskIndex);
           setRetryCount(0);
-          setTimeout(
-            () => speakTaskByIndices(currentActivityIndex, nextTaskIndex),
-            1500,
-          );
+          setTimeout(() => {
+            speakTaskByIndices(currentActivityIndex, nextTaskIndex);
+          }, 1500);
         } else {
           const nextActivityIndex = currentActivityIndex + 1;
           setCurrentActivityIndex(nextActivityIndex);
           setCurrentTaskIndex(0);
+          setRetryCount(0);
+
           if (nextActivityIndex < activitiesWithTasks.length) {
-            setTimeout(() => speakActivityByIndex(nextActivityIndex), 1500);
+            setTimeout(() => {
+              speakActivityByIndex(nextActivityIndex);
+            }, 1500);
           } else {
             setVoiceStep("summary");
-            speakText(
-              "Has terminado todas las validaciones. ¡Buen trabajo!",
-              1.3,
-            );
+            setExpectedInputType("confirmation");
+            setTimeout(() => {
+              speakText(
+                "¡Perfecto! Has terminado de validar todas las tareas de tu jornada.",
+              );
+            }, 1000);
           }
         }
       } else {
-        const mensajeGuia = result.razon;
-        const sugerencia = result.sugerencia
-          ? ` Sugerencia: ${result.sugerencia}`
-          : "";
-        const textoParaLeer = `${mensajeGuia}. ${sugerencia}`;
-
-        setVoiceStep("confirmation");
-
-        // Ahora speakText recibe la función retryExplanation como tercer parámetro.
-        // Se ejecutará EXACTAMENTE cuando el asistente termine de hablar.
-        speakText(textoParaLeer, 1.2, 1.15, () => {
-          console.log(
-            "Asistente terminó de explicar. Reiniciando grabación...",
-          );
-          retryExplanation();
-        });
+        // Si el backend dice que no es válida (ej: muy corta o sin sentido)
+        setVoiceStep("waiting-for-explanation");
+        setExpectedInputType("explanation");
+        speakText(
+          `La explicación no fue suficiente. ${response.razon || "Por favor, intenta dar más detalles."}`,
+        );
       }
+    } catch (error) {
+      console.error("Error en el flujo de validación:", error);
+      setVoiceStep("confirmation");
+      speakText(
+        "Hubo un problema de conexión al validar. ¿Quieres intentar confirmarlo de nuevo?",
+      );
     }
   };
 
@@ -866,10 +1090,7 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
     stopVoice();
 
     setTimeout(() => {
-      speakText(
-        "Por favor, explica cómo resolverás esta tarea.",
-        1.3,
-      );
+      speakText("Por favor, explica nuevamente cómo resolverás esta tarea.");
       setTimeout(() => {
         setVoiceStep("waiting-for-explanation");
         setExpectedInputType("explanation");
@@ -885,18 +1106,87 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
       const historial: HistorialSessionResponse =
         await obtenerHistorialSession();
 
+      console.log("Historial obtenido:", historial);
+
       if (!historial.success || !historial.data) {
         console.log("No hay sesión de historial existente");
         setIsCheckingHistory(false);
         return false;
       }
 
-      const proyectos = historial.proyectos;
+      // Buscar el último mensaje con análisis válido
+      const mensajes = historial.data.mensajes || [];
+      const ultimoMensajeConAnalisis = mensajes
+        .filter(
+          (m: any) => m.role === "bot" && m.analisis && m.analisis.success,
+        )
+        .pop();
 
-      if (!proyectos || !proyectos.actividades) {
+      if (!ultimoMensajeConAnalisis || !ultimoMensajeConAnalisis.analisis) {
+        console.log("No hay análisis en el historial");
         setIsCheckingHistory(false);
         return false;
       }
+
+      const analisis = ultimoMensajeConAnalisis.analisis;
+
+      // Restaurar el assistantAnalysis con los datos del historial
+      const restoredAnalysis: AssistantAnalysis = {
+        success: analisis.success,
+        answer: analisis.answer,
+        provider: analisis.provider,
+        sessionId: analisis.sessionId,
+        proyectoPrincipal: analisis.proyectoPrincipal,
+        metrics: {
+          totalActividades: analisis.metrics?.totalActividades || 0,
+          actividadesConTiempoTotal:
+            analisis.metrics?.actividadesConPendientes || 0,
+          actividadesFinales: analisis.metrics?.actividadesConPendientes || 0,
+          tareasConTiempo: analisis.metrics?.tareasConTiempo || 0,
+          tareasAltaPrioridad: analisis.metrics?.tareasAltaPrioridad || 0,
+          tiempoEstimadoTotal: analisis.metrics?.tiempoEstimadoTotal || "0m",
+        },
+        data: {
+          actividades: analisis.data?.actividades || [],
+          revisionesPorActividad: (
+            analisis.data?.revisionesPorActividad || []
+          ).map((rev: any) => ({
+            actividadId: rev.actividadId,
+            actividadTitulo: rev.actividadTitulo,
+            actividadHorario: rev.actividadHorario || "",
+            tareasConTiempo: (rev.tareasConTiempo || []).map((t: any) => ({
+              id: t.id,
+              nombre: t.nombre,
+              terminada: t.terminada || false,
+              confirmada: t.confirmada || false,
+              duracionMin: t.duracionMin || 0,
+              fechaCreacion: t.fechaCreacion || "",
+              fechaFinTerminada: t.fechaFinTerminada || null,
+              diasPendiente: t.diasPendiente || 0,
+              prioridad: t.prioridad || "MEDIA",
+            })),
+            totalTareasConTiempo: rev.tareasConTiempo?.length || 0,
+            tareasAltaPrioridad: rev.tareasAltaPrioridad || 0,
+            tiempoTotal: rev.tiempoTotal || 0,
+            tiempoFormateado: `${rev.tiempoTotal || 0} min`,
+          })),
+        },
+        multiActividad: (analisis.data?.actividades?.length || 0) > 1,
+      };
+
+      // Establecer el análisis restaurado
+      setAssistantAnalysis(restoredAnalysis);
+
+      // Calcular métricas para mostrar
+      const totalTareasConTiempo =
+        restoredAnalysis.data.revisionesPorActividad.reduce(
+          (sum, rev) => sum + rev.tareasConTiempo.length,
+          0,
+        );
+      const totalActividades =
+        restoredAnalysis.data.revisionesPorActividad.filter(
+          (rev) => rev.tareasConTiempo.length > 0,
+        ).length;
 
       addMessageWithTyping(
         "bot",
@@ -932,14 +1222,146 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
               </p>
             </div>
           </div>
+
+          {/* Mostrar resumen de tareas con tiempo restauradas */}
+          <div className="mt-4 p-3 rounded-lg bg-[#252527] border border-[#2a2a2a]">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="w-4 h-4 text-[#6841ea]" />
+              <span className="font-medium text-sm">
+                Tareas con tiempo estimado
+              </span>
+              <Badge variant="secondary" className="text-xs">
+                {totalTareasConTiempo} tareas
+              </Badge>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {restoredAnalysis.data.revisionesPorActividad.map(
+                (actividad, aIdx) =>
+                  actividad.tareasConTiempo.length > 0 && (
+                    <div key={actividad.actividadId} className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <FolderOpen className="w-3 h-3" />
+                        <span className="truncate">
+                          {actividad.actividadTitulo}
+                        </span>
+                      </div>
+                      {actividad.tareasConTiempo.map((tarea, tIdx) => (
+                        <div
+                          key={tarea.id}
+                          className="flex items-center justify-between p-2 rounded bg-[#1a1a1a] ml-4"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+                              ${
+                                tarea.prioridad === "ALTA"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : tarea.prioridad === "MEDIA"
+                                    ? "bg-yellow-500/20 text-yellow-500"
+                                    : "bg-green-500/20 text-green-500"
+                              }`}
+                            >
+                              {tIdx + 1}
+                            </div>
+                            <span className="text-sm truncate">
+                              {tarea.nombre}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              variant={
+                                tarea.prioridad === "ALTA"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {tarea.prioridad}
+                            </Badge>
+                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {tarea.duracionMin} min
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ),
+              )}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-[#2a2a2a] flex justify-between text-sm">
+              <span className="text-gray-400">Tiempo total estimado:</span>
+              <span className="font-bold text-[#6841ea]">
+                {restoredAnalysis.metrics.tiempoEstimadoTotal}
+              </span>
+            </div>
+          </div>
         </div>,
         400,
       );
 
+      // Agregar mensaje con botones de acción para elegir modo
       setTimeout(() => {
-        fetchAssistantAnalysis(false, true);
-      }, 1000);
+        addMessageWithTyping(
+          "bot",
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a]">
+              <div className="space-y-3">
+                <p className="text-sm text-gray-300">
+                  ¿Te gustaría explicar tus tareas usando el modo guiado por
+                  voz?
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={startVoiceMode}
+                    className="bg-[#6841ea] hover:bg-[#5a36d4] flex items-center gap-2"
+                  >
+                    <Headphones className="w-4 h-4" />
+                    Modo Voz Guiado
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setStep("finished")}
+                    className="bg-transparent"
+                  >
+                    Continuar en chat
+                  </Button>
+                </div>
+              </div>
+            </div>
 
+            <div className="p-3 rounded-lg bg-[#252527] border border-[#6841ea]/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-[#6841ea]/20">
+                  <Headphones className="w-5 h-5 text-[#6841ea]" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">¿Explicar tus tareas?</p>
+                  <p className="text-xs text-gray-400">
+                    Usa el modo guiado por voz para explicar cada actividad y
+                    sus tareas
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={startVoiceMode}
+                  className="ml-auto bg-[#6841ea] hover:bg-[#5a36d4]"
+                >
+                  Activar Modo Voz
+                </Button>
+              </div>
+            </div>
+          </div>,
+          600,
+        );
+      }, 800);
+
+      // Cambiar el step para mostrar los controles de acción
+      setStep("show-analysis");
       setHasExistingSession(true);
       setIsCheckingHistory(false);
       return true;
@@ -1018,7 +1440,6 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
         setTimeout(() => {
           speakText(
             "¡Perfecto! Has explicado todas las tareas de todas las actividades. ¿Quieres enviar este reporte?",
-            1.3,
           );
         }, 500);
       }
@@ -1166,7 +1587,7 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
     try {
       setVoiceStep("sending");
       setExpectedInputType("none");
-      speakText("Enviando tu reporte...", 1.3);
+      speakText("Enviando tu reporte...");
 
       const payload = {
         sessionId: assistantAnalysis.sessionId,
@@ -1203,7 +1624,6 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
 
       speakText(
         "¡Correcto! Tu reporte ha sido enviado. Gracias, puedes comenzar tu día.",
-        1.3,
       );
 
       setTimeout(() => {
@@ -1237,7 +1657,6 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
       console.error("Error al enviar explicaciones:", error);
       speakText(
         "Hubo un error al enviar tu reporte. Puedes intentar nuevamente.",
-        1.3,
       );
       setVoiceStep("summary");
       setExpectedInputType("confirmation");
@@ -1855,18 +2274,24 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
     };
 
     recognition.onresult = (event: any) => {
-      let transcript = "";
-  for (let i = event.resultIndex; i < event.results.length; i++) {
-    transcript += event.results[i][0].transcript;
-  }
-  setVoiceTranscript(transcript);
-  voiceTranscriptRef.current = transcript;
+      // Acumular TODOS los resultados para evitar pérdida al pausar
+      let finalTranscript = "";
+      let interimTranscript = "";
 
-  // Si el usuario dice "listo" o "terminar", cortamos y procesamos ya
-  if (transcript.toLowerCase().includes("listo") || transcript.toLowerCase().includes("terminar")) {
-    recognition.stop(); // Esto disparará el onend y por ende el proceso de validación
-  }
-};
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript + " ";
+        } else {
+          interimTranscript += result[0].transcript;
+        }
+      }
+
+      const fullTranscript = (finalTranscript + interimTranscript).trim();
+      voiceTranscriptRef.current = fullTranscript;
+      setVoiceTranscript(fullTranscript);
+    };
+
     recognition.onerror = (event: any) => {
       console.warn("⚠️ SpeechRecognition error:", event.error);
 
@@ -1943,7 +2368,7 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
       !currentTranscript.trim()
     ) {
       console.log("No hay transcripción, volviendo a waiting-for-explanation");
-      speakText("No escuché tu explicación. Por favor, intenta de nuevo.", 1.3);
+      speakText("No escuché tu explicación. Por favor, intenta de nuevo.");
       setTimeout(() => {
         setVoiceStep("waiting-for-explanation");
       }, 1000);
@@ -2239,7 +2664,7 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                   <p className="text-xs text-gray-500">{getHeaderSubtitle()}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {isSpeaking && (
                   <div className="flex gap-1">
                     <div
@@ -2260,6 +2685,11 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                     />
                   </div>
                 )}
+                <SpeedControlModal
+                  rate={rate}
+                  changeRate={changeRate}
+                  theme={theme}
+                />
                 <Button variant="ghost" size="sm" onClick={cancelVoiceMode}>
                   <X className="w-4 h-4" />
                 </Button>
@@ -2287,22 +2717,25 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
 
           <div className="p-6">
             {voiceStep === "confirm-start" && (
-              <div className="text-center space-y-4">
-                <div
-                  className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${theme === "dark" ? "bg-[#6841ea]/20" : "bg-[#6841ea]/10"}`}
-                >
-                  <Headphones className="w-8 h-8 text-[#6841ea]" />
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div
+                    className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${theme === "dark" ? "bg-[#6841ea]/20" : "bg-[#6841ea]/10"}`}
+                  >
+                    <Headphones className="w-8 h-8 text-[#6841ea]" />
+                  </div>
+                  <h4 className="text-lg font-bold mt-3">
+                    Modo voz guiado por actividades
+                  </h4>
+                  <p
+                    className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mt-1`}
+                  >
+                    Te guiaré por cada actividad y sus tareas pendientes para
+                    que expliques tu plan de acción.
+                  </p>
                 </div>
-                <h4 className="text-lg font-bold">
-                  Modo voz guiado por actividades
-                </h4>
-                <p
-                  className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
-                >
-                  Te guiaré por cada actividad y sus tareas pendientes para que
-                  expliques tu plan de acción.
-                </p>
-                <div className="grid grid-cols-2 gap-2 mb-4">
+
+                <div className="grid grid-cols-2 gap-2">
                   <div
                     className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
                   >
@@ -2324,7 +2757,96 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                     <div className="text-xl font-bold mt-1">{totalTasks}</div>
                   </div>
                 </div>
-                <div className="flex gap-3 justify-center pt-4">
+
+                {/* Lista de tareas con tiempo */}
+                <div
+                  className={`max-h-60 overflow-y-auto rounded-lg border ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"}`}
+                >
+                  {activitiesWithTasks.map((activity, aIdx) => (
+                    <div
+                      key={activity.actividadId}
+                      className={`${aIdx > 0 ? "border-t" : ""} ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"}`}
+                    >
+                      <div
+                        className={`p-3 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FolderOpen className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium text-sm truncate">
+                            {activity.actividadTitulo}
+                          </span>
+                          <span className="text-xs text-gray-500 ml-auto shrink-0">
+                            {activity.actividadHorario}
+                          </span>
+                        </div>
+                      </div>
+                      {activity.tareas.map((tarea, tIdx) => (
+                        <div
+                          key={tarea.id}
+                          className={`p-3 flex items-center justify-between ${tIdx % 2 === 0 ? (theme === "dark" ? "bg-[#1a1a1a]" : "bg-white") : theme === "dark" ? "bg-[#1f1f1f]" : "bg-gray-50"}`}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+                                ${
+                                  tarea.prioridad === "ALTA"
+                                    ? "bg-red-500/20 text-red-500"
+                                    : tarea.prioridad === "MEDIA"
+                                      ? "bg-yellow-500/20 text-yellow-500"
+                                      : "bg-green-500/20 text-green-500"
+                                }`}
+                            >
+                              {tIdx + 1}
+                            </div>
+                            <span className="text-sm truncate">
+                              {tarea.nombre}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            <Badge
+                              variant={
+                                tarea.prioridad === "ALTA"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {tarea.prioridad}
+                            </Badge>
+                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {tarea.duracionMin}m
+                            </span>
+                            {tarea.diasPendiente > 0 && (
+                              <span className="text-xs text-gray-500">
+                                {tarea.diasPendiente}d
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tiempo total */}
+                <div
+                  className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"} flex justify-between items-center`}
+                >
+                  <span className="text-sm text-gray-400">
+                    Tiempo total estimado:
+                  </span>
+                  <span className="font-bold text-[#6841ea]">
+                    {activitiesWithTasks.reduce(
+                      (sum, act) =>
+                        sum + act.tareas.reduce((s, t) => s + t.duracionMin, 0),
+                      0,
+                    )}{" "}
+                    min
+                  </span>
+                </div>
+
+                <div className="flex gap-3 justify-center pt-2">
                   <Button
                     onClick={confirmStartVoiceMode}
                     className="bg-[#6841ea] hover:bg-[#5a36d4] px-6"
@@ -2332,7 +2854,11 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                     <Play className="w-4 h-4 mr-2" />
                     Comenzar
                   </Button>
-                  <Button variant="outline" onClick={cancelVoiceMode}>
+                  <Button
+                    variant="outline"
+                    onClick={cancelVoiceMode}
+                    className="bg-transparent"
+                  >
                     Cancelar
                   </Button>
                 </div>
@@ -2504,7 +3030,7 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                     <Button
                       variant="outline"
                       onClick={skipTask}
-                      className="h-12"
+                      className="h-12 bg-transparent"
                       disabled={
                         isSpeaking || voiceStep === "listening-explanation"
                       }
@@ -2646,7 +3172,7 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                   <Button
                     variant="outline"
                     onClick={retryExplanation}
-                    className="flex-1"
+                    className="flex-1 bg-transparent"
                     disabled={isSpeaking}
                   >
                     <RotateCcw className="w-4 h-4 mr-2" />
@@ -2869,6 +3395,12 @@ const handleDirectValidation = async (explanation: TaskExplanation, activity: an
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <SpeedControlHeader
+                  rate={rate}
+                  changeRate={changeRate}
+                  isSpeaking={isSpeaking}
+                  theme={theme}
+                />
                 {!isPiPMode ? (
                   <button
                     onClick={openPiPWindow}
