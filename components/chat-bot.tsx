@@ -4007,23 +4007,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           className={`flex-1 overflow-y-auto ${isInPiPWindow ? "pt-16" : "pt-20"} ${!isInPiPWindow ? "pb-24" : "pb-20"}`}
         >
           <div className="max-w-4xl mx-auto w-full px-4">
-            {isCheckingHistory && (
-              <div className="flex justify-center items-center py-4">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Restaurando tu sesión anterior...
-                </div>
-              </div>
-            )}
 
-            {isCheckingAfterHours && (
-              <div className="flex justify-center items-center py-4">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Verificando actividades al final del día...
-                </div>
-              </div>
-            )}
 
             <div className="space-y-3 py-4" ref={scrollRef}>
               {messages.map((message) => (

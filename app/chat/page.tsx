@@ -1,27 +1,51 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ChatBot } from "@/components/chat-bot";
 import type { Colaborador, Actividad } from "@/lib/types";
 
 export default function ChatPage() {
-  // 👉 luego puedes traer esto de localStorage o context
-  const colaborador = JSON.parse(
-    localStorage.getItem("colaborador") || "null"
-  ) as Colaborador | null;
+  const [colaborador, setColaborador] = useState<Colaborador | null>(null);
+  const [actividades, setActividades] = useState<Actividad[]>([]);
+  const [isReady, setIsReady] = useState(false);
 
-  const actividades = JSON.parse(
-    localStorage.getItem("actividades") || "[]"
-  ) as Actividad[];
+  useEffect(() => {
+    // Esto solo se ejecuta en el cliente (navegador)
+    const savedColaborador = localStorage.getItem("colaborador");
+    const savedActividades = localStorage.getItem("actividades");
+
+    if (savedColaborador) {
+      setColaborador(JSON.parse(savedColaborador));
+    }
+    
+    if (savedActividades) {
+      setActividades(JSON.parse(savedActividades));
+    }
+
+    setIsReady(true);
+  }, []);
+
+  // Mientras se lee el localStorage, no renderizamos nada o mostramos un loader
+  if (!isReady) {
+    return null; 
+  }
 
   if (!colaborador) {
-    return <p>Sesión no encontrada</p>;
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-muted-foreground">Sesión no encontrada. Por favor, inicia sesión.</p>
+      </div>
+    );
   }
 
   return (
     <ChatBot
       colaborador={colaborador}
       actividades={actividades}
-      onLogout={() => window.close()}
+      onLogout={() => {
+        localStorage.clear();
+        window.location.href = "/";
+      }}
     />
   );
 }
