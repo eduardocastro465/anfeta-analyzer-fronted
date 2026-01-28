@@ -104,6 +104,7 @@ export interface AssistantAnalysis {
 }
 
 interface HistorialMensaje {
+  analisis: any
   role: "usuario" | "bot";
   contenido: string;
   timestamp: string;

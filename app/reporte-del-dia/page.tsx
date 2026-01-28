@@ -17,7 +17,7 @@ import {
   Timer,
   RefreshCw,
 } from "lucide-react";
-import { obtenerReportesDelDia } from "@/lib/api";
+// import {  } from "@/lib/api";
 
 // Tipos
 type EstadoTarea = "pendiente" | "No completado" | "completado";
@@ -221,7 +221,9 @@ export default function ReporteDiaPage() {
             day: "numeric",
           }),
         );
-        const data = await obtenerReportesDelDia();
+        // const data = 
+        
+        const data = reportesData;
 
         console.log("Reporte crudo:", data);
 

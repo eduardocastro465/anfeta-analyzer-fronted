@@ -9,6 +9,7 @@ import {
   validateSession,
   obtenerHistorialSession,
   sendTaskValidation,
+  obtenerHistorialSidebar,
 } from "@/lib/api";
 import type { HistorialSessionResponse } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Colaborador } from "@/lib/types";
+import { obtenerLabelDia } from "@/util/labelDia";
 import {
   Bot,
   FileText,
@@ -56,6 +58,13 @@ import {
   ListChecks,
 } from "lucide-react";
 import Image from "next/image";
+import {
+  History,
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ChatBotProps {
   colaborador: Colaborador;
@@ -72,6 +81,47 @@ interface Message {
   timestamp: Date;
   voiceText?: string;
 }
+
+export type ConversacionSidebar = {
+  sessionId: string;
+  userId: string;
+  nombreConversacion?: string;
+  estadoConversacion: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+export const mockConversacionesSidebar: ConversacionSidebar[] = [
+  {
+    sessionId: "session-1",
+    userId: "user-123",
+    estadoConversacion: "esperando_usuario",
+    createdAt: new Date().toISOString(), // Hoy
+  },
+  {
+    sessionId: "session-2",
+    userId: "user-123",
+    estadoConversacion: "mostrando_actividades",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // Ayer
+  },
+  {
+    sessionId: "session-3",
+    userId: "user-123",
+    estadoConversacion: "esperando_confirmacion_pendientes",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // Hace 2 días
+  },
+  {
+    sessionId: "session-4",
+    userId: "user-123",
+    estadoConversacion: "finalizado",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
+  },
+  {
+    sessionId: "session-5",
+    userId: "user-123",
+    estadoConversacion: "inicio",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+  },
+];
 
 interface AssistantAnalysis {
   success: boolean;
@@ -403,7 +453,19 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [isCheckingHistory, setIsCheckingHistory] = useState(false);
   const [hasExistingSession, setHasExistingSession] = useState(false);
   const [isCheckingAfterHours, setIsCheckingAfterHours] = useState(false);
+  const [sidebarCargado, setSidebarCargado] = useState(false);
 
+  // ========== Estados del Sidebar de Historial ==========
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [data, setData] = useState<ConversacionSidebar[]>([]);
+  const [activo, setActivo] = useState<string | null>(null);
+  const [sidebarCargando, setSidebarCargando] = useState(true);
+  const [conversaciones, setConversaciones] = useState<ConversacionSidebar[]>(
+    mockConversacionesSidebar,
+  );
+  const [conversacionActiva, setConversacionActiva] = useState<string | null>(
+    null,
+  );
   // ========== NUEVO: Estados para Modo Voz Mejorado ==========
   const [voiceMode, setVoiceMode] = useState<boolean>(false);
   const [voiceStep, setVoiceStep] = useState<VoiceModeStep>("idle");
@@ -412,6 +474,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [taskExplanations, setTaskExplanations] = useState<TaskExplanation[]>(
     [],
   );
+
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
+  const [mensajes, setMensajes] = useState([]);
+  const [cargando, setCargando] = useState(false);
   const [voiceConfirmationText, setVoiceConfirmationText] =
     useState<string>("");
   const [showVoiceSummary, setShowVoiceSummary] = useState<boolean>(false);
@@ -420,11 +486,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     "explanation" | "confirmation" | "none"
   >("none");
   const [currentListeningFor, setCurrentListeningFor] = useState<string>("");
-
   const voiceTranscriptRef = useRef<string>(""); // <-- AGREGAR ESTE
   const explanationProcessedRef = useRef<boolean>(false); // <-- AGREGAR ESTE
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null); // Timer para detectar silencio
-
   const displayName = getDisplayName(colaborador);
   const router = useRouter();
   const {
@@ -435,6 +499,24 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     setRate,
     changeRate,
   } = useVoiceSynthesis();
+  const conversacionesAgrupadas = agruparPorDia(data);
+  const [conversacionesCache, setConversacionesCache] = useState<
+    Record<string, Message[]>
+  >({});
+
+  function agruparPorDia(
+    data: ConversacionSidebar[],
+  ): Record<string, ConversacionSidebar[]> {
+    return data.reduce(
+      (acc, conv) => {
+        const dia = obtenerLabelDia(conv.createdAt);
+        acc[dia] ??= [];
+        acc[dia].push(conv);
+        return acc;
+      },
+      {} as Record<string, ConversacionSidebar[]>,
+    );
+  }
 
   // ========== NUEVO: Reorganizar datos por actividades ==========
   const activitiesWithTasks = useMemo(() => {
@@ -1987,6 +2069,26 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
   };
 
+  useEffect(() => {
+    if (!assistantAnalysis) return;
+    if (sidebarCargado) return;
+
+    setSidebarCargando(true); // ← Add loading state
+    obtenerHistorialSidebar()
+      .then((res) => {
+        console.log("Historial del sidebar cargado:", res.data);
+        setData(res.data);
+        // Update conversaciones state too
+        setConversaciones(res.data);
+        setSidebarCargado(true);
+      })
+      .catch((error) => {
+        console.error("Error al cargar sidebar:", error);
+        setData([]);
+      })
+      .finally(() => setSidebarCargando(false)); // ← Add finally
+  }, [assistantAnalysis, sidebarCargado]);
+
   const showAssistantAnalysis = async (
     analysis: AssistantAnalysis,
     isRestoration = false,
@@ -2517,7 +2619,19 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       timestamp: new Date(),
       voiceText,
     };
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => {
+      const updated = [...prev, newMessage];
+
+      // 🔄 ACTUALIZAR CACHÉ AUTOMÁTICAMENTE con la conversación actual
+      if (conversacionActiva) {
+        setConversacionesCache((cache) => ({
+          ...cache,
+          [conversacionActiva]: updated,
+        }));
+      }
+
+      return updated;
+    });
   };
 
   const addMessageWithTyping = async (
@@ -3063,9 +3177,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     <Button
                       onClick={startTaskExplanation}
                       className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4] h-12"
-                      disabled={
-                        isSpeaking || voiceStep === "listening-explanation"
-                      }
+                      disabled={isSpeaking}
                     >
                       <Mic className="w-4 h-4 mr-2" />
                       {taskExplanations.find(
@@ -3078,9 +3190,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                       variant="outline"
                       onClick={skipTask}
                       className="h-12 bg-transparent"
-                      disabled={
-                        isSpeaking || voiceStep === "listening-explanation"
-                      }
+                      disabled={isSpeaking}
                     >
                       <SkipForward className="w-4 h-4" />
                     </Button>
@@ -3351,421 +3461,722 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       </div>
     );
   };
+  const seleccionarConversacion = async (conv: ConversacionSidebar) => {
+    setConversacionActiva(conv.sessionId);
 
+    // ✅ IMPROVED: Check cache AND verify it has content
+    if (conversacionesCache[conv.sessionId]?.length > 0) {
+      console.log("✅ CACHÉ HIT - Usando datos locales");
+      setMessages(conversacionesCache[conv.sessionId]);
+      return;
+    }
+
+    // Always fetch if cache is empty or non-existent
+    setIsTyping(true);
+    try {
+      const res = await obtenerHistorialSession(conv.sessionId);
+
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const data = await res.json();
+
+      if (data.mensajes && Array.isArray(data.mensajes)) {
+        setMessages(data.mensajes);
+
+        // 💾 Cache only if we got real data
+        if (data.mensajes.length > 0) {
+          setConversacionesCache((prev) => ({
+            ...prev,
+            [conv.sessionId]: data.mensajes,
+          }));
+        }
+      } else {
+        setMessages([]);
+        addMessage("bot", "No se encontraron mensajes para esta conversación.");
+      }
+    } catch (error) {
+      console.error("❌ Error:", error);
+      addMessage("bot", "Error al cargar la conversación.");
+    } finally {
+      setIsTyping(false);
+    }
+  };
+  // ========== Crear nueva conversación ==========
+  const nuevaConversacion = () => {
+    const nuevaConv: ConversacionSidebar = {
+      sessionId: `session-${Date.now()}`,
+      userId: colaborador.email,
+      estadoConversacion: "inicio",
+      createdAt: new Date().toISOString(),
+    };
+
+    setConversaciones((prev) => [nuevaConv, ...prev]);
+    setConversacionActiva(nuevaConv.sessionId);
+
+    // 💾 INICIALIZAR CACHÉ VACÍO PARA NUEVA CONVERSACIÓN
+    setConversacionesCache((prev) => ({
+      ...prev,
+      [nuevaConv.sessionId]: [], // Caché vacío para nueva conversación
+    }));
+
+    // Limpiar con transición visual
+    setIsTyping(true);
+    setTimeout(() => {
+      setMessages([]);
+      setIsTyping(false);
+      addMessage(
+        "bot",
+        `¡Nueva conversación iniciada! ¿En qué puedo ayudarte, ${displayName}?`,
+      );
+    }, 300);
+  };
+
+  // async function cargarHistorial() {
+  //   setCargando(true);
+
+  //   try {
+  //     const res = await fetch(
+  //       `/api/chat/historial?fecha=${fechaSeleccionada.toISOString()}`,
+  //       {
+  //         method: "GET",
+  //         credentials: "include",
+  //         headers: { "Content-Type": "application/json" },
+  //       },
+  //     );
+
+  //     if (!res.ok) {
+  //       throw new Error(`Error: ${res.status}`);
+  //     }
+
+  //     const data = await res.json();
+
+  //     // Validar respuesta
+  //     if (data.mensajes && Array.isArray(data.mensajes)) {
+  //       setMensajes(data.mensajes);
+  //       console.log(`Historial cargado: ${data.mensajes.length} mensajes`);
+  //     } else {
+  //       console.warn("Respuesta sin mensajes:", data);
+  //       setMensajes([]);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error al cargar historial:", error);
+  //     setMensajes([]);
+  //     addMessage(
+  //       "bot",
+  //       <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+  //         <div className="flex items-center gap-2">
+  //           <AlertCircle className="w-4 h-4 text-red-500" />
+  //           <span className="text-sm">Error al cargar el historial</span>
+  //         </div>
+  //       </div>,
+  //     );
+  //   } finally {
+  //     setCargando(false);
+  //   }
+  // }
   return (
     <div
-      className={`min-h-screen font-['Arial'] flex flex-col ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
+      className={`min-h-screen font-['Arial'] flex ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
     >
-      <VoiceGuidanceFlow />
-
-      {/* OVERLAY DE MODO VOZ ULTRA-COMPACTO */}
-      {showVoiceOverlay && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-[1px] p-4">
-          <div
-            className={`w-full max-w-sm overflow-hidden flex flex-col rounded-xl border shadow-xl transition-all ${
-              theme === "dark"
-                ? "bg-[#161616] border-[#2a2a2a]"
-                : "bg-white border-gray-200"
-            }`}
-          >
-            {/* Header Minimalista (Sin bordes para ahorrar altura) */}
-            <div className="px-3 py-2 flex items-center justify-between bg-[#6841ea]/5">
-              <div className="flex items-center gap-1.5">
-                <Mic className="w-3.5 h-3.5 text-[#6841ea]" />
-                <span className="text-[10px] font-bold uppercase tracking-tighter opacity-70">
-                  Asistente
-                </span>
-              </div>
-              <button
-                onClick={cancelVoiceMode}
-                className="hover:bg-red-500/10 p-0.5 rounded transition-colors"
-              >
-                <X className="w-3.5 h-3.5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="p-3 space-y-2">
-              {/* Tarea en una sola línea con elipse si es larga */}
-              {getCurrentTask() && (
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <Badge className="h-4 px-1 text-[9px] bg-[#6841ea] shrink-0">
-                    Tarea
-                  </Badge>
-                  <h3 className="text-[12px] font-bold truncate opacity-90">
-                    {getCurrentTask()?.nombre}
-                  </h3>
-                </div>
-              )}
-
-              {/* Layout Horizontal: Micro + Transcripción */}
-              <div className="flex items-center gap-3 py-1">
-                <div className="relative shrink-0">
-                  {isListening && (
-                    <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-20"></span>
-                  )}
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center z-10 relative ${
-                      isListening
-                        ? "bg-[#6841ea] shadow-inner"
-                        : "bg-gray-200 dark:bg-[#2a2a2a]"
-                    }`}
-                  >
-                    {isListening ? (
-                      <div className="flex gap-[2px] items-end h-3">
-                        <div className="w-[2px] bg-white animate-pulse h-full" />
-                        <div className="w-[2px] bg-white animate-pulse h-1/2" />
-                        <div className="w-[2px] bg-white animate-pulse h-3/4" />
-                      </div>
-                    ) : (
-                      <MicOff className="w-4 h-4 text-gray-500" />
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  className={`flex-1 p-2 rounded-md h-12 text-[11px] italic overflow-y-auto border ${
-                    theme === "dark"
-                      ? "bg-black/20 border-white/5 text-gray-400"
-                      : "bg-gray-50 border-black/5 text-gray-500"
-                  }`}
-                >
-                  {voiceTranscript || "Escuchando..."}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer en una sola línea */}
-            <div className="px-3 py-2 border-t flex items-center justify-between">
-              <p className="text-[9px] font-medium opacity-50 uppercase">
-                {voiceStep === "listening-explanation" ? "En vivo" : "Listo"}
-              </p>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={cancelVoiceMode}
-                  className="text-[10px] h-6 px-2"
-                >
-                  Cerrar
-                </Button>
-                <Button
-                  size="sm"
-                  className="bg-[#6841ea] hover:bg-[#5735c8] text-white text-[10px] h-6 px-3 rounded-md gap-1"
-                  onClick={startTaskExplanation}
-                  disabled={isListening}
-                >
-                  {isListening ? "Grabando" : "Grabar"}
-                  <Play className="w-2.5 h-2.5 fill-current" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* ========== SIDEBAR DE HISTORIAL ========== */}
       {!isInPiPWindow && (
-        <div className="fixed top-0 left-0 right-0 z-50">
-          <div
-            className={`absolute top-0 left-0 right-0 h-25 bg-gradient-to-b ${theme === "dark" ? "from-[#101010]/90 via-[#101010]/90 to-transparent" : "from-white/70 via-white/40 to-transparent"}`}
-          />
-          <div className="relative max-w-4xl mx-auto">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full flex items-center justify-center animate-tilt">
-                  <Image
-                    src="/icono.webp"
-                    alt="Chat"
-                    width={80}
-                    height={80}
-                    className="object-contain rounded-full drop-shadow-[0_0_16px_rgba(168,139,255,0.9)]"
-                  />
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold">Asistente</h1>
-                  <p
-                    className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
-                  >
-                    {displayName} • {colaborador.email}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <SpeedControlHeader
-                  rate={rate}
-                  changeRate={changeRate}
-                  isSpeaking={isSpeaking}
-                  theme={theme}
-                />
-                {!isPiPMode ? (
-                  <button
-                    onClick={openPiPWindow}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
-                    title="Abrir en ventana flotante"
-                  >
-                    <PictureInPicture className="w-4 h-4 text-[#6841ea]" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={closePiPWindow}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-red-600 hover:bg-red-700" : "bg-red-500 hover:bg-red-600"}`}
-                    title="Cerrar ventana flotante"
-                  >
-                    <Minimize2 className="w-4 h-4 text-white" />
-                  </button>
-                )}
-                <button
-                  onClick={toggleTheme}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
-                >
-                  {theme === "light" ? (
-                    <Moon className="w-4 h-4 text-gray-700" />
-                  ) : (
-                    <Sun className="w-4 h-4 text-gray-300" />
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowLogoutDialog(true)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535] text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
-                >
-                  <LogOut className="w-4 h-4 mr-2 inline" />
-                  Salir
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isInPiPWindow && (
-        <div
-          className={`fixed top-0 left-0 right-0 z-50 ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}
+        <aside
+          className={`fixed left-0 top-0 h-screen z-30 flex flex-col transition-all duration-300 ${
+            sidebarOpen ? "w-64" : "w-0"
+          } ${
+            theme === "dark"
+              ? "bg-[#0a0a0a] border-r border-[#1a1a1a]"
+              : "bg-gray-50 border-r border-gray-200"
+          }`}
         >
-          <div className="max-w-full mx-auto p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#252527]" : "bg-gray-100"}`}
-                >
-                  <Image
-                    src="/icono.webp"
-                    alt="Chat"
-                    width={16}
-                    height={16}
-                    className="object-contain"
-                  />
-                </div>
-                <h2 className="text-sm font-bold truncate">Anfeta Asistente</h2>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={toggleTheme}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
-                  title="Cambiar tema"
-                >
-                  {theme === "light" ? (
-                    <Moon className="w-3 h-3" />
-                  ) : (
-                    <Sun className="w-3 h-3" />
-                  )}
-                </button>
-                <button
-                  onClick={() => window.close()}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-red-600 hover:bg-red-700" : "bg-red-500 hover:bg-red-600"}`}
-                  title="Cerrar ventana"
-                >
-                  <span className="text-white text-xs font-bold">✕</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div
-        className={`flex-1 overflow-y-auto ${isInPiPWindow ? "pt-16" : "pt-20"} ${!isInPiPWindow ? "pb-24" : "pb-20"}`}
-      >
-        <div className="max-w-4xl mx-auto w-full px-4">
-          {isCheckingHistory && (
-            <div className="flex justify-center items-center py-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Restaurando tu sesión anterior...
-              </div>
-            </div>
-          )}
-
-          {isCheckingAfterHours && (
-            <div className="flex justify-center items-center py-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Verificando actividades al final del día...
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3 py-4" ref={scrollRef}>
-            {messages.map((message) => (
+          {sidebarOpen && (
+            <>
+              {/* Header del Sidebar */}
               <div
-                key={message.id}
-                className={`flex animate-in slide-in-from-bottom-2 duration-300 ${message.type === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 text-sm ${message.type === "bot" ? (theme === "dark" ? "bg-[#2a2a2a] text-white" : "bg-gray-100 text-gray-900") : message.type === "user" ? "bg-[#6841ea] text-white" : message.type === "voice" ? `cursor-pointer hover:opacity-90 transition ${theme === "dark" ? "bg-[#252527]" : "bg-blue-50"}` : theme === "dark" ? "bg-[#2a2a2a] text-gray-300" : "bg-gray-100 text-gray-700"}`}
-                  onClick={
-                    message.type === "voice" && message.voiceText
-                      ? () => handleVoiceMessageClick(message.voiceText!)
-                      : undefined
-                  }
-                >
-                  {message.content}
-                  {message.type === "voice" &&
-                    Date.now() - message.timestamp.getTime() < 2000 && (
-                      <div className="flex gap-1 mt-2">
-                        <div
-                          className="w-1 h-1 bg-[#6841ea] rounded-full animate-bounce"
-                          style={{ animationDelay: "0ms" }}
-                        />
-                        <div
-                          className="w-1 h-1 bg-[#6841ea] rounded-full animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        />
-                        <div
-                          className="w-1 h-1 bg-[#6841ea] rounded-full animate-bounce"
-                          style={{ animationDelay: "300ms" }}
-                        />
-                      </div>
-                    )}
-                </div>
-              </div>
-            ))}
-            {isTyping && (
-              <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
-                <div
-                  className={`rounded-lg px-3 py-2 ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
-                >
-                  <div className="flex gap-1">
-                    <div
-                      className="w-2 h-2 bg-[#6841ea] rounded-full animate-bounce"
-                      style={{ animationDelay: "0ms" }}
-                    />
-                    <div
-                      className="w-2 h-2 bg-[#6841ea] rounded-full animate-bounce"
-                      style={{ animationDelay: "150ms" }}
-                    />
-                    <div
-                      className="w-2 h-2 bg-[#6841ea] rounded-full animate-bounce"
-                      style={{ animationDelay: "300ms" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {step === "finished" &&
-            assistantAnalysis &&
-            activitiesWithTasks.length > 0 &&
-            !voiceMode && (
-              <div
-                className={`mt-4 rounded-lg p-4 border ${theme === "dark" ? "bg-[#1a1a1a] border-[#6841ea]/30" : "bg-white border-[#6841ea]/20"}`}
+                className={`p-4 border-b ${
+                  theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
+                }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <History className="w-5 h-5 text-[#6841ea]" />
+                    <h2 className="font-semibold text-sm">Historial</h2>
+                  </div>
+                  {/* <button
+                    onClick={nuevaConversacion}
+                    className={`p-1.5 rounded-md transition-colors ${
+                      theme === "dark"
+                        ? "hover:bg-[#1a1a1a] text-gray-400 hover:text-white"
+                        : "hover:bg-gray-200 text-gray-600 hover:text-gray-900"
+                    }`}
+                    title="Nueva conversación"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button> */}
+                </div>
+              </div>
+
+              {/* Lista de Conversaciones */}
+              <ScrollArea className="flex-1 px-2 py-2">
+                <div className="space-y-4">
+                  {Object.entries(conversacionesAgrupadas).map(
+                    ([dia, convs]) => (
+                      <div key={dia}>
+                        {/* Label del día */}
+                        <div
+                          className={`px-2 py-1.5 text-xs font-medium uppercase tracking-wider ${
+                            theme === "dark" ? "text-gray-500" : "text-gray-400"
+                          }`}
+                        >
+                          {dia}
+                        </div>
+                        {/* Conversaciones del día */}
+                        <div className="space-y-1">
+                          <div className="space-y-1">
+                            {convs.map((conv) => (
+                              <button
+                                key={conv.sessionId}
+                                onClick={() => seleccionarConversacion(conv)}
+                                className={`w-full text-left p-2.5 rounded-lg transition-all group relative ${
+                                  conversacionActiva === conv.sessionId
+                                    ? theme === "dark"
+                                      ? "bg-[#6841ea]/20 border border-[#6841ea]/30"
+                                      : "bg-[#6841ea]/10 border border-[#6841ea]/20"
+                                    : theme === "dark"
+                                      ? "hover:bg-[#1a1a1a]"
+                                      : "hover:bg-gray-100"
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <MessageSquare
+                                    className={`w-4 h-4 mt-0.5 shrink-0 ${
+                                      conversacionActiva === conv.sessionId
+                                        ? "text-[#6841ea]"
+                                        : theme === "dark"
+                                          ? "text-gray-500"
+                                          : "text-gray-400"
+                                    }`}
+                                  />
+
+                                  <p className="text-sm font-medium truncate">
+                                    {conv.nombreConversacion ||
+                                      `${new Date(conv.createdAt).toLocaleDateString("es-MX")}`}
+                                  </p>
+
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {conv.updatedAt
+                                      ? new Date(
+                                          conv.updatedAt,
+                                        ).toLocaleTimeString("es-MX", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })
+                                      : new Date(
+                                          conv.createdAt,
+                                        ).toLocaleTimeString("es-MX", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                  </p>
+
+                                  {/* AGREGAR ESTE LOADING INDICATOR */}
+                                  {conversacionActiva === conv.sessionId &&
+                                    isTyping && (
+                                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                        <Loader2 className="w-4 h-4 animate-spin text-[#6841ea]" />
+                                      </div>
+                                    )}
+                                </div>
+                              </button>
+                            ))}
+                            {sidebarCargando && (
+                                <div className="flex items-center justify-center py-4">
+                                  <Loader2 className="w-4 h-4 animate-spin text-[#6841ea]" />
+                                  <span className="text-xs text-gray-500 ml-2">Cargando historial...</span>
+                                </div>
+                              )}
+
+                              {!sidebarCargando && data.length === 0 && (
+                                <div className="p-4 text-center">
+                                  <p className="text-xs text-gray-500">No hay conversaciones anteriores</p>
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </ScrollArea>
+
+              {/* Footer del Sidebar */}
+              <div
+                className={`p-3 border-t ${
+                  theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
+                }`}
+              >
+                <p
+                  className={`text-xs text-center ${
+                    theme === "dark" ? "text-gray-600" : "text-gray-400"
+                  }`}
+                >
+                  {/* Fecha de hoy */}
+                  {new Date().toLocaleDateString("es-MX", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+            </>
+          )}
+        </aside>
+      )}
+
+      {/* Botón para toggle del sidebar - Z-INDEX AJUSTADO */}
+      {!isInPiPWindow && (
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className={`fixed z-40 top-1/2 -translate-y-1/2 transition-all duration-300 p-1.5 rounded-r-lg ${
+            sidebarOpen ? "left-64" : "left-0"
+          } ${
+            theme === "dark"
+              ? "bg-[#1a1a1a] hover:bg-[#252525] text-gray-400 hover:text-white border-y border-r border-[#2a2a2a]"
+              : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 border-y border-r border-gray-200"
+          }`}
+          title={sidebarOpen ? "Cerrar sidebar" : "Abrir sidebar"}
+        >
+          {sidebarOpen ? (
+            <ChevronLeft className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </button>
+      )}
+
+      {/* ========== CONTENIDO PRINCIPAL ========== */}
+      <div
+        className={`flex-1 flex flex-col transition-all duration-300 ${
+          !isInPiPWindow && sidebarOpen ? "ml-64" : "ml-0"
+        }`}
+      >
+        <VoiceGuidanceFlow />
+
+        {/* OVERLAY DE MODO VOZ ULTRA-COMPACTO - Z-INDEX MÁS ALTO */}
+        {showVoiceOverlay && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 backdrop-blur-[1px] p-4">
+            <div
+              className={`w-full max-w-sm overflow-hidden flex flex-col rounded-xl border shadow-xl transition-all ${
+                theme === "dark"
+                  ? "bg-[#161616] border-[#2a2a2a]"
+                  : "bg-white border-gray-200"
+              }`}
+            >
+              {/* Header Minimalista (Sin bordes para ahorrar altura) */}
+              <div className="px-3 py-2 flex items-center justify-between bg-[#6841ea]/5">
+                <div className="flex items-center gap-1.5">
+                  <Mic className="w-3.5 h-3.5 text-[#6841ea]" />
+                  <span className="text-[10px] font-bold uppercase tracking-tighter opacity-70">
+                    Asistente
+                  </span>
+                </div>
+                <button
+                  onClick={cancelVoiceMode}
+                  className="hover:bg-red-500/10 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-3 space-y-2">
+                {/* Tarea en una sola línea con elipse si es larga */}
+                {getCurrentTask() && (
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <Badge className="h-4 px-1 text-[9px] bg-[#6841ea] shrink-0">
+                      Tarea
+                    </Badge>
+                    <h3 className="text-[12px] font-bold truncate opacity-90">
+                      {getCurrentTask()?.nombre}
+                    </h3>
+                  </div>
+                )}
+
+                {/* Layout Horizontal: Micro + Transcripción */}
+                <div className="flex items-center gap-3 py-1">
+                  <div className="relative shrink-0">
+                    {isListening && (
+                      <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-20"></span>
+                    )}
                     <div
-                      className={`p-2 rounded-full ${theme === "dark" ? "bg-[#6841ea]/20" : "bg-[#6841ea]/10"}`}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center z-10 relative ${
+                        isListening
+                          ? "bg-[#6841ea] shadow-inner"
+                          : "bg-gray-200 dark:bg-[#2a2a2a]"
+                      }`}
                     >
-                      <Headphones className="w-5 h-5 text-[#6841ea]" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold">¿Explicar tus tareas?</h4>
-                      <p className="text-sm text-gray-500">
-                        Usa el modo guiado por voz para explicar cada actividad
-                        y sus tareas
-                      </p>
+                      {isListening ? (
+                        <div className="flex gap-[2px] items-end h-3">
+                          <div className="w-[2px] bg-white animate-pulse h-full" />
+                          <div className="w-[2px] bg-white animate-pulse h-1/2" />
+                          <div className="w-[2px] bg-white animate-pulse h-3/4" />
+                        </div>
+                      ) : (
+                        <MicOff className="w-4 h-4 text-gray-500" />
+                      )}
                     </div>
                   </div>
-                  <Button
-                    onClick={startVoiceMode}
-                    className="bg-[#6841ea] hover:bg-[#5a36d4]"
+
+                  <div
+                    className={`flex-1 p-2 rounded-md h-12 text-[11px] italic overflow-y-auto border ${
+                      theme === "dark"
+                        ? "bg-black/20 border-white/5 text-gray-400"
+                        : "bg-gray-50 border-black/5 text-gray-500"
+                    }`}
                   >
-                    <Play className="w-4 h-4 mr-2" />
-                    Activar Modo Voz
+                    {voiceTranscript || "Escuchando..."}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer en una sola línea */}
+              <div className="px-3 py-2 border-t flex items-center justify-between">
+                <p className="text-[9px] font-medium opacity-50 uppercase">
+                  {voiceStep === "listening-explanation" ? "En vivo" : "Listo"}
+                </p>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={cancelVoiceMode}
+                    className="text-[10px] h-6 px-2"
+                  >
+                    Cerrar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-[#6841ea] hover:bg-[#5735c8] text-white text-[10px] h-6 px-3 rounded-md gap-1"
+                    onClick={startTaskExplanation}
+                    disabled={isListening}
+                  >
+                    {isListening ? "Grabando" : "Grabar"}
+                    <Play className="w-2.5 h-2.5 fill-current" />
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* HEADER PRINCIPAL - Z-INDEX AJUSTADO */}
+        {!isInPiPWindow && (
+          <div className="fixed top-0 left-0 right-0 z-20">
+            <div
+              className={`absolute top-0 left-0 right-0 h-25 bg-gradient-to-b ${theme === "dark" ? "from-[#101010]/90 via-[#101010]/90 to-transparent" : "from-white/70 via-white/40 to-transparent"}`}
+            />
+            <div className="relative max-w-4xl mx-auto">
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full flex items-center justify-center animate-tilt">
+                    <Image
+                      src="/icono.webp"
+                      alt="Chat"
+                      width={80}
+                      height={80}
+                      className="object-contain rounded-full drop-shadow-[0_0_16px_rgba(168,139,255,0.9)]"
+                    />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold">Asistente</h1>
+                    <p
+                      className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      {displayName} • {colaborador.email}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <SpeedControlHeader
+                    rate={rate}
+                    changeRate={changeRate}
+                    isSpeaking={isSpeaking}
+                    theme={theme}
+                  />
+                  {!isPiPMode ? (
+                    <button
+                      onClick={openPiPWindow}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
+                      title="Abrir en ventana flotante"
+                    >
+                      <PictureInPicture className="w-4 h-4 text-[#6841ea]" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={closePiPWindow}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-red-600 hover:bg-red-700" : "bg-red-500 hover:bg-red-600"}`}
+                      title="Cerrar ventana flotante"
+                    >
+                      <Minimize2 className="w-4 h-4 text-white" />
+                    </button>
+                  )}
+                  <button
+                    onClick={toggleTheme}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
+                  >
+                    {theme === "light" ? (
+                      <Moon className="w-4 h-4 text-gray-700" />
+                    ) : (
+                      <Sun className="w-4 h-4 text-gray-300" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowLogoutDialog(true)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535] text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
+                  >
+                    <LogOut className="w-4 h-4 mr-2 inline" />
+                    Salir
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HEADER PiP WINDOW - Z-INDEX AJUSTADO */}
+        {isInPiPWindow && (
+          <div
+            className={`fixed top-0 left-0 right-0 z-20 ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}
+          >
+            <div className="max-w-full mx-auto p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#252527]" : "bg-gray-100"}`}
+                  >
+                    <Image
+                      src="/icono.webp"
+                      alt="Chat"
+                      width={16}
+                      height={16}
+                      className="object-contain"
+                    />
+                  </div>
+                  <h2 className="text-sm font-bold truncate">
+                    Anfeta Asistente
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={toggleTheme}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
+                    title="Cambiar tema"
+                  >
+                    {theme === "light" ? (
+                      <Moon className="w-3 h-3" />
+                    ) : (
+                      <Sun className="w-3 h-3" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => window.close()}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-red-600 hover:bg-red-700" : "bg-red-500 hover:bg-red-600"}`}
+                    title="Cerrar ventana"
+                  >
+                    <span className="text-white text-xs font-bold">✕</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CONTENIDO DE MENSAJES - PADDING AJUSTADO */}
+        <div
+          className={`flex-1 overflow-y-auto ${isInPiPWindow ? "pt-16" : "pt-20"} ${!isInPiPWindow ? "pb-24" : "pb-20"}`}
+        >
+          <div className="max-w-4xl mx-auto w-full px-4">
+            {isCheckingHistory && (
+              <div className="flex justify-center items-center py-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Restaurando tu sesión anterior...
+                </div>
+              </div>
             )}
 
-          {hasExistingSession && step === "finished" && (
-            <div className="flex justify-center gap-2 mt-4">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setHasExistingSession(false);
-                  fetchAssistantAnalysis(false);
-                }}
-                className="text-xs"
-              >
-                <RotateCcw className="w-3 h-3 mr-1" />
-                Obtener nuevo análisis
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
+            {isCheckingAfterHours && (
+              <div className="flex justify-center items-center py-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Verificando actividades al final del día...
+                </div>
+              </div>
+            )}
 
-      {!voiceMode && (
-        <div
-          className={`fixed bottom-0 left-0 right-0 z-50 ${theme === "dark" ? "bg-[#101010]" : "bg-white"}`}
-        >
-          <div className="max-w-4xl mx-auto p-4">
-            <form
-              onSubmit={handleUserInput}
-              className="flex gap-2 items-center"
-            >
-              <Input
-                ref={inputRef}
-                type="text"
-                placeholder={
-                  canUserType
-                    ? "Escribe tu pregunta o comentario..."
-                    : "Obteniendo análisis..."
-                }
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                className={`flex-1 h-12 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#6841ea] focus:border-[#6841ea] ${theme === "dark" ? "bg-[#2a2a2a] text-white placeholder:text-gray-500 border-[#353535] hover:border-[#6841ea]" : "bg-gray-100 text-gray-900 placeholder:text-gray-500 border-gray-200 hover:border-[#6841ea]"}`}
-              />
-              <Button
-                type="button"
-                onClick={startRecording}
-                className={`h-12 w-14 p-0 rounded-lg transition-all ${isRecording ? "bg-red-600 hover:bg-red-700 animate-pulse" : "bg-[#6841ea] hover:bg-[#5a36d4]"}`}
-                title={
-                  isRecording
-                    ? "Detener reconocimiento de voz"
-                    : "Iniciar reconocimiento de voz"
-                }
-              >
-                {isRecording ? (
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-red-400 rounded-full animate-ping"></div>
-                    <MicOff className="w-5 h-5 text-white relative z-10" />
+            <div className="space-y-3 py-4" ref={scrollRef}>
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex animate-in slide-in-from-bottom-2 duration-300 ${message.type === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-4 py-2 text-sm ${message.type === "bot" ? (theme === "dark" ? "bg-[#2a2a2a] text-white" : "bg-gray-100 text-gray-900") : message.type === "user" ? "bg-[#6841ea] text-white" : message.type === "voice" ? `cursor-pointer hover:opacity-90 transition ${theme === "dark" ? "bg-[#252527]" : "bg-blue-50"}` : theme === "dark" ? "bg-[#2a2a2a] text-gray-300" : "bg-gray-100 text-gray-700"}`}
+                    onClick={
+                      message.type === "voice" && message.voiceText
+                        ? () => handleVoiceMessageClick(message.voiceText!)
+                        : undefined
+                    }
+                  >
+                    {message.content}
+                    {message.type === "voice" &&
+                      Date.now() - message.timestamp.getTime() < 2000 && (
+                        <div className="flex gap-1 mt-2">
+                          <div
+                            className="w-1 h-1 bg-[#6841ea] rounded-full animate-bounce"
+                            style={{ animationDelay: "0ms" }}
+                          />
+                          <div
+                            className="w-1 h-1 bg-[#6841ea] rounded-full animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          />
+                          <div
+                            className="w-1 h-1 bg-[#6841ea] rounded-full animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          />
+                        </div>
+                      )}
                   </div>
-                ) : (
-                  <Mic className="w-5 h-5 text-white" />
-                )}
-              </Button>
-              <Button
-                type="submit"
-                disabled={!canUserType || !userInput.trim()}
-                className="h-12 px-5 bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg disabled:opacity-50"
-              >
-                <Send className="w-5 h-5" />
-              </Button>
-            </form>
+                </div>
+              ))}
+              {isTyping && (
+                <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
+                  <div
+                    className={`rounded-lg px-3 py-2 ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
+                  >
+                    <div className="flex gap-1">
+                      <div
+                        className="w-2 h-2 bg-[#6841ea] rounded-full animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <div
+                        className="w-2 h-2 bg-[#6841ea] rounded-full animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <div
+                        className="w-2 h-2 bg-[#6841ea] rounded-full animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {step === "finished" &&
+              assistantAnalysis &&
+              activitiesWithTasks.length > 0 &&
+              !voiceMode && (
+                <div
+                  className={`mt-4 rounded-lg p-4 border ${theme === "dark" ? "bg-[#1a1a1a] border-[#6841ea]/30" : "bg-white border-[#6841ea]/20"}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`p-2 rounded-full ${theme === "dark" ? "bg-[#6841ea]/20" : "bg-[#6841ea]/10"}`}
+                      >
+                        <Headphones className="w-5 h-5 text-[#6841ea]" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold">¿Explicar tus tareas?</h4>
+                        <p className="text-sm text-gray-500">
+                          Usa el modo guiado por voz para explicar cada
+                          actividad y sus tareas
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={startVoiceMode}
+                      className="bg-[#6841ea] hover:bg-[#5a36d4]"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Activar Modo Voz
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+            {hasExistingSession && step === "finished" && (
+              <div className="flex justify-center gap-2 mt-4">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setHasExistingSession(false);
+                    fetchAssistantAnalysis(false);
+                  }}
+                  className="text-xs"
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  Obtener nuevo análisis
+                </Button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+
+        {/* INPUT BAR - Z-INDEX AJUSTADO */}
+        {!voiceMode && (
+          <div
+            className={`fixed bottom-0 left-0 right-0 z-10 ${theme === "dark" ? "bg-[#101010]" : "bg-white"}`}
+          >
+            <div className="max-w-4xl mx-auto p-4">
+              <form
+                onSubmit={handleUserInput}
+                className="flex gap-2 items-center"
+              >
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  placeholder={
+                    canUserType
+                      ? "Escribe tu pregunta o comentario..."
+                      : "Obteniendo análisis..."
+                  }
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  className={`flex-1 h-12 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#6841ea] focus:border-[#6841ea] ${theme === "dark" ? "bg-[#2a2a2a] text-white placeholder:text-gray-500 border-[#353535] hover:border-[#6841ea]" : "bg-gray-100 text-gray-900 placeholder:text-gray-500 border-gray-200 hover:border-[#6841ea]"}`}
+                />
+                <Button
+                  type="button"
+                  onClick={startRecording}
+                  className={`h-12 w-14 p-0 rounded-lg transition-all ${isRecording ? "bg-red-600 hover:bg-red-700 animate-pulse" : "bg-[#6841ea] hover:bg-[#5a36d4]"}`}
+                  title={
+                    isRecording
+                      ? "Detener reconocimiento de voz"
+                      : "Iniciar reconocimiento de voz"
+                  }
+                >
+                  {isRecording ? (
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-red-400 rounded-full animate-ping"></div>
+                      <MicOff className="w-5 h-5 text-white relative z-10" />
+                    </div>
+                  ) : (
+                    <Mic className="w-5 h-5 text-white" />
+                  )}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!canUserType || !userInput.trim()}
+                  className="h-12 px-5 bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg disabled:opacity-50"
+                >
+                  <Send className="w-5 h-5" />
+                </Button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* ========== FIN CONTENIDO PRINCIPAL ========== */}
 
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent

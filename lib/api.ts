@@ -115,10 +115,10 @@ export async function sendReporte(reporte: unknown): Promise<void> {
     );
   }
 }
-export async function obtenerHistorialSession() {
+export async function obtenerHistorialSession(sessionId: string) {
   try {
     const response = await fetch(
-      `${BASE_URL_BACK}/assistant/historial/sesion`,
+      `${BASE_URL_BACK}/assistant/historial/sesion/${sessionId}`,
       {
         credentials: "include",
       },
@@ -170,25 +170,24 @@ export async function sendTaskValidation(data: {
   }
 }
 
-// // Nueva función para obtener siguiente tarea
-// export async function obtenerSiguienteTarea() {
-//   try {
-//     const response = await fetch(
-//       "http://localhost:4000/api/v1/assistant/siguiente-tarea",
-//       {
-//         method: "GET",
-//         credentials: "include",
-//         headers: { "Content-Type": "application/json" },
-//       }
-//     );
+export async function obtenerHistorialSidebar() {
+  try {
+    const response = await fetch(
+      "http://localhost:4000/api/v1/assistant/historial/titulos",
+      {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      }
+    );
 
-//     if (!response.ok) {
-//       throw new Error(`Error: ${response.status}`);
-//     }
+    if (!response.ok) {
+      throw new Error(`Error: ${response.status}`);
+    }
 
-//     return await response.json();
-//   } catch (error) {
-//     console.error("Error obteniendo siguiente tarea:", error);
-//     return { success: false, hayPendientes: false };
-//   }
-// }
+    return await response.json();
+  } catch (error) {
+    console.error("Error obteniendo titulos:", error);
+    return { success: false, hayPendientes: false };
+  }
+}
