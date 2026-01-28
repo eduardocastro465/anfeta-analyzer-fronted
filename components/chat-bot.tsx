@@ -203,6 +203,8 @@ const useVoiceSynthesis = () => {
 
   const speak = useCallback(
     (text: string, customRate?: number) => {
+      if (typeof window === "undefined") return;
+
       if (!("speechSynthesis" in window)) {
         console.warn("Tu navegador no soporta síntesis de voz");
         return;
@@ -247,6 +249,7 @@ const useVoiceSynthesis = () => {
   );
 
   const stop = useCallback(() => {
+    if (typeof window === "undefined") return;
     window.speechSynthesis.cancel();
     currentTextRef.current = "";
     setIsSpeaking(false);
@@ -254,6 +257,8 @@ const useVoiceSynthesis = () => {
 
   // Cambiar velocidad y reiniciar si está hablando
   const changeRate = useCallback((newRate: number) => {
+
+    if (typeof window === "undefined") return;
     setRate(newRate);
     if (currentTextRef.current && window.speechSynthesis.speaking) {
       window.speechSynthesis.cancel();
@@ -851,6 +856,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
   const startRecordingForExplanation = () => {
     console.log("Iniciando grabación específica para explicación...");
+
+    if (typeof window === "undefined") return;
 
     if (
       !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
@@ -1828,7 +1835,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
   }, [voiceTranscript, voiceMode]);
 
-  useEffect(() => {
+useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("speechSynthesis" in window)) return;
+
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
       console.log(
@@ -1857,6 +1867,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   }, []);
 
   useEffect(() => {
+
+    if (typeof window === "undefined") return;
+    if (typeof document === "undefined") return;
     document.documentElement.classList.add("dark");
 
     const checkIfPiPWindow = () => {
@@ -2387,6 +2400,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const startRecording = () => {
+
+    if (typeof window === "undefined") return;
     if (
       !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
     ) {
@@ -2535,12 +2550,18 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const toggleTheme = () => {
+
+    if (typeof document === "undefined") return;
+
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
     document.documentElement.classList.toggle("dark", newTheme === "dark");
   };
 
   const openPiPWindow = () => {
+
+    if (typeof window === "undefined") return;
+    
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       pipWindowRef.current.close();
       pipWindowRef.current = null;
@@ -2609,6 +2630,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const closePiPWindow = () => {
+
+    if (typeof window === "undefined") return;
+
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       pipWindowRef.current.close();
       pipWindowRef.current = null;
@@ -4007,8 +4031,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           className={`flex-1 overflow-y-auto ${isInPiPWindow ? "pt-16" : "pt-20"} ${!isInPiPWindow ? "pb-24" : "pb-20"}`}
         >
           <div className="max-w-4xl mx-auto w-full px-4">
-
-
             <div className="space-y-3 py-4" ref={scrollRef}>
               {messages.map((message) => (
                 <div
