@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MessageItem } from "./MessageItem";
 import { MessageListProps } from "@/lib/types";
-
+import { verificarDescripcion } from "@/lib/api";
+import { useEffect, useState, useCallback } from "react";
 
 export function MessageList({
   messages,
@@ -22,13 +23,23 @@ export function MessageList({
   assistantAnalysis,
   onOpenReport,
   onStartVoiceMode,
-  reportConfig = { horaInicio: 17, minutoInicio: 30, horaFin: 24, minutoFin: 59 }
+  reportConfig = {
+    horaInicio: 17,
+    minutoInicio: 30,
+    horaFin: 24,
+    minutoFin: 59,
+  },
 }: MessageListProps) {
+  // ✅ Estado para almacenar IDs de tareas con descripción guardada
+  const [tareasConDescripcion, setTareasConDescripcion] = useState<Set<string>>(
+    new Set(),
+  );
 
   const isReportTimeWindow = () => {
     const now = new Date();
     const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
-    const startTotalMinutes = reportConfig.horaInicio * 60 + reportConfig.minutoInicio;
+    const startTotalMinutes =
+      reportConfig.horaInicio * 60 + reportConfig.minutoInicio;
     const endTotalMinutes = reportConfig.horaFin * 60 + reportConfig.minutoFin;
     return (
       currentTotalMinutes >= startTotalMinutes &&
@@ -37,9 +48,88 @@ export function MessageList({
   };
 
   const esHoraReporte = isReportTimeWindow();
-  const hayTareas =
-    assistantAnalysis &&
-    assistantAnalysis.data.revisionesPorActividad.length > 0;
+
+  // const verificarDescripciones = useCallback(async () => {
+  //   if (!assistantAnalysis?.sessionId) return;
+  //   const response = await verificarDescripcion(assistantAnalysis.sessionId);
+
+  //   if (response.valida) {
+  //     setTareasConDescripcion(new Set(response.tareasConDescripcion));
+  //   }
+  // }, [assistantAnalysis?.sessionId]);
+
+  // ✅ Función para verificar tareas con descripción
+  const verificarTareasConDescripcion = useCallback(async () => {
+    if (!assistantAnalysis?.sessionId) return;
+  }, [assistantAnalysis?.sessionId]);
+
+  // ✅ useEffect: Verificar cada 10 segundos
+  useEffect(() => {
+    if (!assistantAnalysis) return;
+
+    // Verificar inmediatamente al montar
+    verificarTareasConDescripcion();
+
+    // Intervalo de 10 segundos
+    const interval = setInterval(() => {
+      verificarTareasConDescripcion();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [assistantAnalysis?.sessionId, verificarTareasConDescripcion]);
+
+  // ✅ useEffect: Escuchar evento personalizado cuando se guardan explicaciones
+  useEffect(() => {
+    const handleExplanationsSaved = () => {
+      console.log("🔄 Evento: Explicaciones guardadas - Actualizando lista...");
+      // Verificar inmediatamente después de guardar
+      setTimeout(() => {
+        verificarTareasConDescripcion();
+      }, 1000); // Pequeño delay para que el backend procese
+    };
+
+    window.addEventListener("explanations-saved", handleExplanationsSaved);
+
+    return () => {
+      window.removeEventListener("explanations-saved", handleExplanationsSaved);
+    };
+  }, [verificarTareasConDescripcion]);
+
+  // ✅ Filtrar actividades y tareas SIN descripción
+  const actividadesConTareasPendientes =
+    assistantAnalysis?.data.revisionesPorActividad
+      .map((revision) => {
+        // Filtrar tareas que NO tienen descripción guardada
+        const tareasPendientes = revision.tareasConTiempo.filter((tarea) => {
+          return !tareasConDescripcion.has(tarea.id);
+        });
+
+        return {
+          ...revision,
+          tareasConTiempo: tareasPendientes,
+        };
+      })
+      .filter((revision) => revision.tareasConTiempo.length > 0) || [];
+
+  const hayTareas = actividadesConTareasPendientes.length > 0;
+
+  const totalTareasPendientes = actividadesConTareasPendientes.reduce(
+    (sum, revision) => sum + revision.tareasConTiempo.length,
+    0,
+  );
+
+  // useEffect para hacer scroll
+  useEffect(() => {
+    if (assistantAnalysis && hayTareas && scrollRef.current) {
+      const timer = setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [assistantAnalysis, hayTareas, scrollRef]);
 
   return (
     <div
@@ -55,7 +145,7 @@ export function MessageList({
         />
       ))}
 
-      {/* ✅ SECCIÓN DE ANÁLISIS Y TAREAS */}
+      {/* Panel de actividades - SOLO TAREAS SIN DESCRIPCIÓN */}
       {assistantAnalysis && hayTareas && (
         <div className="animate-in slide-in-from-bottom-2 duration-300 space-y-4">
           <div
@@ -68,8 +158,7 @@ export function MessageList({
             <div className="px-3 py-2 border-b border-[#2a2a2a] bg-[#6841ea]/10 flex justify-between items-center">
               <h4 className="font-medium text-xs flex items-center gap-2 uppercase tracking-wide">
                 <Target className="w-4 h-4" />
-                Actividades del Día ({assistantAnalysis.data.actividades.length}
-                )
+                Tareas Pendientes ({totalTareasPendientes})
               </h4>
               <Badge
                 variant="secondary"
@@ -80,16 +169,16 @@ export function MessageList({
             </div>
 
             <div className="p-3 space-y-4">
-              {assistantAnalysis.data.actividades.map((actividad, idx) => {
-                const revisiones =
-                  assistantAnalysis.data.revisionesPorActividad.find(
-                    (rev) => rev.actividadId === actividad.id,
-                  );
-                const tareas = revisiones?.tareasConTiempo || [];
+              {actividadesConTareasPendientes.map((revision, idx) => {
+                const actividad = assistantAnalysis.data.actividades.find(
+                  (act) => act.id === revision.actividadId,
+                );
+
+                if (!actividad) return null;
 
                 return (
                   <div
-                    key={actividad.id}
+                    key={revision.actividadId}
                     className={`p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -114,9 +203,9 @@ export function MessageList({
                       </Badge>
                     </div>
 
-                    {tareas.length > 0 && (
+                    {revision.tareasConTiempo.length > 0 && (
                       <div className="ml-8 mt-2 space-y-2">
-                        {tareas.map((tarea) => (
+                        {revision.tareasConTiempo.map((tarea) => (
                           <div
                             key={tarea.id}
                             className={`p-2 rounded ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}
@@ -143,29 +232,29 @@ export function MessageList({
               })}
             </div>
 
-            {/* ✅ BLOQUE DE ACCIÓN DINÁMICO FINAL */}
             <div
               className={`p-3 border-t ${theme === "dark" ? "border-[#2a2a2a] bg-[#252527]" : "border-gray-200 bg-gray-50"}`}
             >
-               <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-gray-500">
-                    Tiempo estimado: {assistantAnalysis.metrics.tiempoEstimadoTotal}
+                    {totalTareasPendientes} tarea
+                    {totalTareasPendientes !== 1 ? "s" : ""} sin descripción
                   </span>
                 </div>
                 <div className="flex gap-2">
                   <Button
                     onClick={() => {
                       if (esHoraReporte) {
-                        onOpenReport(); // Abre modal de reporte
+                        onOpenReport?.();
                       } else {
-                        onStartVoiceMode?.(); // Activa modo voz guiado
+                        onStartVoiceMode?.();
                       }
                     }}
                     size="sm"
                     className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4] text-xs h-8"
                   >
-                   {esHoraReporte ? (
+                    {esHoraReporte ? (
                       <>
                         <ListChecks className="w-3.5 h-3.5 mr-2" />
                         Reportar Actividades
@@ -173,12 +262,14 @@ export function MessageList({
                     ) : (
                       <>
                         <Headphones className="w-3.5 h-3.5 mr-2" />
-                        Modo Voz Guiado
+                        Explicar Tareas
                       </>
                     )}
                   </Button>
                   <Button
-                   
+                    onClick={() => {
+                      onStartVoiceMode?.();
+                    }}
                     size="sm"
                     variant="outline"
                     className="flex-1 text-xs h-8"
@@ -192,7 +283,7 @@ export function MessageList({
         </div>
       )}
 
-      {/* Caso: Sin tareas */}
+      {/* Sin tareas pendientes */}
       {assistantAnalysis && !hayTareas && (
         <div className="animate-in slide-in-from-bottom-2 duration-300 flex justify-center">
           <div
@@ -200,10 +291,10 @@ export function MessageList({
           >
             <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
             <h4 className="font-semibold mb-1 text-sm">
-              Sin tareas planificadas
+              ✅ Todas las tareas explicadas
             </h4>
             <p className="text-xs text-gray-500">
-              No hay tareas pendientes para hoy.
+              No hay tareas pendientes por describir.
             </p>
           </div>
         </div>

@@ -13,7 +13,7 @@ import {
   validarReportePendiente,
   obtenerPendientesHoy,
   obtenerActividadesConRevisiones,
-  guardarExplicaciones,
+  guardarReporteTarde,
 } from "@/lib/api";
 import type {
   ActividadDiaria,
@@ -141,7 +141,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   >("esperando");
 
   // ==================== ESTADOS: HORARIOS REPORTE ====================
-  const [horaInicioReporte] = useState(0); // a que hora empieza el reporte
+  const [horaInicioReporte] = useState(16); // a que hora empieza el reporte
   const [minutoInicioReporte] = useState(30);
   const [horaFinReporte] = useState(17); // a que hora termina el reporte
   const [minutoFinReporte] = useState(30);
@@ -352,6 +352,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     recognition.start();
   };
+
   const procesarRespuestaReporte = async (transcript: string) => {
     const trimmedTranscript = transcript.trim();
     explanationProcessedRef.current = true;
@@ -1189,7 +1190,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           })),
       };
 
-      const response = await guardarExplicaciones(payload);
+      const response = await guardarReporteTarde(payload);
 
       if (response.ok) {
         speakText("¡Correcto! Tu reporte ha sido enviado.");
@@ -1963,32 +1964,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       </div>
 
       {/* Modal de Reporte de Actividades Diarias */}
+     
       <ReporteActividadesModal
         isOpen={mostrarModalReporte}
         onOpenChange={setMostrarModalReporte}
         theme={theme}
-        modoVoz={modoVozReporte}
-        setModoVoz={setModoVozReporte}
-        isListening={isListening}
-        isSpeaking={isSpeaking}
-        indiceActual={indicePendienteActual}
-        totalPendientes={pendientesReporte.length}
-        voiceTranscript={voiceTranscript}
         actividadesDiarias={actividadesDiarias}
-        pendientesReporte={pendientesReporte}
-        onToggleCompletado={handleToggleCompletado}
-        onExplicacionChange={handleExplicacionChange}
-        iniciarModoVoz={iniciarModoVoz}
         stopVoice={stopVoice}
-        recognitionRef={recognitionRef}
-        pasoModalVoz={pasoModalVoz} // ✅ AGREGADO
-        iniciarGrabacionEnModal={iniciarGrabacionEnModal}
-        voiceTranscriptRef={voiceTranscriptRef} // ✅ AGREGADO
-        procesarRespuestaReporte={procesarRespuestaReporte}
-        guardarReporteDiario={guardarReporteDiario} // ✅ AGREGADO
-        guardandoReporte={guardandoReporte} // ✅ AGREGADO
-        setPasoModalVoz={setPasoModalVoz} // ✅ AGREGADO
-        setIndicePendienteActual={setIndicePendienteActual} // ✅ AGREGADO
+        speakText={speakText}
+        isSpeaking={isSpeaking}
+        onGuardarReporte={guardarReporteDiario}
+        guardandoReporte={guardandoReporte}
       />
       {/* ========== FIN CONTENIDO PRINCIPAL ========== */}
 

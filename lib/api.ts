@@ -253,27 +253,29 @@ export async function validarReportePendiente(
 ) {
   try {
     const response = await fetch(
-      `${BASE_URL_BACK}/assistant/confirmarEstadoPendientes`,
+      `${BASE_URL_BACK}/assistant/validar-explicacion`,
       {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pendienteId: pendienteId,
-          actividadId: actividadId,
-          transcript: transcript,
+          actividadId,
+          taskId:pendienteId,
+          transcript,
         }),
       },
     );
 
-    if (!response.ok) {
-      throw new Error(`Error: ${response.status}`);
-    }
+    const data = await response.json();
 
-    return await response.json();
+    // 👇 NO tires throw, deja que el backend responda
+    return data;
   } catch (error) {
-    console.error("Error obteniendo actividades con tiempo hoy:", error);
-    return { success: false, actividades: [] };
+    console.error("Error validando explicación:", error);
+    return {
+      valida: false,
+      razon: "Errr",
+    };
   }
 }
 
@@ -325,15 +327,30 @@ export async function obtenerActividadesConRevisiones(requestBody: any) {
   }
 }
 
-export async function guardarExplicaciones(payload: any) {
+export async function guardarExplicaciones(payload: {
+  transcript: string;
+  actividadId: string;
+  pendienteNombre: string;
+  sessionId: string;
+  actividadTitulo: string;
+  pendienteId: string;
+}) {
   try {
+    
     const response = await fetch(
       `${BASE_URL_BACK}/assistant/guardar-explicaciones`,
       {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({  
+          transcript: payload.transcript,
+          pendienteNombre: payload.pendienteNombre,
+          actividadId: payload.actividadId,
+          sessionId: payload.sessionId,
+          pendienteId: payload.pendienteId,
+          actividadTitulo: payload.actividadTitulo,
+        }),
       },
     );
 
@@ -345,3 +362,49 @@ export async function guardarExplicaciones(payload: any) {
     return { success: false, message: "Error de conexión" };
   }
 }
+
+export async function verificarDescripcion(sessionId: string) {
+  try {
+    const response = await fetch(`${BASE_URL_BACK}/validar-explicacion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: sessionId,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(
+        "📋 Tareas con descripción verificadas:",
+        data.tareasConDescripcion,
+      );
+      return data;
+    }
+  } catch (error) {
+    console.error("Error al verificar descripciones:", error);
+    return { valida: false, tareasConDescripcion: [] };
+  }
+}
+
+export async function guardarReporteTarde(payload: any) {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/guardarDescripcionTarde`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    if (!response.ok) throw new Error(`Error: ${response.status}`);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error obteniendo actividades con revisiones:", error);
+    return { success: false, actividades: [] };
+  }
+}
+
