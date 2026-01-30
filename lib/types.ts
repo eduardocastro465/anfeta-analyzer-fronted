@@ -341,6 +341,7 @@ export type VoiceModeStep =
   | "confirmation"
   | "summary"
   | "sending";
+  
 
   interface Activity {
   actividadId: string;
@@ -372,6 +373,7 @@ export interface VoiceGuidanceFlowProps {
   currentListeningFor: string;
   retryCount: number;
   voiceConfirmationText: string;
+  finishVoiceMode: () => void;
   rate: number;
   changeRate: (newRate: number) => void;
   cancelVoiceMode: () => void;
@@ -380,7 +382,6 @@ export interface VoiceGuidanceFlowProps {
   startTaskExplanation: () => void;
   skipTask: () => void;
   stopRecording: () => void;
-  confirmExplanation: () => void;
   retryExplanation: () => void;
   sendExplanationsToBackend: () => void;
   recognitionRef: React.MutableRefObject<any>;

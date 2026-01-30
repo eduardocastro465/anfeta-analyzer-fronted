@@ -625,14 +625,12 @@ export const ConfirmationStep: React.FC<{
   voiceConfirmationText: string;
   theme: string;
   isSpeaking: boolean;
-  confirmExplanation: () => void;
   retryExplanation: () => void;
 }> = ({
   currentTask,
   voiceConfirmationText,
   theme,
   isSpeaking,
-  confirmExplanation,
   retryExplanation,
 }) => (
   <div className="space-y-4">
@@ -673,7 +671,6 @@ export const ConfirmationStep: React.FC<{
 
     <div className="flex gap-3">
       <Button
-        onClick={confirmExplanation}
         className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4]"
         disabled={isSpeaking}
       >
@@ -702,16 +699,16 @@ export const SummaryStep: React.FC<{
   totalTasks: number;
   theme: string;
   isSpeaking: boolean;
-  sendExplanationsToBackend: () => void;
   cancelVoiceMode: () => void;
+  finishVoiceMode: () => void;
 }> = ({
   activitiesWithTasks,
   taskExplanations,
   totalTasks,
   theme,
   isSpeaking,
-  sendExplanationsToBackend,
   cancelVoiceMode,
+  finishVoiceMode,
 }) => (
   <div className="space-y-4">
     <div className="text-center">
@@ -810,37 +807,14 @@ export const SummaryStep: React.FC<{
     </div>
 
     <div className="flex gap-3">
-      <Button
-        onClick={sendExplanationsToBackend}
-        className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4]"
-        disabled={isSpeaking}
-      >
-        Comenzar jornada
-      </Button>
-      <Button variant="outline" onClick={cancelVoiceMode} disabled={isSpeaking}>
-        Ver más tarde
-      </Button>
+    <Button
+  onClick={finishVoiceMode}
+  className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4]"
+  disabled={isSpeaking}
+>
+  Comenzar jornada
+</Button>
     </div>
   </div>
 );
 
-// ============================================
-// SENDING STEP
-// ============================================
-export const SendingStep: React.FC<{ theme: string }> = ({ theme }) => (
-  <div className="text-center space-y-4">
-    <div className="flex justify-center">
-      <div className="relative">
-        <Loader2 className="w-12 h-12 text-[#6841ea] animate-spin" />
-      </div>
-    </div>
-    <h4 className="text-lg font-bold">Guardando...</h4>
-    <p
-      className={`text-sm ${
-        theme === "dark" ? "text-gray-300" : "text-gray-600"
-      }`}
-    >
-      Tu reporte está siendo enviado.
-    </p>
-  </div>
-);

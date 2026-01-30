@@ -137,14 +137,12 @@ export async function obtenerHistorialSession(sessionId: string) {
   }
 }
 
-export async function sendTaskValidation(data: {
-  taskId: string;
-  taskName: string;
-  activityTitle: string;
-  explanation: string;
-  confirmed: boolean;
-  priority: string;
-  duration: number;
+export async function sendPendienteValidarYGuardar(data: {
+  actividadId: string;
+  actividadTitulo: string;
+  nombrePendiente: string;
+  idPendiente: string;
+  explicacion: string;
 }) {
   try {
     const response = await fetch(
@@ -154,9 +152,11 @@ export async function sendTaskValidation(data: {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          taskName: data.taskName,
-          explanation: data.explanation,
-          activityTitle: data.activityTitle,
+          actividadId: data.actividadId,
+          actividadTitulo: data.actividadTitulo,
+          nombrePendiente: data.nombrePendiente,
+          idPendiente: data.idPendiente,
+          explicacion: data.explicacion,
         }),
       },
     );
@@ -260,7 +260,7 @@ export async function validarReportePendiente(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           actividadId,
-          taskId:pendienteId,
+          taskId: pendienteId,
           transcript,
         }),
       },
@@ -336,14 +336,13 @@ export async function guardarExplicaciones(payload: {
   pendienteId: string;
 }) {
   try {
-    
     const response = await fetch(
       `${BASE_URL_BACK}/assistant/guardar-explicaciones`,
       {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({  
+        body: JSON.stringify({
           transcript: payload.transcript,
           pendienteNombre: payload.pendienteNombre,
           actividadId: payload.actividadId,
@@ -407,4 +406,3 @@ export async function guardarReporteTarde(payload: any) {
     return { success: false, actividades: [] };
   }
 }
-

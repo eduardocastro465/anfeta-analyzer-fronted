@@ -10,7 +10,6 @@ import {
   ListeningExplanationStep,
   ConfirmationStep,
   SummaryStep,
-  SendingStep,
   ConfirmStartStep,
 } from "@/components/VoiceGuidanceFlow-SubComponents";
 import type { VoiceGuidanceFlowProps } from "@/lib/types";
@@ -31,13 +30,13 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
   rate,
   changeRate,
   cancelVoiceMode,
+  finishVoiceMode,
   confirmStartVoiceMode,
   speakTaskByIndices,
   startTaskExplanation,
   skipTask,
   stopRecording,
   processVoiceExplanation = () => {},
-  confirmExplanation,
   retryExplanation,
   sendExplanationsToBackend,
   recognitionRef,
@@ -347,7 +346,6 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
               voiceConfirmationText={voiceConfirmationText}
               theme={theme}
               isSpeaking={isSpeaking}
-              confirmExplanation={confirmExplanation}
               retryExplanation={retryExplanation}
             />
           )}
@@ -358,13 +356,13 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
               taskExplanations={taskExplanations}
               totalTasks={totalTasks}
               theme={theme}
+              finishVoiceMode={finishVoiceMode}
               isSpeaking={isSpeaking}
-              sendExplanationsToBackend={sendExplanationsToBackend}
               cancelVoiceMode={cancelVoiceMode}
             />
           )}
 
-          {voiceStep === "sending" && <SendingStep theme={theme} />}
+          {voiceStep === "sending"}
         </div>
       </div>
     </div>

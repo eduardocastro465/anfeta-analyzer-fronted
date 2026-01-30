@@ -6,7 +6,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   validateSession,
-  sendTaskValidation,
   obtenerHistorialSidebar,
   obtenerActividadesConTiempoHoy,
   actualizarEstadoPendientes,
@@ -14,6 +13,7 @@ import {
   obtenerPendientesHoy,
   obtenerActividadesConRevisiones,
   guardarReporteTarde,
+  sendPendienteValidarYGuardar,
 } from "@/lib/api";
 import type {
   ActividadDiaria,
@@ -211,39 +211,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
   };
 
-  // Función para marcar/desmarcar como completado
-  const handleToggleCompletado = useCallback((pendienteId: string) => {
-    setPendientesReporte((prev) =>
-      prev.map((p) =>
-        p.pendienteId === pendienteId
-          ? { ...p, completadoLocal: !p.completadoLocal }
-          : p,
-      ),
-    );
-  }, []);
 
-  // Función para actualizar la explicación de por qué no se terminó
-  const handleExplicacionChange = (
-    pendienteId: string,
-    nuevaExplicacion: string,
-  ) => {
-    setPendientesReporte((prev) =>
-      prev.map((p) =>
-        p.pendienteId === pendienteId
-          ? { ...p, motivoLocal: nuevaExplicacion }
-          : p,
-      ),
-    );
-  };
-
-  const iniciarModoVoz = () => {
-    setModoVozReporte(true);
-    setIndicePendienteActual(0);
-    speakText(
-      `Vamos a reportar ${pendientesReporte.length} tareas. Comenzamos con la primera.`,
-    );
-    setTimeout(() => preguntarPendiente(0), 2000);
-  };
   const preguntarPendiente = (index: number) => {
     if (index >= pendientesReporte.length) {
       speakText("Terminamos. ¿Quieres guardar el reporte?");
@@ -261,96 +229,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setIsListening(true);
       startRecording();
     }, texto.length * 50);
-  };
-
-  const iniciarGrabacionEnModal = () => {
-    if (typeof window === "undefined") return;
-
-    if (
-      !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
-    ) {
-      speakText("Tu navegador no soporta reconocimiento de voz.");
-      return;
-    }
-
-    setPasoModalVoz("escuchando");
-    setIsRecording(true);
-    setIsListening(true);
-    setVoiceTranscript("");
-    voiceTranscriptRef.current = "";
-    explanationProcessedRef.current = false;
-
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = "es-MX";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognitionRef.current = recognition;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      setPasoModalVoz("escuchando");
-    };
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = "";
-      let interimTranscript = "";
-
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript + " ";
-        } else {
-          interimTranscript += result[0].transcript;
-        }
-      }
-
-      const fullTranscript = (finalTranscript + interimTranscript).trim();
-      voiceTranscriptRef.current = fullTranscript;
-      setVoiceTranscript(fullTranscript);
-
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-
-      if (fullTranscript.length > 0) {
-        silenceTimerRef.current = setTimeout(() => {
-          if (
-            !explanationProcessedRef.current &&
-            voiceTranscriptRef.current.trim().length > 0
-          ) {
-            if (recognitionRef.current) {
-              recognitionRef.current.stop();
-            }
-            procesarRespuestaReporte(voiceTranscriptRef.current);
-          }
-        }, 3000);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Error:", event.error);
-      setIsListening(false);
-      setIsRecording(false);
-      setPasoModalVoz("esperando");
-      speakText("Hubo un error. Intenta de nuevo.");
-    };
-
-    recognition.onend = () => {
-      console.log("Reconocimiento terminado");
-      setIsListening(false);
-      setIsRecording(false);
-    };
-
-    recognition.start();
   };
 
   const procesarRespuestaReporte = async (transcript: string) => {
@@ -634,6 +512,21 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setIsCheckingAfterHours(false);
     }
   };
+  // Agregar esta función cerca de sendExplanationsToBackend
+const finishVoiceMode = () => {
+  console.log("========== FINALIZANDO MODO VOZ ==========");
+  
+  // Detener voz
+  stopVoice();
+  
+  // Resetear modo voz
+  voiceMode.setVoiceMode(false);
+  voiceMode.setVoiceStep("idle");
+  voiceMode.setExpectedInputType("none");
+  voiceMode.setCurrentActivityIndex(0);
+  voiceMode.setCurrentTaskIndex(0);
+  speakText("¡Perfecto! Tu jornada ha comenzado. Mucho éxito con tus tareas.");
+};
 
   const cancelVoiceMode = () => {
     stopVoice();
@@ -829,23 +722,21 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       console.log("📡 Enviando al backend...");
 
       const payload = {
-        taskId: currentTask.id,
-        taskName: currentTask.nombre,
-        activityTitle: currentActivity.actividadTitulo,
-        explanation: trimmedTranscript,
-        confirmed: true,
-        priority: currentTask.prioridad,
-        duration: currentTask.duracionMin,
+        actividadId: currentActivity.actividadId,
+        actividadTitulo: currentActivity.actividadTitulo,
+        nombrePendiente: currentTask.nombre,
+        idPendiente: currentTask.id,
+        explicacion: trimmedTranscript,
       };
 
-      console.log("📦 Payload:", payload);
+      console.log("currentTask", currentTask);
 
       // ✅ ENVIAR AL BACKEND PARA VALIDAR
-      const response = await sendTaskValidation(payload);
+      const response = await sendPendienteValidarYGuardar(payload);
 
       console.log("📡 Respuesta del backend:", response);
 
-      if (response.valida) {
+      if (response.esValida) {
         console.log("✅ EXPLICACIÓN VÁLIDA");
 
         // ✅ EXPLICACIÓN VÁLIDA - GUARDAR Y CONTINUAR
@@ -905,7 +796,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         // ❌ EXPLICACIÓN NO VÁLIDA - PEDIR CORRECCIÓN
         voiceMode.setRetryCount((prev) => prev + 1);
         speakText(
-          `La explicación no es suficiente. ${response.razon || "Por favor, explica con más detalle cómo resolverás esta tarea."}`,
+          `${response.razon || "Por favor, explica con más detalle cómo resolverás esta tarea."}`,
         );
 
         setTimeout(() => {
@@ -915,109 +806,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       }
     } catch (error) {
       console.error("❌ Error en validación:", error);
-      speakText("Hubo un error de conexión. Por favor, intenta de nuevo.");
+      speakText("Hubo un error. Por favor, intenta de nuevo.");
 
       setTimeout(() => {
         voiceMode.setVoiceStep("waiting-for-explanation");
         voiceMode.setExpectedInputType("explanation");
       }, 2000);
-    }
-  };
-
-  const confirmExplanation = async () => {
-    console.log("========== CONFIRMANDO Y ENVIANDO EXPLICACIÓN ==========");
-
-    if (
-      voiceMode.voiceStep !== "confirmation" ||
-      voiceMode.expectedInputType !== "confirmation"
-    ) {
-      console.log("ERROR: No se puede confirmar en este estado");
-      return;
-    }
-
-    const currentTask = getCurrentTask(
-      voiceMode.currentActivityIndex,
-      voiceMode.currentTaskIndex,
-      activitiesWithTasks,
-    );
-    const currentActivity = getCurrentActivity(
-      voiceMode.currentActivityIndex,
-      activitiesWithTasks,
-    );
-
-    const explanationToSend = voiceMode.taskExplanations.find(
-      (exp) => exp.taskId === currentTask?.id,
-    );
-
-    if (!currentTask || !currentActivity || !explanationToSend) {
-      console.error("ERROR: Faltan datos para el envío");
-      return;
-    }
-
-    voiceMode.setVoiceStep("processing-explanation");
-    speakText("Validando tu explicación, un momento...");
-
-    try {
-      const response = await sendTaskValidation({
-        taskId: currentTask.id,
-        taskName: currentTask.nombre,
-        activityTitle: currentActivity.actividadTitulo,
-        explanation: explanationToSend.explanation,
-        confirmed: true,
-        priority: currentTask.prioridad,
-        duration: currentTask.duracionMin,
-      });
-
-      if (response.valida) {
-        voiceMode.setTaskExplanations((prev) =>
-          prev.map((exp) =>
-            exp.taskId === currentTask.id ? { ...exp, confirmed: true } : exp,
-          ),
-        );
-
-        speakText("Excelente. Explicación validada correctamente.");
-
-        const nextTaskIndex = voiceMode.currentTaskIndex + 1;
-
-        if (nextTaskIndex < currentActivity.tareas.length) {
-          voiceMode.setCurrentTaskIndex(nextTaskIndex);
-          voiceMode.setRetryCount(0);
-          setTimeout(() => {
-            speakTaskByIndices(voiceMode.currentActivityIndex, nextTaskIndex);
-          }, 1500);
-        } else {
-          const nextActivityIndex = voiceMode.currentActivityIndex + 1;
-          voiceMode.setCurrentActivityIndex(nextActivityIndex);
-          voiceMode.setCurrentTaskIndex(0);
-          voiceMode.setRetryCount(0);
-
-          if (nextActivityIndex < activitiesWithTasks.length) {
-            setTimeout(() => {
-              speakActivityByIndex(nextActivityIndex);
-            }, 1500);
-          } else {
-            voiceMode.setVoiceStep("summary");
-            voiceMode.setExpectedInputType("confirmation");
-            setTimeout(() => {
-              speakText(
-                "¡Perfecto! Has terminado de validar todas las tareas.",
-              );
-            }, 1000);
-          }
-        }
-      } else {
-        voiceMode.setVoiceStep("waiting-for-explanation");
-        voiceMode.setExpectedInputType("explanation");
-        speakText(
-          `La explicación no fue suficiente. ${response.razon || "Por favor, intenta dar más detalles."}`,
-        );
-      }
-    } catch (error) {
-      console.error("Error en el flujo de validación:", error);
-      voiceMode.setVoiceStep("confirmation");
-      speakText(
-        "Hubo un problema de conexión al validar. ¿Quieres intentar confirmarlo de nuevo?",
-      );
     }
   };
 
@@ -1118,11 +912,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         if (
           isClearCommand(lowerTranscript, ["sí", "si", "confirmar", "correcto"])
         ) {
-          if (voiceMode.voiceStep === "confirmation") {
-            confirmExplanation();
-          } else if (voiceMode.voiceStep === "summary") {
-            sendExplanationsToBackend();
-          }
+          sendExplanationsToBackend();
+
           return;
         }
 
@@ -1891,6 +1682,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           voiceStep={voiceMode.voiceStep}
           theme={theme}
           isSpeaking={isSpeaking}
+          finishVoiceMode={finishVoiceMode}
           currentActivityIndex={voiceMode.currentActivityIndex}
           currentTaskIndex={voiceMode.currentTaskIndex}
           activitiesWithTasks={activitiesWithTasks}
@@ -1908,7 +1700,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           skipTask={skipTask}
           processVoiceExplanation={processVoiceExplanation}
           stopRecording={voiceRecognition.stopRecording}
-          confirmExplanation={confirmExplanation}
           retryExplanation={retryExplanation}
           sendExplanationsToBackend={sendExplanationsToBackend}
           recognitionRef={voiceRecognition.recognitionRef}
@@ -1964,7 +1755,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       </div>
 
       {/* Modal de Reporte de Actividades Diarias */}
-     
+
       <ReporteActividadesModal
         isOpen={mostrarModalReporte}
         onOpenChange={setMostrarModalReporte}
