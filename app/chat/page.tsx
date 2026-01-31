@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChatBot } from "@/components/chat-bot";
+import { ChatContainer } from "@/components/ChatContainer";
 import type { Colaborador, Actividad } from "@/lib/types";
 
 export default function ChatPage() {
@@ -41,7 +41,7 @@ export default function ChatPage() {
   }
 
   return (
-    <ChatBot
+    <ChatContainer
       colaborador={colaborador}
       actividades={actividades}
       onLogout={() => {

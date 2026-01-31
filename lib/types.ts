@@ -1,15 +1,15 @@
 export interface Project {
-  id: string | null
-  name: string
-  estatusRevisionYPago: string
-  url: string | null
-  telegram: string | null
+  id: string | null;
+  name: string;
+  estatusRevisionYPago: string;
+  url: string | null;
+  telegram: string | null;
 }
 
 export interface MessageListProps {
   messages: Message[];
   isTyping: boolean;
-  theme: 'light' | 'dark';
+  theme: "light" | "dark";
   onVoiceMessageClick: (voiceText: string) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   assistantAnalysis?: AssistantAnalysis | null; // ✅ NUEVO
@@ -40,63 +40,62 @@ export interface HeaderProps {
   setShowLogoutDialog: (show: boolean) => void;
 }
 
-
 export interface Actividad {
-  id: string
-  titulo: string
-  project: Project
-  assignees: string[]
-  status: string
-  prioridad: string
-  tipo: string
-  dueStart: string
-  dueEnd: string
-  tiempoReal: number
-  anotaciones: string
-  pasosYLinks: string
-  documentoCompartido: string | null
-  url: string
-  destacado: boolean
-  destacadoColor: string | null
-  pendientes: string[]
-  archivosAdjuntos: string[]
-  avanceIA: string
-  estatusMasterRollup: string
-  grupoWhatsapp?: string
+  id: string;
+  titulo: string;
+  project: Project;
+  assignees: string[];
+  status: string;
+  prioridad: string;
+  tipo: string;
+  dueStart: string;
+  dueEnd: string;
+  tiempoReal: number;
+  anotaciones: string;
+  pasosYLinks: string;
+  documentoCompartido: string | null;
+  url: string;
+  destacado: boolean;
+  destacadoColor: string | null;
+  pendientes: string[];
+  archivosAdjuntos: string[];
+  avanceIA: string;
+  estatusMasterRollup: string;
+  grupoWhatsapp?: string;
 }
 
 export interface Colaborador {
-  _id: string
-  firstName: string
-  lastName: string
-  email: string
-  phone?: string
-  collaboratorId?: string
-  avatar?: string
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  collaboratorId?: string;
+  avatar?: string;
 }
 
 export interface TaskReport {
-  taskId: string
-  titulo: string
-  tiempoTrabajado: number
-  descripcionTrabajo: string
-  completada: boolean
+  taskId: string;
+  titulo: string;
+  tiempoTrabajado: number;
+  descripcionTrabajo: string;
+  completada: boolean;
 }
 
 export interface ReporteCompleto {
-  colaborador: Colaborador
-  fecha: string
-  tareas: TaskReport[]
-  totalTiempo: number
+  colaborador: Colaborador;
+  fecha: string;
+  tareas: TaskReport[];
+  totalTiempo: number;
 }
 
 export interface UsersApiResponse {
-  items: Colaborador[]
+  items: Colaborador[];
 }
 
 export interface ActividadesApiResponse {
-  success: boolean
-  data: Actividad[]
+  success: boolean;
+  data: Actividad[];
 }
 // export interface AssistantAnalysis {
 //   success: boolean;
@@ -139,13 +138,12 @@ export interface ActividadesApiResponse {
 // }
 
 interface HistorialMensaje {
-  analisis: any
+  analisis: any;
   role: "usuario" | "bot";
   contenido: string;
   timestamp: string;
   _id: string;
 }
-
 
 export interface HistorialSessionResponse {
   success: boolean;
@@ -217,8 +215,6 @@ export interface TaskExplanation {
   timestamp: Date;
 }
 
-
-
 export interface ActividadConTareas {
   actividadId: string;
   actividadTitulo: string;
@@ -253,7 +249,8 @@ export interface Message {
   content: string | React.ReactNode;
   timestamp: Date;
   voiceText?: string;
-   analisis?: any;
+  analisis?: any;
+  isWide?: boolean;
 }
 
 export type ConversacionSidebar = {
@@ -312,7 +309,7 @@ export interface AssistantAnalysis {
   multiActividad: boolean;
 }
 
-export  interface TaskExplanation {
+export interface TaskExplanation {
   taskId: string;
   taskName: string;
   activityTitle: string;
@@ -326,9 +323,17 @@ export interface ChatBotProps {
   colaborador: Colaborador;
   actividades: any[];
   onLogout: () => void;
+  conversacionActiva: any;
+  onNuevaConversacion: (nuevaConv: ConversacionSidebar) => void;
+  onActualizarNombre: (sessionId: string, nuevoNombre: string) => void;
+  onActualizarTyping: (typing: boolean) => void;
 }
 
-export type ChatStep = "welcome" | "loading-analysis" | "show-analysis" | "finished";
+export type ChatStep =
+  | "welcome"
+  | "loading-analysis"
+  | "show-analysis"
+  | "finished";
 
 export type VoiceModeStep =
   | "idle"
@@ -341,9 +346,8 @@ export type VoiceModeStep =
   | "confirmation"
   | "summary"
   | "sending";
-  
 
-  interface Activity {
+interface Activity {
   actividadId: string;
   actividadTitulo: string;
   actividadHorario: string;
@@ -357,8 +361,6 @@ interface Task {
   duracionMin: number;
   diasPendiente: number;
 }
-
-
 
 export interface VoiceGuidanceFlowProps {
   voiceMode: boolean;
@@ -390,4 +392,25 @@ export interface VoiceGuidanceFlowProps {
   setVoiceStep: (step: VoiceModeStep) => void;
   processVoiceExplanation?: (transcript: string) => void;
   setCurrentListeningFor: (text: string) => void;
+  setCurrentActivityIndex?: (index: number) => void;
+  setCurrentTaskIndex?: (index: number) => void;
+  setTaskExplanations?: (value: any[] | ((prev: any[]) => any[])) => void;
+}
+
+export interface ConsultarIAPayload {
+  pregunta: string;
+  pendienteNombre?: string;
+  actividadTitulo?: string;
+}
+
+export interface ChatGeneralIAPayload {
+  mensaje: string;
+  historial?: Array<{ role: "user" | "assistant"; content: string }>;
+}
+
+export interface IAResponse {
+  success: boolean;
+  respuesta?: string;
+  timestamp?: Date;
+  error?: string;
 }

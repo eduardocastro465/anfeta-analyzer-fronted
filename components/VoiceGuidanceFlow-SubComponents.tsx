@@ -700,6 +700,7 @@ export const SummaryStep: React.FC<{
   theme: string;
   isSpeaking: boolean;
   cancelVoiceMode: () => void;
+  onEditTask: (activityIndex: number, taskIndex: number) => void;
   finishVoiceMode: () => void;
 }> = ({
   activitiesWithTasks,

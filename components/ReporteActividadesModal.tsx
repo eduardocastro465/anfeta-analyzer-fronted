@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import  { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,10 +15,9 @@ import {
   Loader2,
   Send,
   AlertCircle,
-  Check,
 } from "lucide-react";
 
-import type { ActividadDiaria, PendienteEstadoLocal } from "@/lib/types";
+import type { ActividadDiaria } from "@/lib/types";
 import { guardarReporteTarde } from "@/lib/api";
 
 interface ReporteActividadesModalProps {
@@ -27,10 +26,10 @@ interface ReporteActividadesModalProps {
   theme: "light" | "dark";
   actividadesDiarias: ActividadDiaria[];
   stopVoice: () => void;
-  speakText: (text: string) => void;
   isSpeaking: boolean;
-  onGuardarReporte: () => void;
+  onGuardarReporte: () => Promise<void>;
   guardandoReporte: boolean;
+  speakText: (text: string) => void;
 }
 type PasoModal =
   | "inicial" // Mostrar resumen y botón iniciar
@@ -48,10 +47,10 @@ export function ReporteActividadesModal({
   theme,
   actividadesDiarias,
   stopVoice,
-  speakText,
   isSpeaking,
   onGuardarReporte,
   guardandoReporte,
+  speakText,
 }: ReporteActividadesModalProps) {
   // ==================== ESTADOS ====================
   const [paso, setPaso] = useState<PasoModal>("inicial");

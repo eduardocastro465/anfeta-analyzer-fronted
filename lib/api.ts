@@ -406,3 +406,74 @@ export async function guardarReporteTarde(payload: any) {
     return { success: false, actividades: [] };
   }
 }
+
+
+export async function obtenerConversacionCompleta(
+  sessionId: string
+): Promise<{ success: boolean; data: any | null }> {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/conversacion/${sessionId}`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error al obtener conversación completa:", error);
+    return { success: false, data: null };
+  }
+}
+
+
+export async function chatGeneralIA(mensaje: string) {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/consultar-ia`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mensaje: mensaje }),
+      },
+    );
+
+    if (!response.ok) throw new Error(`Error: ${response.status}`);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error consultando IA:", error);
+    return { success: false, actividades: [] };
+  }
+}
+
+export async function consultarIAProyecto(mensaje: string) {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/consultar-ia-proyecto`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+       body: JSON.stringify({ mensaje: mensaje }),
+      },
+    );
+
+    if (!response.ok) throw new Error(`Error: ${response.status}`);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error consultando IA:", error);
+    return { success: false, actividades: [] };
+  }
+}

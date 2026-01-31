@@ -38,12 +38,13 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
   stopRecording,
   processVoiceExplanation = () => {},
   retryExplanation,
-  sendExplanationsToBackend,
   recognitionRef,
   setIsRecording,
   setIsListening,
   setVoiceStep,
   setCurrentListeningFor,
+  setCurrentActivityIndex,
+  setCurrentTaskIndex,
 }) => {
   if (!voiceMode) return null;
 
@@ -96,6 +97,53 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
     return null;
   };
 
+  // ✅ FUNCIÓN PARA EDITAR UNA TAREA DESDE EL RESUMEN
+  const handleEditTask = React.useCallback((activityIndex: number, taskIndex: number) => {
+    console.log(`📝 Editando tarea: Actividad ${activityIndex}, Tarea ${taskIndex}`);
+    
+    // Detener cualquier reproducción de audio
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    
+    // Detener reconocimiento de voz si está activo
+    if (recognitionRef?.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.log("Recognition ya estaba detenido");
+      }
+    }
+    
+    // Resetear estados de grabación
+    if (setIsRecording) setIsRecording(false);
+    if (setIsListening) setIsListening(false);
+    if (setCurrentListeningFor) setCurrentListeningFor("");
+    
+    // Primero ir a un estado de transición
+    setVoiceStep("activity-presentation");
+    
+    // Usar requestAnimationFrame para asegurar que React procese el cambio
+    requestAnimationFrame(() => {
+      // Navegar a esa tarea específica
+      if (setCurrentActivityIndex) setCurrentActivityIndex(activityIndex);
+      if (setCurrentTaskIndex) setCurrentTaskIndex(taskIndex);
+      
+      // Esperar otro frame antes de ir a waiting-for-explanation
+      requestAnimationFrame(() => {
+        setVoiceStep("waiting-for-explanation");
+      });
+    });
+  }, [
+    recognitionRef,
+    setIsRecording,
+    setIsListening,
+    setCurrentListeningFor,
+    setCurrentActivityIndex,
+    setCurrentTaskIndex,
+    setVoiceStep,
+  ]);
+
   const currentActivity = getCurrentActivity();
   const currentTask = getCurrentTask();
   const totalActivities = activitiesWithTasks.length;
@@ -105,10 +153,25 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
   );
 
   const isInFinalSteps = voiceStep === "summary" || voiceStep === "sending";
+  const isInTransition = voiceStep === "activity-presentation" && !currentActivity;
 
-  if (!currentActivity && !isInFinalSteps) {
+  // Durante transiciones, mostrar un loading simple en lugar de error
+  if (!currentActivity && !isInFinalSteps && !isInTransition) {
     console.error("ERROR: No hay actividad en el índice actual");
     return null;
+  }
+  
+  // Si estamos en transición, mostrar un loading
+  if (isInTransition) {
+    return (
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center ${
+          theme === "dark" ? "bg-black/80" : "bg-white/95"
+        }`}
+      >
+        <Loader2 className="w-8 h-8 animate-spin text-[#6841ea]" />
+      </div>
+    );
   }
 
   const safeActivityTasksCount = currentActivity?.tareas?.length || 1;
@@ -284,7 +347,7 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
             />
           )}
 
-          {/* ✅ NUEVO: Estado de procesamiento/validación */}
+          {/* ✅ Estado de procesamiento/validación */}
           {voiceStep === "processing-explanation" && (
             <div className="text-center space-y-4">
               <div className="relative">
@@ -359,6 +422,7 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
               finishVoiceMode={finishVoiceMode}
               isSpeaking={isSpeaking}
               cancelVoiceMode={cancelVoiceMode}
+              onEditTask={handleEditTask}
             />
           )}
 

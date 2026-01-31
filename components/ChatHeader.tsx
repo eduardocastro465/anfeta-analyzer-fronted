@@ -12,7 +12,6 @@ import {
 import { SpeedControlHeader } from "./voice-controls";
 import { HeaderProps } from "@/lib/types";
 
-
 export const ChatHeader: React.FC<HeaderProps> = ({
   isInPiPWindow,
   sidebarOpen,
@@ -78,24 +77,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
   // RENDERIZADO PARA MODO NORMAL
   return (
     <>
-      {/* Botón para toggle del sidebar */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className={`fixed z-40 top-1/2 -translate-y-1/2 transition-all duration-300 p-1.5 rounded-r-lg ${
-          sidebarOpen ? "left-64" : "left-0"
-        } ${
-          theme === "dark"
-            ? "bg-[#1a1a1a] text-gray-400 border-y border-r border-[#2a2a2a]"
-            : "bg-gray-100 text-gray-600 border-y border-r border-gray-200"
-        }`}
-      >
-        {sidebarOpen ? (
-          <ChevronLeft className="w-4 h-4" />
-        ) : (
-          <ChevronRight className="w-4 h-4" />
-        )}
-      </button>
-
       {/* Header Principal */}
       <div className=" top-0 left0 right-0 z-20">
         <div

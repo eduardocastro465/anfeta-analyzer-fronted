@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"; // Añadimos useEffect
 import { LoginForm } from "@/components/login-form";
-import { ChatBot } from "@/components/chat-bot";
 
 import type { Colaborador, Actividad } from "@/lib/types";
 import { logout } from "../lib/api";
+import { ChatContainer } from "@/components/ChatContainer";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -67,7 +67,7 @@ export default function Home() {
   }
 
   return (
-    <ChatBot
+    <ChatContainer
       colaborador={currentColaborador}
       actividades={userActividades}
       onLogout={handleLogout}

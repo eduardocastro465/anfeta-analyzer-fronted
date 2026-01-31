@@ -1,19 +1,19 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React from "react";
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   validateSession,
   obtenerHistorialSidebar,
-  obtenerActividadesConTiempoHoy,
   actualizarEstadoPendientes,
   validarReportePendiente,
-  obtenerPendientesHoy,
   obtenerActividadesConRevisiones,
   guardarReporteTarde,
   sendPendienteValidarYGuardar,
+  chatGeneralIA,
+  consultarIAProyecto,
 } from "@/lib/api";
 import type {
   ActividadDiaria,
@@ -51,7 +51,6 @@ import {
 } from "lucide-react";
 import { getDisplayName } from "@/util/utils-chat";
 import { useVoiceSynthesis } from "@/components/hooks/use-voice-synthesis";
-import { SidebarHistorial } from "./SidebarHistorial";
 import { ChatHeader } from "./ChatHeader";
 import { VoiceGuidanceFlow } from "./VoiceGuidanceFlow";
 import { useVoiceRecognition } from "@/components/hooks/useVoiceRecognition";
@@ -64,7 +63,7 @@ import {
   cleanExplanationTranscript,
   validateExplanationLength,
 } from "@/util/voiceModeLogic";
-import { MessageList } from "./chat/MessageList";
+import { MessageList, NoTasksMessage, TasksPanel } from "./chat/MessageList";
 import { ChatInputBar } from "./chat/ChatInputBar";
 import { ReporteActividadesModal } from "./ReporteActividadesModal";
 
@@ -76,7 +75,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const pipWindowRef = useRef<Window | null>(null);
   const voiceTranscriptRef = useRef<string>("");
   const explanationProcessedRef = useRef<boolean>(false);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<any>(null);
 
   // ==================== HOOKS PERSONALIZADOS ====================
@@ -130,8 +128,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     PendienteEstadoLocal[]
   >([]);
   const [guardandoReporte, setGuardandoReporte] = useState(false);
-  const [yaSeVerificoHoy, setYaSeVerificoHoy] = useState(false);
-  const [isCheckingAfterHours, setIsCheckingAfterHours] = useState(false);
 
   // ==================== ESTADOS: MODAL VOZ REPORTE ====================
   const [modoVozReporte, setModoVozReporte] = useState(false);
@@ -141,14 +137,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   >("esperando");
 
   // ==================== ESTADOS: HORARIOS REPORTE ====================
-  const [horaInicioReporte] = useState(16); // a que hora empieza el reporte
+  const [horaInicioReporte] = useState(18); // a que hora empieza el reporte
   const [minutoInicioReporte] = useState(30);
   const [horaFinReporte] = useState(17); // a que hora termina el reporte
   const [minutoFinReporte] = useState(30);
-
-  // ==================== ESTADOS: HORARIOS ====================
-  const [horaFinJornada] = useState(17); // a que hora termina la jornada
-  const [minutoFinJornada] = useState(30); // a que minuto termina la jornada
 
   // ==================== ESTADOS: PiP (PICTURE-IN-PICTURE) ====================
   const [isPiPMode, setIsPiPMode] = useState(false);
@@ -156,61 +148,237 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
   // ==================== VALORES COMPUTADOS ====================
   const canUserType = step !== "loading-analysis" && !voiceMode.voiceMode;
-
-  // ==================== ESTADOS: CONFIGURACIÓN REPORTE ====================
-  const reportConfig = useMemo(
-    () => ({
-      horaInicio: 0,
-      minutoInicio: 30,
-      horaFin: 17,
-      minutoFin: 30,
-      horaFinJornada: 17,
-      minutoFinJornada: 30,
-    }),
-    [],
-  );
+  const [chatMode, setChatMode] = useState<"normal" | "ia">("normal");
+  const [isLoadingIA, setIsLoadingIA] = useState(false);
 
   // ==================== FUNCIONES ====================
 
-  const isReportTimeWindow = useCallback(() => {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const startMinutes =
-      reportConfig.horaInicio * 60 + reportConfig.minutoInicio;
-    const endMinutes = reportConfig.horaFin * 60 + reportConfig.minutoFin;
-    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-  }, [reportConfig]);
+  useEffect(() => {
+    if (welcomeSentRef.current) return;
+    welcomeSentRef.current = true;
 
-  const cargarActividadesParaReporte = async () => {
-    try {
-      const response = await obtenerActividadesConTiempoHoy();
-
-      if (response.success && response.data && response.data.length > 0) {
-        setActividadesDiarias(response.data);
-
-        const todosLosPendientes: PendienteEstadoLocal[] = [];
-        response.data.forEach((actividad: ActividadDiaria) => {
-          actividad.pendientes.forEach((pendiente) => {
-            todosLosPendientes.push({
-              ...pendiente,
-              actividadId: actividad.actividadId,
-              completadoLocal: false,
-              motivoLocal: "",
-            });
-          });
-        });
-
-        setPendientesReporte(todosLosPendientes);
-        setYaSeVerificoHoy(true);
-      } else {
-        console.log("No hay actividades para reportar hoy");
-        setYaSeVerificoHoy(true);
+    const init = async () => {
+      const user = await validateSession();
+      if (!user) {
+        router.replace("/");
+        return;
       }
-    } catch (error) {
-      console.error("Error al cargar actividades para reporte:", error);
+
+      // Inicializar la aplicación...
+      addMessageWithTyping(
+        "bot",
+        `¡Hola ${displayName}! 👋 Soy tu asistente.`,
+        500,
+      );
+
+      fetchAssistantAnalysis();
+    };
+
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (!voiceRecognition.voiceTranscript) {
+      return;
+    }
+
+    console.log(
+      "EFECTO: Procesando voiceTranscript:",
+      voiceRecognition.voiceTranscript,
+    );
+    console.log("voiceMode activo?:", voiceMode.voiceMode);
+
+    if (!voiceMode.voiceMode) {
+      return;
+    }
+
+    processVoiceCommand(voiceRecognition.voiceTranscript);
+  }, [voiceRecognition.voiceTranscript, voiceMode.voiceMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("speechSynthesis" in window)) return;
+
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      console.log(
+        "Voces disponibles:",
+        voices.map((v) => `${v.name} (${v.lang})`),
+      );
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.add("dark");
+
+    const checkIfPiPWindow = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isPiPWindow = urlParams.get("pip") === "true";
+      setIsInPiPWindow(isPiPWindow);
+
+      if (isPiPWindow) {
+        document.title = "Asistente Anfeta";
+        document.documentElement.style.overflow = "hidden";
+        document.body.style.margin = "0";
+        document.body.style.padding = "0";
+        document.body.style.overflow = "hidden";
+        document.body.style.height = "100vh";
+        document.body.style.width = "100vw";
+
+        if (window.opener) {
+          setIsPiPMode(true);
+          try {
+            window.moveTo(window.screenX, window.screenY);
+            window.resizeTo(400, 600);
+          } catch (e) {
+            console.log(
+              "No se pueden aplicar ciertas restricciones de ventana",
+            );
+          }
+        }
+
+        window.addEventListener("message", handleParentMessage);
+      }
+    };
+
+    checkIfPiPWindow();
+
+    if (!isInPiPWindow) {
+      window.addEventListener("message", handleChildMessage);
+    }
+
+    const checkPiPWindowInterval = setInterval(() => {
+      if (pipWindowRef.current && pipWindowRef.current.closed) {
+        console.log("Ventana PiP cerrada detectada");
+        setIsPiPMode(false);
+        pipWindowRef.current = null;
+      }
+    }, 1000);
+
+    const handleBeforeUnload = () => {
+      if (pipWindowRef.current && !pipWindowRef.current.closed) {
+        try {
+          pipWindowRef.current.postMessage({ type: "PARENT_CLOSING" }, "*");
+        } catch (e) {
+          console.log("No se pudo notificar a la ventana PiP");
+        }
+        pipWindowRef.current.close();
+      }
+      stopVoice();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("message", handleParentMessage);
+      window.removeEventListener("message", handleChildMessage);
+      clearInterval(checkPiPWindowInterval);
+
+      if (pipWindowRef.current && !pipWindowRef.current.closed) {
+        pipWindowRef.current.close();
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      stopVoice();
+    };
+  }, [isInPiPWindow, stopVoice]);
+
+  useEffect(() => {
+    if (!assistantAnalysis) return;
+    if (sidebarCargado) return;
+
+    setSidebarCargando(true); // ✅ Ahora existe
+    obtenerHistorialSidebar()
+      .then((res) => {
+        console.log("Historial del sidebar cargado:", res.data);
+        setData(res.data); // ✅ Ahora existe
+        setConversaciones(res.data); // ✅ Ahora existe
+        setSidebarCargado(true);
+      })
+      .catch((error) => {
+        console.error("Error al cargar sidebar:", error);
+        setData([]); // ✅ Ahora existe
+      })
+      .finally(() => setSidebarCargando(false)); // ✅ Ahora existe
+  }, [assistantAnalysis, sidebarCargado]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isTyping, voiceMode.voiceMode, voiceMode.voiceStep]);
+
+  useEffect(() => {
+    if (
+      inputRef.current &&
+      step !== "loading-analysis" &&
+      !voiceMode.voiceMode
+    ) {
+      inputRef.current.focus();
+    }
+  }, [step, voiceMode.voiceMode]);
+
+  const activitiesWithTasks = useMemo(() => {
+    if (!assistantAnalysis?.data?.revisionesPorActividad) {
+      return [];
+    }
+
+    return assistantAnalysis.data.revisionesPorActividad
+      .filter((actividad) => actividad.tareasConTiempo.length > 0)
+      .map((actividad) => ({
+        actividadId: actividad.actividadId,
+        actividadTitulo: actividad.actividadTitulo,
+        actividadHorario: actividad.actividadHorario,
+        tareas: actividad.tareasConTiempo.map((tarea) => ({
+          ...tarea,
+          actividadId: actividad.actividadId,
+          actividadTitulo: actividad.actividadTitulo,
+        })),
+      }));
+  }, [assistantAnalysis]);
+
+  const toggleChatMode = () => {
+    const newMode = chatMode === "normal" ? "ia" : "normal";
+    setChatMode(newMode);
+
+    if (newMode === "ia") {
+      addMessage(
+        "system",
+        <div
+          className={`p-3 rounded-lg border ${
+            theme === "dark"
+              ? "bg-[#6841ea]/10 border-[#6841ea]/20"
+              : "bg-purple-50 border-purple-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4 text-[#6841ea]" />
+            <span className="text-sm font-medium text-[#6841ea]">
+              Modo Asistente IA activado
+            </span>
+          </div>
+          <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">
+            Ahora puedes hacer preguntas sobre tus tareas y recibir ayuda
+            personalizada.
+          </p>
+        </div>,
+      );
+    } else {
+      addMessage(
+        "system",
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          Modo normal activado
+        </div>,
+      );
     }
   };
-
 
   const preguntarPendiente = (index: number) => {
     if (index >= pendientesReporte.length) {
@@ -415,118 +583,45 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
   };
 
-  const checkTimeAndVerifyActivities = useCallback(() => {
-    if (checkIfAfterHours()) {
-      checkEndOfDayActivities();
-    }
-    if (isReportTimeWindow() && !yaSeVerificoHoy) {
-      cargarActividadesParaReporte();
-    }
-  }, [yaSeVerificoHoy]);
+  const finishVoiceMode = () => {
+    console.log("========== FINALIZANDO MODO VOZ ==========");
 
-  useEffect(() => {
-    checkTimeAndVerifyActivities();
-    const interval = setInterval(checkTimeAndVerifyActivities, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [checkTimeAndVerifyActivities]);
+    // Detener voz
+    stopVoice();
 
-  useEffect(() => {
-    const checkMidnight = () => {
-      const now = new Date();
-      if (now.getHours() === 0 && now.getMinutes() === 0) {
-        setYaSeVerificoHoy(false);
-        console.log("🌙 Medianoche - Reseteando verificación diaria");
-      }
-    };
+    // Resetear modo voz
+    voiceMode.setVoiceMode(false);
+    voiceMode.setVoiceStep("idle");
+    voiceMode.setExpectedInputType("none");
+    voiceMode.setCurrentActivityIndex(0);
+    voiceMode.setCurrentTaskIndex(0);
 
-    const midnightInterval = setInterval(checkMidnight, 60 * 1000);
-    return () => clearInterval(midnightInterval);
-  }, []);
+    // Mensaje de confirmación
+    addMessage(
+      "bot",
+      <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-green-500" />
+          <div>
+            <span className="font-medium">¡Jornada iniciada!</span>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+              Has explicado{" "}
+              {
+                voiceMode.taskExplanations.filter(
+                  (exp) => exp.explanation !== "[Tarea saltada]",
+                ).length
+              }{" "}
+              tareas correctamente. ¡Mucho éxito!
+            </p>
+          </div>
+        </div>
+      </div>,
+    );
 
-  const activitiesWithTasks = useMemo(() => {
-    if (!assistantAnalysis?.data?.revisionesPorActividad) {
-      return [];
-    }
-
-    return assistantAnalysis.data.revisionesPorActividad
-      .filter((actividad) => actividad.tareasConTiempo.length > 0)
-      .map((actividad) => ({
-        actividadId: actividad.actividadId,
-        actividadTitulo: actividad.actividadTitulo,
-        actividadHorario: actividad.actividadHorario,
-        tareas: actividad.tareasConTiempo.map((tarea) => ({
-          ...tarea,
-          actividadId: actividad.actividadId,
-          actividadTitulo: actividad.actividadTitulo,
-        })),
-      }));
-  }, [assistantAnalysis]);
-
-  const checkIfAfterHours = () => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-
-    const currentTotalMinutes = currentHour * 60 + currentMinute;
-    const finJornadaMinutes = horaFinJornada * 60 + minutoFinJornada;
-
-    return currentTotalMinutes >= finJornadaMinutes;
+    speakText(
+      "¡Perfecto! Tu jornada ha comenzado. Mucho éxito con tus tareas.",
+    );
   };
-
-  const checkEndOfDayActivities = async () => {
-    try {
-      setIsCheckingAfterHours(true);
-
-      const data = await obtenerPendientesHoy({
-        email: colaborador.email,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (data.success && data.todasValidadas) {
-        addMessage(
-          "bot",
-          <div
-            className={`p-4 rounded-lg border ${theme === "dark" ? "bg-green-900/20 border-green-500/20" : "bg-green-50 border-green-200"}`}
-          >
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              <div>
-                <span className="font-medium">¡Jornada completada! </span>
-                <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                  Todas tus actividades han sido revisadas y validadas
-                  correctamente. ¡Buen trabajo! Puedes cerrar sesión.
-                </p>
-              </div>
-            </div>
-          </div>,
-        );
-
-        speakText(
-          "¡Perfecto! Todas tus actividades han sido revisadas y validadas. Buen trabajo, puedes cerrar sesión.",
-        );
-      }
-
-      setIsCheckingAfterHours(false);
-    } catch (error) {
-      console.error("Error al verificar actividades finalizadas:", error);
-      setIsCheckingAfterHours(false);
-    }
-  };
-  // Agregar esta función cerca de sendExplanationsToBackend
-const finishVoiceMode = () => {
-  console.log("========== FINALIZANDO MODO VOZ ==========");
-  
-  // Detener voz
-  stopVoice();
-  
-  // Resetear modo voz
-  voiceMode.setVoiceMode(false);
-  voiceMode.setVoiceStep("idle");
-  voiceMode.setExpectedInputType("none");
-  voiceMode.setCurrentActivityIndex(0);
-  voiceMode.setCurrentTaskIndex(0);
-  speakText("¡Perfecto! Tu jornada ha comenzado. Mucho éxito con tus tareas.");
-};
 
   const cancelVoiceMode = () => {
     stopVoice();
@@ -1023,119 +1118,6 @@ const finishVoiceMode = () => {
     }
   };
 
-  useEffect(() => {
-    if (!voiceRecognition.voiceTranscript) {
-      return;
-    }
-
-    console.log(
-      "EFECTO: Procesando voiceTranscript:",
-      voiceRecognition.voiceTranscript,
-    );
-    console.log("voiceMode activo?:", voiceMode.voiceMode);
-
-    if (!voiceMode.voiceMode) {
-      return;
-    }
-
-    processVoiceCommand(voiceRecognition.voiceTranscript);
-  }, [voiceRecognition.voiceTranscript, voiceMode.voiceMode]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!("speechSynthesis" in window)) return;
-
-    const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      console.log(
-        "Voces disponibles:",
-        voices.map((v) => `${v.name} (${v.lang})`),
-      );
-    };
-
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (typeof document === "undefined") return;
-    document.documentElement.classList.add("dark");
-
-    const checkIfPiPWindow = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const isPiPWindow = urlParams.get("pip") === "true";
-      setIsInPiPWindow(isPiPWindow);
-
-      if (isPiPWindow) {
-        document.title = "Asistente Anfeta";
-        document.documentElement.style.overflow = "hidden";
-        document.body.style.margin = "0";
-        document.body.style.padding = "0";
-        document.body.style.overflow = "hidden";
-        document.body.style.height = "100vh";
-        document.body.style.width = "100vw";
-
-        if (window.opener) {
-          setIsPiPMode(true);
-          try {
-            window.moveTo(window.screenX, window.screenY);
-            window.resizeTo(400, 600);
-          } catch (e) {
-            console.log(
-              "No se pueden aplicar ciertas restricciones de ventana",
-            );
-          }
-        }
-
-        window.addEventListener("message", handleParentMessage);
-      }
-    };
-
-    checkIfPiPWindow();
-
-    if (!isInPiPWindow) {
-      window.addEventListener("message", handleChildMessage);
-    }
-
-    const checkPiPWindowInterval = setInterval(() => {
-      if (pipWindowRef.current && pipWindowRef.current.closed) {
-        console.log("Ventana PiP cerrada detectada");
-        setIsPiPMode(false);
-        pipWindowRef.current = null;
-      }
-    }, 1000);
-
-    const handleBeforeUnload = () => {
-      if (pipWindowRef.current && !pipWindowRef.current.closed) {
-        try {
-          pipWindowRef.current.postMessage({ type: "PARENT_CLOSING" }, "*");
-        } catch (e) {
-          console.log("No se pudo notificar a la ventana PiP");
-        }
-        pipWindowRef.current.close();
-      }
-      stopVoice();
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("message", handleParentMessage);
-      window.removeEventListener("message", handleChildMessage);
-      clearInterval(checkPiPWindowInterval);
-
-      if (pipWindowRef.current && !pipWindowRef.current.closed) {
-        pipWindowRef.current.close();
-      }
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      stopVoice();
-    };
-  }, [isInPiPWindow, stopVoice]);
-
   const handleParentMessage = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
     if (event.data.type === "PARENT_CLOSING") {
@@ -1189,6 +1171,7 @@ const finishVoiceMode = () => {
           </div>
         </div>,
         400,
+        true, // isWide
       );
 
       setTimeout(async () => {
@@ -1253,7 +1236,41 @@ const finishVoiceMode = () => {
             )}
           </div>,
           600,
+          false, // isWide
         );
+
+        setTimeout(() => {
+          const hayTareas = analysis.data.revisionesPorActividad.some(
+            (r) => r.tareasConTiempo.length > 0,
+          );
+
+          if (hayTareas) {
+            // Filtrar solo las que tienen tareas
+            const actividadesConTareas =
+              analysis.data.revisionesPorActividad.filter(
+                (r) => r.tareasConTiempo.length > 0,
+              );
+            const totalTareas = actividadesConTareas.reduce(
+              (sum, r) => sum + r.tareasConTiempo.length,
+              0,
+            );
+
+            addMessage(
+              "bot",
+              <TasksPanel
+                actividadesConTareasPendientes={actividadesConTareas}
+                totalTareasPendientes={totalTareas}
+                esHoraReporte={false}
+                theme={theme}
+                assistantAnalysis={analysis}
+                onOpenReport={() => setMostrarModalReporte(true)}
+                onStartVoiceMode={handleStartVoiceMode}
+              />,
+            );
+          } else {
+            addMessage("bot", <NoTasksMessage theme={theme} />);
+          }
+        }, 1400);
       }, 800);
     }
   };
@@ -1364,25 +1381,6 @@ const finishVoiceMode = () => {
       setIsTyping(false);
     }
   };
-
-  useEffect(() => {
-    if (!assistantAnalysis) return;
-    if (sidebarCargado) return;
-
-    setSidebarCargando(true); // ✅ Ahora existe
-    obtenerHistorialSidebar()
-      .then((res) => {
-        console.log("Historial del sidebar cargado:", res.data);
-        setData(res.data); // ✅ Ahora existe
-        setConversaciones(res.data); // ✅ Ahora existe
-        setSidebarCargado(true);
-      })
-      .catch((error) => {
-        console.error("Error al cargar sidebar:", error);
-        setData([]); // ✅ Ahora existe
-      })
-      .finally(() => setSidebarCargando(false)); // ✅ Ahora existe
-  }, [assistantAnalysis, sidebarCargado]);
 
   const startRecording = () => {
     if (typeof window === "undefined") return;
@@ -1543,6 +1541,7 @@ const finishVoiceMode = () => {
     type: Message["type"],
     content: string | React.ReactNode,
     voiceText?: string,
+    isWide?: boolean,
   ) => {
     const newMessage: Message = {
       id: `${Date.now()}-${Math.random()}`,
@@ -1550,6 +1549,7 @@ const finishVoiceMode = () => {
       content,
       timestamp: new Date(),
       voiceText,
+      isWide,
     };
 
     setMessages((prev) => {
@@ -1571,60 +1571,46 @@ const finishVoiceMode = () => {
     type: Message["type"],
     content: string | React.ReactNode,
     delay = 800,
+    isWide?: boolean,
   ) => {
     setIsTyping(true);
     await new Promise((resolve) => setTimeout(resolve, delay));
     setIsTyping(false);
-    addMessage(type, content);
+    addMessage(type, content, undefined, isWide);
   };
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isTyping, voiceMode.voiceMode, voiceMode.voiceStep]);
+  const handleUserInput = async (e: React.FormEvent) => {
+    try {
+      e.preventDefault();
+      if (!userInput.trim()) return;
+      let response;
 
-  useEffect(() => {
-    if (
-      inputRef.current &&
-      step !== "loading-analysis" &&
-      !voiceMode.voiceMode
-    ) {
-      inputRef.current.focus();
-    }
-  }, [step, voiceMode.voiceMode]);
+      const mensajeAEnviar = userInput.trim();
 
-  useEffect(() => {
-    if (welcomeSentRef.current) return;
-    welcomeSentRef.current = true;
+      // Agregar mensaje del usuario al historial
+      addMessage("user", mensajeAEnviar);
+      setUserInput("");
+      setIsTyping(true);
 
-    const init = async () => {
-      const user = await validateSession();
-      if (!user) {
-        router.replace("/");
-        return;
+      if (chatMode === "ia" && assistantAnalysis) {
+        response = await consultarIAProyecto(mensajeAEnviar);
+      } else {
+        response = await chatGeneralIA(mensajeAEnviar);
       }
 
-      // Inicializar la aplicación...
-      addMessageWithTyping(
-        "bot",
-        `¡Hola ${displayName}! 👋 Soy tu asistente.`,
-        500,
-      );
+      setIsTyping(false);
+      console.log("Respuesta:", response);
 
-      fetchAssistantAnalysis();
-    };
-
-    init();
-  }, []);
-
-  const handleUserInput = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userInput.trim()) return;
-
-    const input = userInput.trim();
-    setUserInput("");
-    addMessage("user", input);
+      if (response.respuesta) {
+        addMessage("bot", response.respuesta);
+      } else {
+        addMessage("bot", "Lo siento, no pude procesar tu mensaje.");
+      }
+    } catch (error) {
+      console.error("Error al enviar mensaje:", error);
+      setIsTyping(false);
+      addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
+    }
   };
 
   const handleVoiceMessageClick = (voiceText: string) => {
@@ -1636,123 +1622,102 @@ const finishVoiceMode = () => {
 
   return (
     <div
-      className={`min-h-screen font-['Arial'] flex ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
+      className={`flex flex-col h-screen ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
     >
-      {!isInPiPWindow && (
-        <aside
-          className={`fixed left-0 top-0 h-screen z-50 transition-all duration-300 ${conversationHistory.sidebarOpen ? "w-64" : "w-0"} ${theme === "dark" ? "bg-[#0a0a0a] border-r border-[#1a1a1a]" : "bg-gray-50 border-r border-gray-200"} overflow-hidden`}
-        >
-          <SidebarHistorial
-            conversacionActiva={conversationHistory.conversacionActiva}
-            onSeleccionarConversacion={(conv) =>
-              conversationHistory.seleccionarConversacion(
-                conv,
-                setMessages,
-                setIsTyping,
-                addMessage,
-              )
-            }
-            theme={theme}
-          />
-        </aside>
-      )}
+      <ChatHeader
+        isInPiPWindow={isInPiPWindow}
+        sidebarOpen={conversationHistory.sidebarOpen}
+        setSidebarOpen={conversationHistory.setSidebarOpen}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        displayName={displayName}
+        colaborador={colaborador}
+        rate={rate}
+        changeRate={changeRate}
+        isSpeaking={isSpeaking}
+        isPiPMode={isPiPMode}
+        openPiPWindow={() => {}} // Implementar si necesitas PiP
+        closePiPWindow={() => {}}
+        setShowLogoutDialog={setShowLogoutDialog}
+      />
 
+      <VoiceGuidanceFlow
+        voiceMode={voiceMode.voiceMode}
+        voiceStep={voiceMode.voiceStep}
+        theme={theme}
+        isSpeaking={isSpeaking}
+        finishVoiceMode={finishVoiceMode}
+        currentActivityIndex={voiceMode.currentActivityIndex}
+        currentTaskIndex={voiceMode.currentTaskIndex}
+        activitiesWithTasks={activitiesWithTasks}
+        taskExplanations={voiceMode.taskExplanations}
+        voiceTranscript={voiceRecognition.voiceTranscript}
+        currentListeningFor={voiceMode.currentListeningFor}
+        retryCount={voiceMode.retryCount}
+        voiceConfirmationText=""
+        rate={rate}
+        changeRate={changeRate}
+        cancelVoiceMode={cancelVoiceMode}
+        confirmStartVoiceMode={confirmStartVoiceMode}
+        speakTaskByIndices={speakTaskByIndices}
+        startTaskExplanation={startTaskExplanation}
+        skipTask={skipTask}
+        processVoiceExplanation={processVoiceExplanation}
+        stopRecording={voiceRecognition.stopRecording}
+        retryExplanation={retryExplanation}
+        sendExplanationsToBackend={sendExplanationsToBackend}
+        recognitionRef={voiceRecognition.recognitionRef}
+        setIsRecording={() => {}}
+        setIsListening={() => {}}
+        setVoiceStep={voiceMode.setVoiceStep}
+        setCurrentListeningFor={voiceMode.setCurrentListeningFor}
+      />
+
+      {/* CONTENIDO DE MENSAJES - PADDING AJUSTADO */}
       <div
-        className={`flex-1 flex flex-col min-w-0 h-screen transition-all  scrollbar-hide duration-300 relative  ${!isInPiPWindow && conversationHistory.sidebarOpen ? "ml-64" : "ml-0"}`}
-      >
-        <ChatHeader
-          isInPiPWindow={isInPiPWindow}
-          sidebarOpen={conversationHistory.sidebarOpen}
-          setSidebarOpen={conversationHistory.setSidebarOpen}
-          theme={theme}
-          toggleTheme={toggleTheme}
-          displayName={displayName}
-          colaborador={colaborador}
-          rate={rate}
-          changeRate={changeRate}
-          isSpeaking={isSpeaking}
-          isPiPMode={isPiPMode}
-          openPiPWindow={() => {}} // Implementar si necesitas PiP
-          closePiPWindow={() => {}}
-          setShowLogoutDialog={setShowLogoutDialog}
-        />
-
-        <VoiceGuidanceFlow
-          voiceMode={voiceMode.voiceMode}
-          voiceStep={voiceMode.voiceStep}
-          theme={theme}
-          isSpeaking={isSpeaking}
-          finishVoiceMode={finishVoiceMode}
-          currentActivityIndex={voiceMode.currentActivityIndex}
-          currentTaskIndex={voiceMode.currentTaskIndex}
-          activitiesWithTasks={activitiesWithTasks}
-          taskExplanations={voiceMode.taskExplanations}
-          voiceTranscript={voiceRecognition.voiceTranscript}
-          currentListeningFor={voiceMode.currentListeningFor}
-          retryCount={voiceMode.retryCount}
-          voiceConfirmationText=""
-          rate={rate}
-          changeRate={changeRate}
-          cancelVoiceMode={cancelVoiceMode}
-          confirmStartVoiceMode={confirmStartVoiceMode}
-          speakTaskByIndices={speakTaskByIndices}
-          startTaskExplanation={startTaskExplanation}
-          skipTask={skipTask}
-          processVoiceExplanation={processVoiceExplanation}
-          stopRecording={voiceRecognition.stopRecording}
-          retryExplanation={retryExplanation}
-          sendExplanationsToBackend={sendExplanationsToBackend}
-          recognitionRef={voiceRecognition.recognitionRef}
-          setIsRecording={() => {}}
-          setIsListening={() => {}}
-          setVoiceStep={voiceMode.setVoiceStep}
-          setCurrentListeningFor={voiceMode.setCurrentListeningFor}
-        />
-
-        {/* CONTENIDO DE MENSAJES - PADDING AJUSTADO */}
-        <div
-          className={`flex-1 overflow-y-auto
+        className={`flex-1 overflow-y-auto
     [scrollbar-width:none]
     [-ms-overflow-style:none]
     [&::-webkit-scrollbar]:hidden
     ${isInPiPWindow ? "pt-2" : "pt-4"}
     pb-6
   `}
-        >
-          <div className="max-w-4xl mx-auto w-full">
-            <MessageList
-              messages={messages}
-              isTyping={isTyping}
-              theme={theme}
-              onVoiceMessageClick={handleVoiceMessageClick}
-              scrollRef={scrollRef}
-              assistantAnalysis={assistantAnalysis}
-              onOpenReport={() => setMostrarModalReporte(true)}
-              onStartVoiceMode={handleStartVoiceMode}
-              reportConfig={{
-                horaInicio: horaInicioReporte,
-                minutoInicio: minutoInicioReporte,
-                horaFin: horaFinReporte,
-                minutoFin: minutoFinReporte,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* INPUT BAR - Z-INDEX AJUSTADO */}
-        {!voiceMode.voiceMode && (
-          <ChatInputBar
-            userInput={userInput}
-            setUserInput={setUserInput}
-            onSubmit={handleUserInput}
-            onVoiceClick={startRecordingWrapper}
-            isRecording={voiceRecognition.isRecording}
-            canUserType={canUserType}
+      >
+        <div className="max-w-[75%] mx-auto w-fulll">
+          <MessageList
+            messages={messages}
+            isTyping={isTyping}
             theme={theme}
-            inputRef={inputRef}
+            onVoiceMessageClick={handleVoiceMessageClick}
+            scrollRef={scrollRef}
+            assistantAnalysis={assistantAnalysis}
+            onOpenReport={() => setMostrarModalReporte(true)}
+            onStartVoiceMode={handleStartVoiceMode}
+            reportConfig={{
+              horaInicio: horaInicioReporte,
+              minutoInicio: minutoInicioReporte,
+              horaFin: horaFinReporte,
+              minutoFin: minutoFinReporte,
+            }}
           />
-        )}
+        </div>
       </div>
+
+      {/* INPUT BAR - Z-INDEX AJUSTADO */}
+      {!voiceMode.voiceMode && (
+        <ChatInputBar
+          userInput={userInput}
+          setUserInput={setUserInput}
+          onSubmit={handleUserInput}
+          onVoiceClick={startRecordingWrapper}
+          isRecording={voiceRecognition.isRecording}
+          canUserType={canUserType && !isLoadingIA}
+          theme={theme}
+          inputRef={inputRef}
+          chatMode={chatMode}
+          onToggleChatMode={toggleChatMode}
+        />
+      )}
 
       {/* Modal de Reporte de Actividades Diarias */}
 

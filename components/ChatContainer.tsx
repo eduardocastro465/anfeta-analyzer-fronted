@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
 import type { Colaborador } from "@/lib/types";
@@ -30,26 +30,12 @@ export type ConversacionSidebar = {
   updatedAt?: string;
 };
 
-function agruparPorDia(
-  data: ConversacionSidebar[],
-): Record<string, ConversacionSidebar[]> {
-  return data.reduce(
-    (acc, conv) => {
-      const dia = obtenerLabelDia(conv.createdAt);
-      acc[dia] ??= [];
-      acc[dia].push(conv);
-      return acc;
-    },
-    {} as Record<string, ConversacionSidebar[]>,
-  );
-}
-
 export function ChatContainer({
   colaborador,
   actividades,
   onLogout,
 }: ChatContainerProps) {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme] = useState<"light" | "dark">("dark");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversaciones, setConversaciones] = useState<ConversacionSidebar[]>(
     [],
@@ -61,13 +47,26 @@ export function ChatContainer({
   const [isTyping, setIsTyping] = useState(false);
   const router = useRouter();
 
-  const conversacionesAgrupadas = agruparPorDia(conversaciones);
+  // Agrupar conversaciones por día (memoizado)
+  const conversacionesAgrupadas = useMemo(() => {
+    return conversaciones.reduce(
+      (acc, conv) => {
+        const dia = obtenerLabelDia(conv.createdAt);
+        acc[dia] ??= [];
+        acc[dia].push(conv);
+        return acc;
+      },
+      {} as Record<string, ConversacionSidebar[]>,
+    );
+  }, [conversaciones]);
 
+  // Dark mode
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.classList.add("dark");
   }, []);
 
+  // Inicialización y carga de historial
   useEffect(() => {
     const init = async () => {
       const user = await validateSession();
@@ -76,30 +75,65 @@ export function ChatContainer({
         return;
       }
 
-      // Cargar historial del sidebar
-      try {
-        setSidebarCargando(true);
-        const res = await obtenerHistorialSidebar();
-        setConversaciones(res.data);
-      } catch (error) {
-        console.error("Error al cargar sidebar:", error);
-        setConversaciones([]);
-      } finally {
-        setSidebarCargando(false);
-      }
+      await cargarHistorial();
     };
 
     init();
   }, [router]);
 
+  // Función para cargar/recargar el historial
+  const cargarHistorial = async () => {
+    try {
+      setSidebarCargando(true);
+      const res = await obtenerHistorialSidebar();
 
+      if (res.success && res.data) {
+        setConversaciones(res.data);
+      } else {
+        setConversaciones([]);
+      }
+    } catch (error) {
+      console.error("Error al cargar sidebar:", error);
+      setConversaciones([]);
+    } finally {
+      setSidebarCargando(false);
+    }
+  };
+
+  // Seleccionar conversación
   const seleccionarConversacion = (conv: ConversacionSidebar) => {
     setConversacionActiva(conv.sessionId);
   };
 
+  // Agregar nueva conversación (llamar desde ChatBot cuando se cree una nueva)
+  const agregarNuevaConversacion = (nuevaConv: ConversacionSidebar) => {
+    setConversaciones((prev) => [nuevaConv, ...prev]);
+    setConversacionActiva(nuevaConv.sessionId);
+  };
+
+  // Actualizar nombre de conversación (cuando el backend genere el título)
+  const actualizarNombreConversacion = (
+    sessionId: string,
+    nuevoNombre: string,
+  ) => {
+    setConversaciones((prev) =>
+      prev.map((conv) =>
+        conv.sessionId === sessionId
+          ? {
+              ...conv,
+              nombreConversacion: nuevoNombre,
+              updatedAt: new Date().toISOString(),
+            }
+          : conv,
+      ),
+    );
+  };
+
   return (
     <div
-      className={`min-h-screen font-['Arial'] flex ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
+      className={`min-h-screen font-['Arial'] flex ${
+        theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"
+      }`}
     >
       {/* ========== SIDEBAR DE HISTORIAL ========== */}
       <aside
@@ -267,15 +301,20 @@ export function ChatContainer({
 
       {/* ========== COMPONENTE CHAT ========== */}
       <div
-        className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"}`}
+        className={`flex-1 transition-all duration-300 ${
+          sidebarOpen ? "ml-64" : "ml-0"
+        }`}
       >
         <ChatBot
           colaborador={colaborador}
           actividades={actividades}
           onLogout={onLogout}
+          conversacionActiva={conversacionActiva}
+          onNuevaConversacion={agregarNuevaConversacion}
+          onActualizarNombre={actualizarNombreConversacion}
+          onActualizarTyping={setIsTyping}
         />
       </div>
     </div>
   );
 }
-
