@@ -67,7 +67,18 @@ import { MessageList, NoTasksMessage, TasksPanel } from "./chat/MessageList";
 import { ChatInputBar } from "./chat/ChatInputBar";
 import { ReporteActividadesModal } from "./ReporteActividadesModal";
 
-export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
+export function ChatBot({
+  colaborador,
+  onLogout,
+  theme: externalTheme,
+  onToggleTheme: externalToggle,
+  conversacionActiva,
+  mensajesRestaurados,
+  analisisRestaurado,
+  onNuevaConversacion,
+  onActualizarNombre,
+  onActualizarTyping,
+}: ChatBotProps) {
   // ==================== REFS ====================
   const scrollRef = useRef<HTMLDivElement>(null);
   const welcomeSentRef = useRef(false);
@@ -97,9 +108,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [assistantAnalysis, setAssistantAnalysis] =
     useState<AssistantAnalysis | null>(null);
+  const [isLoadingIA, setIsLoadingIA] = useState(false);
 
   // ==================== ESTADOS: DIÁLOGOS Y MODALS ====================
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -112,9 +123,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [data, setData] = useState<ConversacionSidebar[]>([]);
 
   // ==================== ESTADOS: REPORTE DE ACTIVIDADES ====================
-  const [actividadesDiarias] = useState<
-    ActividadDiaria[]
-  >([]);
+  const [actividadesDiarias] = useState<ActividadDiaria[]>([]);
   const [pendientesReporte, setPendientesReporte] = useState<
     PendienteEstadoLocal[]
   >([]);
@@ -125,6 +134,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [pasoModalVoz, setPasoModalVoz] = useState<
     "esperando" | "escuchando" | "procesando"
   >("esperando");
+  const autoSendTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTranscriptRef = useRef<string>("");
+  const [isUserEditing, setIsUserEditing] = useState(false);
 
   // ==================== ESTADOS: HORARIOS REPORTE ====================
   const [horaInicioReporte] = useState("1:33 PM"); // Formato: "HH:MM AM/PM"
@@ -135,13 +147,19 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const [isInPiPWindow, setIsInPiPWindow] = useState(false);
 
   // ==================== VALORES COMPUTADOS ====================
-  const canUserType = step !== "loading-analysis" && !voiceMode.voiceMode;
+  const canUserType =
+    step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
+
   const [chatMode, setChatMode] = useState<"normal" | "ia">("normal");
-  const [isLoadingIA, setIsLoadingIA] = useState(false);
+
+  const [internalTheme, setInternalTheme] = useState<"light" | "dark">("dark");
+  const theme = externalTheme ?? internalTheme;
 
   // ==================== FUNCIONES ====================
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.add("dark");
     if (welcomeSentRef.current) return;
     welcomeSentRef.current = true;
 
@@ -172,6 +190,40 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
     init();
   }, []);
+
+  useEffect(() => {
+    if (!conversacionActiva || !mensajesRestaurados?.length) return;
+
+    console.log("🔄 Restaurando conversación en ChatBot");
+    console.log("📝 Mensajes a restaurar:", mensajesRestaurados.length);
+
+    // Mapeo simple de mensajes
+    const mensajes: Message[] = mensajesRestaurados.map((msg) => ({
+      id: msg._id || `${Date.now()}-${Math.random()}`,
+      type: msg.role === "usuario" ? "user" : "bot",
+      content: msg.contenido,
+      timestamp: new Date(msg.timestamp),
+    }));
+
+    setMessages(mensajes);
+
+    // Restaurar análisis si existe
+    if (analisisRestaurado) {
+      console.log("📊 Restaurando análisis del asistente");
+      assistantAnalysisRef.current = analisisRestaurado;
+      setAssistantAnalysis(analisisRestaurado);
+    }
+
+    setStep("ready");
+    setIsTyping(false);
+
+    // Scroll al final
+    setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }, 100);
+  }, [conversacionActiva, mensajesRestaurados, analisisRestaurado]);
 
   useEffect(() => {
     if (!voiceRecognition.voiceTranscript) {
@@ -373,7 +425,67 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       );
     }
   };
+  const handleUserInputChange = (value: string) => {
+    setUserInput(value);
 
+    // Si el valor es diferente a la última transcripción, el usuario está editando
+    if (
+      value !== lastTranscriptRef.current &&
+      voiceRecognition.voiceTranscript
+    ) {
+      console.log("✏️ Usuario editando manualmente");
+      setIsUserEditing(true);
+
+      // Cancelar envío automático
+      if (autoSendTimerRef.current) {
+        clearTimeout(autoSendTimerRef.current);
+        autoSendTimerRef.current = null;
+        console.log("🚫 Envío automático cancelado por edición");
+      }
+    }
+  };
+
+  // ✅ FUNCIÓN: Envío automático
+  const handleAutoSend = async () => {
+    if (!userInput.trim()) return;
+
+    console.log("📤 Enviando automáticamente:", userInput);
+
+    try {
+      const mensajeAEnviar = userInput.trim();
+
+      // Agregar mensaje del usuario
+      addMessage("user", mensajeAEnviar);
+      setUserInput("");
+      setIsTyping(true);
+      setIsLoadingIA(true);
+
+      // Reset de estados
+      setIsUserEditing(false);
+      lastTranscriptRef.current = "";
+
+      let response;
+      if (chatMode === "ia" && assistantAnalysis) {
+        response = await consultarIAProyecto(mensajeAEnviar);
+      } else {
+        response = await chatGeneralIA(mensajeAEnviar);
+      }
+
+      if (response.respuesta) {
+        addMessage("bot", response.respuesta);
+      } else {
+        addMessage("bot", "Lo siento, no pude procesar tu mensaje.");
+      }
+
+      setIsLoadingIA(false);
+      setIsTyping(false);
+    } catch (error) {
+      console.error("Error al enviar mensaje:", error);
+      setIsTyping(false);
+      setIsLoadingIA(false);
+      addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
+    }
+  };
   const preguntarPendiente = (index: number) => {
     if (index >= pendientesReporte.length) {
       speakText("Terminamos. ¿Quieres guardar el reporte?");
@@ -563,7 +675,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       if (response.success) {
         setMostrarModalReporte(false);
-    
+
         setIndicePendienteActual(0);
         setPasoModalVoz("esperando");
 
@@ -786,13 +898,39 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const startRecordingWrapper = () => {
-    // ✅ Sin callbacks - la transcripción se procesa en el useEffect
+    voiceRecognition.startRecording(undefined, (error) => {
+      console.error("Error en reconocimiento de voz:", error);
+      speakText("Hubo un error con el micrófono. Por favor, intenta de nuevo.");
+    });
+  };
+
+  // funcion para iniciar grabacion de voz en chat no
+  const startChatVoiceRecording = () => {
+    if (voiceRecognition.isRecording) {
+      // Si ya está grabando, detene onVoiceClick={startRecordingWrapper}r
+      voiceRecognition.stopRecording();
+      return;
+    }
+
+    // Iniciar grabación para chat normal
     voiceRecognition.startRecording(
-      undefined, // No necesitamos onResult aquí
+      (transcript) => {
+        // Cuando termine de grabar, poner el texto en el input
+        if (transcript.trim()) {
+          setUserInput(transcript.trim());
+          // Opcional: Enfocar el input
+          if (inputRef.current) {
+            inputRef.current.focus();
+          }
+        }
+      },
       (error) => {
         console.error("Error en reconocimiento de voz:", error);
-        speakText(
-          "Hubo un error con el micrófono. Por favor, intenta de nuevo.",
+        addMessage(
+          "system",
+          <div className="text-xs text-red-500">
+            Error con el micrófono. Por favor, verifica los permisos.
+          </div>,
         );
       },
     );
@@ -1405,10 +1543,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         );
       }, 100);
 
+      setStep("ready");
       showAssistantAnalysis(adaptedData, isRestoration);
     } catch (error) {
       console.error("Error al obtener análisis del asistente:", error);
       setIsTyping(false);
+      setStep("error");
       // sin datos de ejemplo ni estatico
       addMessage(
         "bot",
@@ -1570,9 +1710,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    if (typeof document !== "undefined") {
+    if (externalToggle) {
+      externalToggle(); // Usa la función del padre
+    } else {
+      // Fallback local
+      const newTheme = internalTheme === "light" ? "dark" : "light";
+      setInternalTheme(newTheme);
       document.documentElement.classList.toggle("dark", newTheme === "dark");
     }
   };
@@ -1631,6 +1774,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       addMessage("user", mensajeAEnviar);
       setUserInput("");
       setIsTyping(true);
+      setIsLoadingIA(true);
 
       if (chatMode === "ia" && assistantAnalysis) {
         response = await consultarIAProyecto(mensajeAEnviar);
@@ -1638,17 +1782,19 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         response = await chatGeneralIA(mensajeAEnviar);
       }
 
-      setIsTyping(false);
-      console.log("Respuesta:", response);
-
       if (response.respuesta) {
         addMessage("bot", response.respuesta);
       } else {
         addMessage("bot", "Lo siento, no pude procesar tu mensaje.");
       }
+
+      setIsLoadingIA(false);
+      setIsTyping(false);
+      console.log("Respuesta:", response);
     } catch (error) {
       console.error("Error al enviar mensaje:", error);
       setIsTyping(false);
+      setIsLoadingIA(false);
       addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
     }
   };
@@ -1745,12 +1891,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       {!voiceMode.voiceMode && (
         <ChatInputBar
           userInput={userInput}
-          setUserInput={setUserInput}
+          setUserInput={handleUserInputChange}
           onSubmit={handleUserInput}
-          onVoiceClick={startRecordingWrapper}
+          onVoiceClick={startChatVoiceRecording}
           isRecording={voiceRecognition.isRecording}
-          canUserType={canUserType && !isLoadingIA}
+          canUserType={canUserType}
           theme={theme}
+          isLoadingIA={isLoadingIA}
           inputRef={inputRef}
           chatMode={chatMode}
           isSpeaking={isSpeaking}

@@ -8,8 +8,6 @@ import type {
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 const BASE_URL_BACK = process.env.NEXT_PUBLIC_BASE_URL_BACK;
 
-// Funciones del api de anfeta
-
 export async function fetchColaboradores(): Promise<Colaborador[]> {
   try {
     const response = await fetch(`${BASE_URL}/api/users/search`);
@@ -400,13 +398,16 @@ export async function guardarExplicaciones(payload: {
 
 export async function verificarDescripcion(sessionId: string) {
   try {
-    const response = await fetch(`${BASE_URL_BACK}/assistant/validar-explicacion`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: sessionId,
-      }),
-    });
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/validar-explicacion`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: sessionId,
+        }),
+      },
+    );
 
     if (response.ok) {
       const data = await response.json();
@@ -443,9 +444,8 @@ export async function guardarReporteTarde(payload: any) {
   }
 }
 
-
 export async function obtenerConversacionCompleta(
-  sessionId: string
+  sessionId: string,
 ): Promise<{ success: boolean; data: any | null }> {
   try {
     const response = await fetch(
@@ -456,7 +456,7 @@ export async function obtenerConversacionCompleta(
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -471,18 +471,14 @@ export async function obtenerConversacionCompleta(
   }
 }
 
-
 export async function chatGeneralIA(mensaje: string) {
   try {
-    const response = await fetch(
-      `${BASE_URL_BACK}/assistant/consultar-ia`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensaje: mensaje }),
-      },
-    );
+    const response = await fetch(`${BASE_URL_BACK}/assistant/consultar-ia`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mensaje: mensaje }),
+    });
 
     if (!response.ok) throw new Error(`Error: ${response.status}`);
     const data = await response.json();
@@ -501,7 +497,7 @@ export async function consultarIAProyecto(mensaje: string) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-       body: JSON.stringify({ mensaje: mensaje }),
+        body: JSON.stringify({ mensaje: mensaje }),
       },
     );
 
@@ -513,4 +509,3 @@ export async function consultarIAProyecto(mensaje: string) {
     return { success: false, actividades: [] };
   }
 }
-

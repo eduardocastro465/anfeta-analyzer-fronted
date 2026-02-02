@@ -15,6 +15,7 @@ interface ChatInputBarProps {
   inputRef: React.RefObject<HTMLInputElement | null>;
   chatMode?: "normal" | "ia";
   onToggleChatMode?: () => void;
+  isLoadingIA?: boolean;
   isSpeaking?: boolean; // ✅ Nueva prop
 }
 
@@ -28,11 +29,12 @@ export function ChatInputBar({
   theme,
   inputRef,
   chatMode = "normal",
+  isLoadingIA = false,
   onToggleChatMode,
   isSpeaking = false, // ✅ Nueva prop con valor por defecto
 }: ChatInputBarProps) {
   // ✅ Determinar si se puede interactuar
-  const isInteractionDisabled = !canUserType || isSpeaking;
+  const isInteractionDisabled = !canUserType || isSpeaking || isLoadingIA;
 
   const getPlaceholder = () => {
     if (isSpeaking) return "El asistente está hablando...";
@@ -128,28 +130,23 @@ export function ChatInputBar({
           <Button
             type="button"
             onClick={onVoiceClick}
-            disabled={isInteractionDisabled} // ✅ Bloqueado si está hablando
-            className={`h-12 w-12 p-0 rounded-lg transition-all ${
-              isRecording
-                ? "bg-red-600 hover:bg-red-700 animate-pulse"
-                : "bg-[#6841ea] hover:bg-[#5a36d4]"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-            title={
-              isSpeaking
-                ? "Espera a que termine de hablar"
-                : isRecording
-                  ? "Detener reconocimiento de voz"
-                  : "Iniciar reconocimiento de voz"
-            }
+            disabled={isInteractionDisabled}
+            className={`
+    relative h-12 w-12 p-0 rounded-full transition-all
+    ${
+      isRecording
+        ? "bg-red-600 scale-110 shadow-lg shadow-red-500/40"
+        : "bg-[#6841ea] hover:bg-[#5a36d4]"
+    }
+    disabled:opacity-50 disabled:cursor-not-allowed
+  `}
+            title={isRecording ? "Escuchando..." : "Hablar"}
           >
-            {isRecording ? (
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-75"></div>
-                <MicOff className="w-5 h-5 text-white relative z-10" />
-              </div>
-            ) : (
-              <Mic className="w-5 h-5 text-white" />
+            {isRecording && (
+              <span className="absolute inset-0 rounded-full animate-ping bg-red-500/50"></span>
             )}
+
+            <Mic className="w-5 h-5 text-white relative z-10" />
           </Button>
 
           {/* Botón de enviar */}

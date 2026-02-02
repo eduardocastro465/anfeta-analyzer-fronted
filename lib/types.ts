@@ -1,3 +1,5 @@
+import { MensajeHistorial } from "./interface/historial.interface";
+
 export interface Project {
   id: string | null;
   name: string;
@@ -319,19 +321,26 @@ export interface TaskExplanation {
 }
 export interface ChatBotProps {
   colaborador: Colaborador;
-  actividades: any[];
+  actividades?: any[];
   onLogout: () => void;
-  conversacionActiva: any;
-  onNuevaConversacion: (nuevaConv: ConversacionSidebar) => void;
-  onActualizarNombre: (sessionId: string, nuevoNombre: string) => void;
-  onActualizarTyping: (typing: boolean) => void;
+  theme?: "light" | "dark";
+  onToggleTheme?: () => void;
+  conversacionActiva?: string | null;
+  mensajesRestaurados?: MensajeHistorial[];
+  analisisRestaurado?: AssistantAnalysis | null;
+  onNuevaConversacion?: (conv: ConversacionSidebar) => void;
+  onActualizarNombre?: (sessionId: string, nombre: string) => void;
+  onActualizarTyping?: (isTyping: boolean) => void;
+
 }
 
 export type ChatStep =
   | "welcome"
   | "loading-analysis"
   | "show-analysis"
-  | "finished";
+  | "finished"
+  | "ready"
+  | "error";
 
 export type VoiceModeStep =
   | "idle"

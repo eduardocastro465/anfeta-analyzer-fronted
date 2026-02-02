@@ -34,7 +34,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "../anfeta-analyzer-fronted-prueba/lib/axios.ts"  ],
   "exclude": [
     "node_modules"
   ]

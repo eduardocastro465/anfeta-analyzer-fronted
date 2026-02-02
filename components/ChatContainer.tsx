@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
-import type { Colaborador } from "@/lib/types";
+import type { Colaborador, Message, AssistantAnalysis } from "@/lib/types";
+import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { obtenerLabelDia } from "@/util/labelDia";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -12,8 +13,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Plus,
 } from "lucide-react";
 import { ChatBot } from "./chat-bot";
+import { obtenerMensajesConversacion } from "@/lib/historial.service";
 
 interface ChatContainerProps {
   colaborador: Colaborador;
@@ -35,7 +38,7 @@ export function ChatContainer({
   actividades,
   onLogout,
 }: ChatContainerProps) {
-  const [theme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversaciones, setConversaciones] = useState<ConversacionSidebar[]>(
     [],
@@ -45,28 +48,43 @@ export function ChatContainer({
   );
   const [sidebarCargando, setSidebarCargando] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
+
+  // Estados para restauración
+  const [mensajesRestaurados, setMensajesRestaurados] = useState<
+    MensajeHistorial[]
+  >([]);
+  const [analisisRestaurado, setAnalisisRestaurado] =
+    useState<AssistantAnalysis | null>(null);
+  const [cargandoConversacion, setCargandoConversacion] = useState(false);
+
   const router = useRouter();
 
-  // Agrupar conversaciones por día (memoizado)
-  const conversacionesAgrupadas = useMemo(() => {
-    return conversaciones.reduce(
-      (acc, conv) => {
-        const dia = obtenerLabelDia(conv.createdAt);
-        acc[dia] ??= [];
-        acc[dia].push(conv);
-        return acc;
-      },
-      {} as Record<string, ConversacionSidebar[]>,
-    );
-  }, [conversaciones]);
+  // Agrupar conversaciones por día
+  const conversacionesAgrupadas = conversaciones.reduce(
+    (acc, conv) => {
+      const dia = obtenerLabelDia(conv.createdAt);
+      acc[dia] ??= [];
+      acc[dia].push(conv);
+      return acc;
+    },
+    {} as Record<string, ConversacionSidebar[]>,
+  );
 
-  // Dark mode
+  const toggleTheme = () => {
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", newTheme === "dark");
+    }
+  };
+
+  // Dark mode inicial
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.classList.add("dark");
   }, []);
 
-  // Inicialización y carga de historial
+  // Inicialización
   useEffect(() => {
     const init = async () => {
       const user = await validateSession();
@@ -81,7 +99,7 @@ export function ChatContainer({
     init();
   }, [router]);
 
-  // Función para cargar/recargar el historial
+  // Cargar historial del sidebar
   const cargarHistorial = async () => {
     try {
       setSidebarCargando(true);
@@ -100,18 +118,78 @@ export function ChatContainer({
     }
   };
 
-  // Seleccionar conversación
-  const seleccionarConversacion = (conv: ConversacionSidebar) => {
-    setConversacionActiva(conv.sessionId);
+  // ✅ Restaurar conversación
+  const restaurarConversacion = async (sessionId: string) => {
+    try {
+      setCargandoConversacion(true);
+      setConversacionActiva(sessionId);
+
+      console.log("📥 Restaurando conversación:", sessionId);
+
+      const response = await obtenerMensajesConversacion(sessionId);
+
+      if (response.success) {
+        console.log("✅ Conversación obtenida:", {
+          mensajes: response.mensajes?.length || 0,
+          tieneAnalisis: !!response.ultimoAnalisis,
+          estadoConversacion: response.estadoConversacion,
+        });
+
+        setMensajesRestaurados(response.mensajes || []);
+        setAnalisisRestaurado(response.ultimoAnalisis || null);
+
+        // Actualizar nombre si cambió
+        if (response.nombreConversacion) {
+          const convIndex = conversaciones.findIndex(
+            (c) => c.sessionId === sessionId,
+          );
+          if (
+            convIndex !== -1 &&
+            conversaciones[convIndex].nombreConversacion !==
+              response.nombreConversacion
+          ) {
+            actualizarNombreConversacion(
+              sessionId,
+              response.nombreConversacion,
+            );
+          }
+        }
+      } else {
+        console.warn("⚠️ No se pudo cargar la conversación");
+        setMensajesRestaurados([]);
+        setAnalisisRestaurado(null);
+      }
+    } catch (error: any) {
+      console.error("❌ Error al restaurar conversación:", error);
+      setMensajesRestaurados([]);
+      setAnalisisRestaurado(null);
+    } finally {
+      setCargandoConversacion(false);
+    }
   };
 
-  // Agregar nueva conversación (llamar desde ChatBot cuando se cree una nueva)
+  // Seleccionar conversación
+  const seleccionarConversacion = async (conv: ConversacionSidebar) => {
+    // Si ya está activa, no hacer nada
+    if (conversacionActiva === conv.sessionId) return;
+
+    await restaurarConversacion(conv.sessionId);
+  };
+
+  // Crear nueva conversación
+  const crearNuevaConversacion = () => {
+    setConversacionActiva(null);
+    setMensajesRestaurados([]);
+    setAnalisisRestaurado(null);
+  };
+
+  // Agregar nueva conversación al sidebar
   const agregarNuevaConversacion = (nuevaConv: ConversacionSidebar) => {
     setConversaciones((prev) => [nuevaConv, ...prev]);
     setConversacionActiva(nuevaConv.sessionId);
   };
 
-  // Actualizar nombre de conversación (cuando el backend genere el título)
+  // Actualizar nombre de conversación
   const actualizarNombreConversacion = (
     sessionId: string,
     nuevoNombre: string,
@@ -161,6 +239,21 @@ export function ChatContainer({
               </div>
             </div>
 
+            {/* Botón Nueva Conversación */}
+            <div className="p-3">
+              <button
+                onClick={crearNuevaConversacion}
+                className={`w-full p-2.5 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                  theme === "dark"
+                    ? "bg-[#6841ea] hover:bg-[#5a36d4]"
+                    : "bg-[#6841ea] hover:bg-[#5a36d4]"
+                } text-white font-medium`}
+              >
+                <Plus className="w-4 h-4" />
+                Nueva conversación
+              </button>
+            </div>
+
             {/* Lista de Conversaciones */}
             <ScrollArea className="flex-1 px-2 py-2">
               <div className="space-y-4">
@@ -180,6 +273,10 @@ export function ChatContainer({
                         <button
                           key={conv.sessionId}
                           onClick={() => seleccionarConversacion(conv)}
+                          disabled={
+                            cargandoConversacion &&
+                            conversacionActiva === conv.sessionId
+                          }
                           className={`w-full text-left p-2.5 rounded-lg transition-all group relative ${
                             conversacionActiva === conv.sessionId
                               ? theme === "dark"
@@ -188,7 +285,7 @@ export function ChatContainer({
                               : theme === "dark"
                                 ? "hover:bg-[#1a1a1a]"
                                 : "hover:bg-gray-100"
-                          }`}
+                          } ${cargandoConversacion && conversacionActiva === conv.sessionId ? "opacity-50" : ""}`}
                         >
                           <div className="flex items-start gap-2">
                             <MessageSquare
@@ -204,7 +301,7 @@ export function ChatContainer({
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">
                                 {conv.nombreConversacion ||
-                                  `${new Date(conv.createdAt).toLocaleDateString("es-MX")}`}
+                                  `Chat ${new Date(conv.createdAt).toLocaleDateString("es-MX")}`}
                               </p>
 
                               <p className="text-xs text-gray-500 mt-0.5">
@@ -226,13 +323,27 @@ export function ChatContainer({
                               </p>
                             </div>
 
+                            {/* Indicadores */}
+                            {cargandoConversacion &&
+                              conversacionActiva === conv.sessionId && (
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                  <Loader2 className="w-4 h-4 animate-spin text-[#6841ea]" />
+                                </div>
+                              )}
+
                             {conversacionActiva === conv.sessionId &&
-                              isTyping && (
+                              isTyping &&
+                              !cargandoConversacion && (
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2">
                                   <Loader2 className="w-4 h-4 animate-spin text-[#6841ea]" />
                                 </div>
                               )}
                           </div>
+
+                          {/* Indicador de conversación activa */}
+                          {conversacionActiva === conv.sessionId && (
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#6841ea] rounded-r-full" />
+                          )}
                         </button>
                       ))}
                     </div>
@@ -309,7 +420,11 @@ export function ChatContainer({
           colaborador={colaborador}
           actividades={actividades}
           onLogout={onLogout}
+          theme={theme}
+          onToggleTheme={toggleTheme}
           conversacionActiva={conversacionActiva}
+          mensajesRestaurados={mensajesRestaurados}
+          analisisRestaurado={analisisRestaurado}
           onNuevaConversacion={agregarNuevaConversacion}
           onActualizarNombre={actualizarNombreConversacion}
           onActualizarTyping={setIsTyping}

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { MessageItem } from "./MessageItem";
 import { MessageListProps } from "@/lib/types";
 import { useEffect, useState, useMemo } from "react";
-import { verificarHorarioReporte } from "@/util/HorarioReporte";
 
 export function MessageList({
   messages,
@@ -21,9 +20,6 @@ export function MessageList({
   onVoiceMessageClick,
   scrollRef,
   assistantAnalysis,
-  reportConfig,
-  onOpenReport,
-  onStartVoiceMode,
 }: MessageListProps) {
   // ========== ESTADOS ==========
   const [tareasConDescripcion] = useState<Set<string>>(
@@ -62,23 +58,6 @@ export function MessageList({
 
   const hayTareas = actividadesConTareasPendientes.length > 0;
 
-  // Calcular total de tareas pendientes
-  const totalTareasPendientes = useMemo(() => {
-    return actividadesConTareasPendientes.reduce(
-      (acc, revision) => acc + revision.tareasConTiempo.length,
-      0,
-    );
-  }, [actividadesConTareasPendientes]);
-
-  // Determinar si es hora de reporte - ahora depende de currentTime
-  const esHoraReporte = useMemo(() => {
-    if (!reportConfig?.horaInicio || !reportConfig?.horaFin) return false;
-
-    return verificarHorarioReporte(
-      reportConfig.horaInicio,
-      reportConfig.horaFin,
-    );
-  }, [reportConfig, currentTime]); // Agregamos currentTime como dependencia
 
   // ✅ Auto-scroll cuando hay nuevas tareas
   useEffect(() => {
@@ -113,21 +92,6 @@ export function MessageList({
       {/* Indicador de typing */}
       {isTyping && <TypingIndicator theme={theme} />}
 
-      {/* Panel de tareas */}
-      {hayTareas && assistantAnalysis && (
-        <TasksPanel
-          actividadesConTareasPendientes={actividadesConTareasPendientes}
-          totalTareasPendientes={totalTareasPendientes}
-          esHoraReporte={esHoraReporte}
-          theme={theme}
-          assistantAnalysis={assistantAnalysis}
-          onOpenReport={onOpenReport}
-          onStartVoiceMode={onStartVoiceMode}
-        />
-      )}
-
-      {/* Mensaje cuando no hay tareas */}
-      {!hayTareas && assistantAnalysis && <NoTasksMessage theme={theme} />}
     </div>
   );
 }
