@@ -73,9 +73,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   const welcomeSentRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const pipWindowRef = useRef<Window | null>(null);
-  const voiceTranscriptRef = useRef<string>("");
   const explanationProcessedRef = useRef<boolean>(false);
-  const recognitionRef = useRef<any>(null);
+  // const recognitionRef = useRef<any>(null);
+  const assistantAnalysisRef = useRef<AssistantAnalysis | null>(null);
 
   // ==================== HOOKS PERSONALIZADOS ====================
   const voiceRecognition = useVoiceRecognition();
@@ -116,9 +116,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   );
 
   // ==================== ESTADOS: VOICE RECOGNITION (MODAL REPORTE) ====================
-  const [isRecording, setIsRecording] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
+  // const [isRecording, setIsRecording] = useState(false);
+  // const [isListening, setIsListening] = useState(false);
+  // const [voiceTranscript, setVoiceTranscript] = useState("");
 
   // ==================== ESTADOS: REPORTE DE ACTIVIDADES ====================
   const [actividadesDiarias, setActividadesDiarias] = useState<
@@ -169,6 +169,14 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         "bot",
         `¡Hola ${displayName}! 👋 Soy tu asistente.`,
         500,
+      );
+
+      addMessageWithTyping(
+        "system",
+        <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+          <Brain className="w-4 h-4 text-[#6841ea]" />
+          {"Obteniendo análisis de tus actividades..."}
+        </div>,
       );
 
       fetchAssistantAnalysis();
@@ -269,6 +277,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         }
         pipWindowRef.current.close();
       }
+      voiceRecognition.stopRecording();
       stopVoice();
     };
 
@@ -283,9 +292,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       if (pipWindowRef.current && !pipWindowRef.current.closed) {
         pipWindowRef.current.close();
       }
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
+      voiceRecognition.stopRecording();
       stopVoice();
     };
   }, [isInPiPWindow, stopVoice]);
@@ -393,9 +400,19 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     speakText(texto);
 
     setTimeout(() => {
-      setIsRecording(true);
-      setIsListening(true);
-      startRecording();
+      // ✅ Usar el hook
+      voiceRecognition.startRecording(
+        (transcript) => {
+          console.log("Transcripción del reporte:", transcript);
+          if (transcript.trim()) {
+            procesarRespuestaReporte(transcript);
+          }
+        },
+        (error) => {
+          console.error("Error:", error);
+          speakText("Error con el micrófono.");
+        },
+      );
     }, texto.length * 50);
   };
 
@@ -451,8 +468,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setTimeout(() => {
         setPasoModalVoz("esperando");
         explanationProcessedRef.current = false;
-        setVoiceTranscript("");
-        voiceTranscriptRef.current = "";
         setIndicePendienteActual((prev) => prev + 1);
 
         // Si hay más tareas, preguntarlas
@@ -471,20 +486,50 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const handleStartVoiceMode = () => {
-    if (!assistantAnalysis) {
+    console.log("========== INICIANDO MODO VOZ ==========");
+
+    // ✅ USAR EL REF EN LUGAR DEL ESTADO
+    const analysis = assistantAnalysisRef.current;
+
+    console.log("📊 analysis (desde ref):", analysis);
+
+    if (!analysis) {
+      console.log("❌ No hay analysis");
       speakText("No hay actividades para explicar.");
       return;
     }
 
-    const activitiesWithTasks =
-      assistantAnalysis.data.revisionesPorActividad.filter(
-        (actividad) => actividad.tareasConTiempo.length > 0,
-      );
+    console.log(
+      "📋 revisionesPorActividad:",
+      analysis.data.revisionesPorActividad,
+    );
+
+    const activitiesWithTasks = analysis.data.revisionesPorActividad
+      .filter(
+        (actividad) =>
+          actividad.tareasConTiempo && actividad.tareasConTiempo.length > 0,
+      )
+      .map((actividad) => ({
+        actividadId: actividad.actividadId,
+        actividadTitulo: actividad.actividadTitulo,
+        actividadHorario: actividad.actividadHorario,
+        tareas: actividad.tareasConTiempo.map((tarea) => ({
+          ...tarea,
+          actividadId: actividad.actividadId,
+          actividadTitulo: actividad.actividadTitulo,
+        })),
+      }));
+
+    console.log("✅ Actividades con tareas:", activitiesWithTasks);
+    console.log("📝 Cantidad:", activitiesWithTasks.length);
 
     if (activitiesWithTasks.length === 0) {
+      console.log("❌ No hay actividades con tareas");
       speakText("No hay tareas con tiempo asignado para explicar.");
       return;
     }
+
+    console.log("🎤 Activando modo voz...");
 
     // Activar modo voz
     voiceMode.setVoiceMode(true);
@@ -495,9 +540,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     voiceMode.setTaskExplanations([]);
 
     // Mensaje de bienvenida
-    speakText(
-      `Vamos a explicar ${activitiesWithTasks.length} actividades con tareas programadas. ¿Listo para comenzar?`,
-    );
+    const mensaje = `Vamos a explicar ${activitiesWithTasks.length} actividad${activitiesWithTasks.length !== 1 ? "es" : ""} con tareas programadas. ¿Listo para comenzar?`;
+    console.log("🔊 Mensaje:", mensaje);
+    speakText(mensaje);
   };
 
   const guardarReporteDiario = async () => {
@@ -650,7 +695,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       setTimeout(() => {
         speakText(
-          "¡Perfecto! Has explicado todas las tareas. ¿Quieres enviar este reporte?",
+          "¡Perfecto! Has explicado todas las tareas. presiona el boton de comenzar para iniciar tu jornada para comenzar a trabajar.",
         );
       }, 500);
       return;
@@ -754,14 +799,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
   };
 
   const startRecordingWrapper = () => {
+    // ✅ Sin callbacks - la transcripción se procesa en el useEffect
     voiceRecognition.startRecording(
-      (transcript) => {
-        console.log("Transcripción completa:", transcript);
-
-        if (voiceMode.voiceMode) {
-          processVoiceCommand(transcript);
-        }
-      },
+      undefined, // No necesitamos onResult aquí
       (error) => {
         console.error("Error en reconocimiento de voz:", error);
         speakText(
@@ -1240,9 +1280,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         );
 
         setTimeout(() => {
+          console.log("hayTareas", analysis);
           const hayTareas = analysis.data.revisionesPorActividad.some(
             (r) => r.tareasConTiempo.length > 0,
           );
+
+          console.log("hayTareas", hayTareas);
 
           if (hayTareas) {
             // Filtrar solo las que tienen tareas
@@ -1283,18 +1326,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setIsTyping(true);
       setStep("loading-analysis");
 
-      if (!isRestoration) {
-        addMessage(
-          "system",
-          <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-            <Brain className="w-4 h-4 text-[#6841ea]" />
-            {showAll
-              ? "Obteniendo todas tus actividades..."
-              : "Obteniendo análisis de tus actividades..."}
-          </div>,
-        );
-      }
-
       const requestBody = {
         email: colaborador.email,
         showAll: showAll,
@@ -1320,23 +1351,23 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           tiempoEstimadoTotal: data.metrics?.tiempoEstimadoTotal || "0h 0m",
         },
         data: {
-          actividades:
-            data.data?.actividades?.map((a: any) => ({
-              id: a.id,
-              titulo: a.titulo,
-              horario: a.horario,
-              status: a.status,
-              proyecto: a.proyecto,
-              esHorarioLaboral: a.esHorarioLaboral || false,
-              tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
-            })) || [],
-          revisionesPorActividad:
-            data.data?.revisionesPorActividad?.map((act: any) => ({
-              actividadId: act.actividadId,
-              actividadTitulo: act.actividadTitulo,
-              actividadHorario: act.actividadHorario,
-              tareasConTiempo:
-                act.tareasConTiempo?.map((t: any) => ({
+          actividades: (data.data?.actividades || []).map((a: any) => ({
+            id: a.id,
+            titulo: a.titulo,
+            horario: a.horario,
+            status: a.status,
+            proyecto: a.proyecto,
+            esHorarioLaboral: a.esHorarioLaboral || false,
+            tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
+          })),
+
+          revisionesPorActividad: (data.data?.revisionesPorActividad || []).map(
+            (act: any) => {
+              console.log("🔍 Mapeando actividad:", act.actividadTitulo);
+              console.log("   Tareas originales:", act.tareasConTiempo);
+
+              const tareasMapeadas = (act.tareasConTiempo || []).map(
+                (t: any) => ({
                   id: t.id,
                   nombre: t.nombre,
                   terminada: t.terminada || false,
@@ -1346,17 +1377,47 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   fechaFinTerminada: t.fechaFinTerminada || null,
                   diasPendiente: t.diasPendiente || 0,
                   prioridad: t.prioridad || "BAJA",
-                })) || [],
-              totalTareasConTiempo: act.totalTareasConTiempo || 0,
-              tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
-              tiempoTotal: act.tiempoTotal || 0,
-              tiempoFormateado: act.tiempoFormateado || "0h 0m",
-            })) || [],
+                }),
+              );
+
+              console.log("   Tareas mapeadas:", tareasMapeadas);
+
+              return {
+                actividadId: act.actividadId,
+                actividadTitulo: act.actividadTitulo,
+                actividadHorario: act.actividadHorario,
+                tareasConTiempo: tareasMapeadas,
+                totalTareasConTiempo: act.totalTareasConTiempo || 0,
+                tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
+                tiempoTotal: act.tiempoTotal || 0,
+                tiempoFormateado: act.tiempoFormateado || "0h 0m",
+              };
+            },
+          ),
         },
         multiActividad: data.multiActividad || false,
       };
 
+      console.log("========== GUARDANDO ANÁLISIS EN ESTADO ==========");
+      console.log("📊 adaptedData:", adaptedData);
+      console.log(
+        "📋 revisionesPorActividad:",
+        adaptedData.data.revisionesPorActividad,
+      );
+
+      assistantAnalysisRef.current = adaptedData;
+
+      // ✅ Guardar en el estado (para re-renders)
       setAssistantAnalysis(adaptedData);
+
+      setTimeout(() => {
+        console.log("✅ Estado guardado, verificando...");
+        console.log(
+          "📊 assistantAnalysis después de setear:",
+          assistantAnalysis,
+        );
+      }, 100);
+
       showAssistantAnalysis(adaptedData, isRestoration);
     } catch (error) {
       console.error("Error al obtener análisis del asistente:", error);
@@ -1382,128 +1443,125 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }
   };
 
-  const startRecording = () => {
-    if (typeof window === "undefined") return;
-    if (
-      !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
-    ) {
-      alert("Tu navegador no soporta reconocimiento de voz");
-      return;
-    }
+  // const startRecording = () => {
+  //   if (typeof window === "undefined") return;
+  //   if (
+  //     !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
+  //   ) {
+  //     alert("Tu navegador no soporta reconocimiento de voz");
+  //     return;
+  //   }
 
-    if (isRecording) {
-      stopRecording();
-      return;
-    }
+  //   if (isRecording) {
+  //     stopRecording();
+  //     return;
+  //   }
 
-    window.speechSynthesis.cancel();
+  //   window.speechSynthesis.cancel();
 
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      } catch (e) {
-        console.log("Error al detener reconocimiento previo:", e);
-      }
-    }
+  //   if (recognitionRef.current) {
+  //     try {
+  //       recognitionRef.current.stop();
+  //       recognitionRef.current = null;
+  //     } catch (e) {
+  //       console.log("Error al detener reconocimiento previo:", e);
+  //     }
+  //   }
 
-    setIsRecording(true);
-    setIsListening(true);
-    setVoiceTranscript("");
-    voiceTranscriptRef.current = "";
+  //   setIsRecording(true);
+  //   setIsListening(true);
+  //   setVoiceTranscript("");
+  //   voiceTranscriptRef.current = "";
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = "es-MX";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+  //   const SpeechRecognition =
+  //     (window as any).SpeechRecognition ||
+  //     (window as any).webkitSpeechRecognition;
+  //   const recognition = new SpeechRecognition();
+  //   recognition.lang = "es-MX";
+  //   recognition.continuous = true;
+  //   recognition.interimResults = true;
+  //   recognition.maxAlternatives = 1;
 
-    recognitionRef.current = recognition;
+  //   recognitionRef.current = recognition;
 
-    recognition.onstart = () => {
-      console.log("✅ Reconocimiento de voz INICIADO");
-      setIsListening(true);
-    };
+  //   recognition.onstart = () => {
+  //     console.log("✅ Reconocimiento de voz INICIADO");
+  //     setIsListening(true);
+  //   };
 
-    recognition.onresult = (event: any) => {
-      // Acumular TODOS los resultados para evitar pérdida al pausar
-      let finalTranscript = "";
-      let interimTranscript = "";
+  //   recognition.onresult = (event: any) => {
+  //     // Acumular TODOS los resultados para evitar pérdida al pausar
+  //     let finalTranscript = "";
+  //     let interimTranscript = "";
 
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript + " ";
-        } else {
-          interimTranscript += result[0].transcript;
-        }
-      }
+  //     for (let i = 0; i < event.results.length; i++) {
+  //       const result = event.results[i];
+  //       if (result.isFinal) {
+  //         finalTranscript += result[0].transcript + " ";
+  //       } else {
+  //         interimTranscript += result[0].transcript;
+  //       }
+  //     }
 
-      const fullTranscript = (finalTranscript + interimTranscript).trim();
-      voiceTranscriptRef.current = fullTranscript;
-      setVoiceTranscript(fullTranscript);
-    };
+  //     const fullTranscript = (finalTranscript + interimTranscript).trim();
+  //     voiceTranscriptRef.current = fullTranscript;
+  //     setVoiceTranscript(fullTranscript);
+  //   };
 
-    recognition.onerror = (event: any) => {
-      console.warn("⚠️ SpeechRecognition error:", event.error);
+  //   recognition.onerror = (event: any) => {
+  //     console.warn("⚠️ SpeechRecognition error:", event.error);
 
-      if (event.error === "aborted") {
-        console.log("🔄 Abortado intencionalmente");
-        setIsListening(false);
-        setIsRecording(false);
+  //     if (event.error === "aborted") {
+  //       console.log("🔄 Abortado intencionalmente");
+  //       setIsListening(false);
+  //       setIsRecording(false);
 
-        return;
-      }
+  //       return;
+  //     }
 
-      setIsListening(false);
-      setIsRecording(false);
-    };
+  //     setIsListening(false);
+  //     setIsRecording(false);
+  //   };
 
-    recognition.onend = () => {
-      console.log("🛑 Reconocimiento de voz FINALIZADO");
-      setIsListening(false);
-      setIsRecording(false);
-    };
+  //   recognition.onend = () => {
+  //     console.log("🛑 Reconocimiento de voz FINALIZADO");
+  //     setIsListening(false);
+  //     setIsRecording(false);
+  //   };
 
-    setTimeout(() => {
-      try {
-        recognition.start();
-        console.log(" Iniciando reconocimiento...");
-      } catch (error) {
-        console.error("❌ Error al iniciar reconocimiento:", error);
-        setIsListening(false);
-        setIsRecording(false);
+  //   setTimeout(() => {
+  //     try {
+  //       recognition.start();
+  //       console.log(" Iniciando reconocimiento...");
+  //     } catch (error) {
+  //       console.error("❌ Error al iniciar reconocimiento:", error);
+  //       setIsListening(false);
+  //       setIsRecording(false);
 
-        setTimeout(() => {
-          try {
-            recognition.start();
-          } catch (retryError) {
-            console.error("❌ Error en reintento:", retryError);
-            alert(
-              "No se pudo acceder al micrófono. Por favor, verifica los permisos.",
-            );
-          }
-        }, 300);
-      }
-    }, 100);
-  };
+  //       setTimeout(() => {
+  //         try {
+  //           recognition.start();
+  //         } catch (retryError) {
+  //           console.error("❌ Error en reintento:", retryError);
+  //           alert(
+  //             "No se pudo acceder al micrófono. Por favor, verifica los permisos.",
+  //           );
+  //         }
+  //       }, 300);
+  //     }
+  //   }, 100);
+  // };
 
   const stopRecording = () => {
     console.log("========== DETENIENDO GRABACIÓN ==========");
 
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    setIsRecording(false);
-    setIsListening(false);
+    // ✅ Usar el hook
+    voiceRecognition.stopRecording();
 
-    const currentTranscript = voiceTranscriptRef.current;
+    const currentTranscript = voiceRecognition.voiceTranscript;
     console.log("📝 Transcripción capturada:", currentTranscript);
 
-    // ✅ VALIDAR QUE ESTEMOS EN MODO VOZ Y EN EL PASO CORRECTO
+    // Validar que estemos en modo voz
     if (
       voiceMode.voiceMode &&
       voiceMode.voiceStep === "listening-explanation" &&
@@ -1521,11 +1579,6 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       setTimeout(() => {
         voiceMode.setVoiceStep("waiting-for-explanation");
       }, 1000);
-    }
-
-    // Lógica del modal de reporte
-    if (modoVozReporte && voiceTranscriptRef.current.trim()) {
-      procesarRespuestaReporte(voiceTranscriptRef.current);
     }
   };
 

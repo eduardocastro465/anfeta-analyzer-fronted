@@ -83,51 +83,6 @@ export function MessageList({
 
   // ========== FUNCIONES ==========
 
-  // ✅ Función para verificar tareas con descripción (CORREGIDA)
-  const verificarTareasConDescripcion = useCallback(async () => {
-    if (!assistantAnalysis?.sessionId) return;
-
-    try {
-      const response = await verificarDescripcion(assistantAnalysis.sessionId);
-
-      if (response.valida && response.tareasConDescripcion) {
-        setTareasConDescripcion(new Set(response.tareasConDescripcion));
-      }
-    } catch (error) {
-      console.error("Error al verificar descripciones:", error);
-    }
-  }, [assistantAnalysis?.sessionId]);
-
-  // ========== EFFECTS ==========
-
-  // ✅ Verificar tareas con descripción al montar y cada 10 segundos
-  useEffect(() => {
-    if (!assistantAnalysis?.sessionId) return;
-
-    // Verificar inmediatamente al montar
-    verificarTareasConDescripcion();
-
-    // Intervalo de 10 segundos
-    const interval = setInterval(verificarTareasConDescripcion, 10000);
-
-    return () => clearInterval(interval);
-  }, [assistantAnalysis?.sessionId, verificarTareasConDescripcion]);
-
-  // ✅ Escuchar evento cuando se guardan explicaciones
-  useEffect(() => {
-    const handleExplanationsSaved = () => {
-      console.log("🔄 Evento: Explicaciones guardadas - Actualizando lista...");
-      // Verificar inmediatamente después de guardar
-      setTimeout(verificarTareasConDescripcion, 1000);
-    };
-
-    window.addEventListener("explanations-saved", handleExplanationsSaved);
-
-    return () => {
-      window.removeEventListener("explanations-saved", handleExplanationsSaved);
-    };
-  }, [verificarTareasConDescripcion]);
-
   // ✅ Auto-scroll cuando hay nuevas tareas
   useEffect(() => {
     if (!assistantAnalysis || !hayTareas || !scrollRef.current) return;

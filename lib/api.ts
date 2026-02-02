@@ -146,7 +146,7 @@ export async function sendPendienteValidarYGuardar(data: {
 }) {
   try {
     const response = await fetch(
-      `${BASE_URL_BACK}/assistant/validar-explicacion`,
+      `${BASE_URL_BACK}/assistant/validar-guardar-explicacion`,
       {
         method: "POST",
         credentials: "include",
@@ -400,7 +400,7 @@ export async function guardarExplicaciones(payload: {
 
 export async function verificarDescripcion(sessionId: string) {
   try {
-    const response = await fetch(`${BASE_URL_BACK}/validar-explicacion`, {
+    const response = await fetch(`${BASE_URL_BACK}/assistant/validar-explicacion`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
