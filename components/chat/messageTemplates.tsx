@@ -109,16 +109,19 @@ export const analysisTemplates = {
   }: MessageTemplateProps & { analysis: AssistantAnalysis }) => (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 mt-3">
+        {/* ========== TARJETA ALTA PRIORIDAD ========== */}
         <div
           className={`p-3 rounded-lg border ${
             theme === "dark"
-              ? "bg-[#1a1a1a] border-[#2a2a2a]"
-              : "bg-gray-50 border-gray-200"
+              ? "bg-gradient-to-br from-red-950/20 to-red-900/10 border-red-500/20"
+              : "bg-gradient-to-br from-red-50 to-red-100/50 border-red-200"
           }`}
         >
           <div className="flex items-center gap-2 mb-1">
             <Target className="w-3 h-3 text-red-500" />
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span className={`text-xs font-medium ${
+              theme === "dark" ? "text-red-300" : "text-red-700"
+            }`}>
               Alta
             </span>
           </div>
@@ -127,34 +130,42 @@ export const analysisTemplates = {
           </div>
         </div>
 
+        {/* ========== TARJETA TOTAL ========== */}
         <div
           className={`p-3 rounded-lg border ${
             theme === "dark"
-              ? "bg-[#1a1a1a] border-[#2a2a2a]"
-              : "bg-gray-50 border-gray-200"
+              ? "bg-gradient-to-br from-green-950/20 to-green-900/10 border-green-500/20"
+              : "bg-gradient-to-br from-green-50 to-green-100/50 border-green-200"
           }`}
         >
           <div className="flex items-center gap-2 mb-1">
             <FileText className="w-3 h-3 text-green-500" />
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span className={`text-xs font-medium ${
+              theme === "dark" ? "text-green-300" : "text-green-700"
+            }`}>
               Total
             </span>
           </div>
-          <div className="text-xl font-bold">
+          <div className={`text-xl font-bold ${
+            theme === "dark" ? "text-green-400" : "text-green-600"
+          }`}>
             {analysis.metrics.tareasConTiempo || 0}
           </div>
         </div>
 
+        {/* ========== TARJETA TIEMPO ========== */}
         <div
           className={`p-3 rounded-lg border ${
             theme === "dark"
-              ? "bg-[#1a1a1a] border-[#2a2a2a]"
-              : "bg-gray-50 border-gray-200"
+              ? "bg-gradient-to-br from-yellow-950/20 to-yellow-900/10 border-yellow-500/20"
+              : "bg-gradient-to-br from-yellow-50 to-yellow-100/50 border-yellow-200"
           }`}
         >
           <div className="flex items-center gap-2 mb-1">
             <Clock className="w-3 h-3 text-yellow-500" />
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span className={`text-xs font-medium ${
+              theme === "dark" ? "text-yellow-300" : "text-yellow-700"
+            }`}>
               Tiempo
             </span>
           </div>
@@ -164,18 +175,21 @@ export const analysisTemplates = {
         </div>
       </div>
 
+      {/* ========== TEXTO DESCRIPTIVO ========== */}
       {analysis.answer && (
         <div
           className={`p-3 rounded-lg border ${
             theme === "dark"
-              ? "bg-[#1a1a1a] border-[#2a2a2a]"
-              : "bg-gray-50 border-gray-200"
+              ? "bg-gradient-to-br from-[#6841ea]/10 to-[#8b5cf6]/5 border-[#6841ea]/20"
+              : "bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200"
           }`}
         >
           <div className="flex items-start gap-2">
-            <Bot className="w-4 h-4 text-[#6841ea] mt-0.5" />
+            <Bot className="w-4 h-4 text-[#6841ea] mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+              <p className={`text-sm leading-relaxed ${
+                theme === "dark" ? "text-gray-200" : "text-gray-700"
+              }`}>
                 {analysis.answer.split("\n\n")[0]}
               </p>
             </div>
@@ -185,7 +199,6 @@ export const analysisTemplates = {
     </div>
   ),
 };
-
 // ========== MENSAJES DE ÉXITO ==========
 
 export const successTemplates = {
@@ -201,7 +214,7 @@ export const successTemplates = {
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <div>
           <span className="font-medium">✅ Reporte guardado</span>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+          <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"} mt-1`}>
             Se actualizaron {count} tareas correctamente. ¡Buen trabajo hoy!
           </p>
         </div>

@@ -118,55 +118,54 @@ export function ChatContainer({
     }
   };
 
-  // ✅ Restaurar conversación
-  const restaurarConversacion = async (sessionId: string) => {
-    try {
-      setCargandoConversacion(true);
-      setConversacionActiva(sessionId);
+  // En ChatContainer.tsx
 
-      console.log("📥 Restaurando conversación:", sessionId);
+const restaurarConversacion = async (sessionId: string) => {
+  try {
+    setCargandoConversacion(true);
+    setConversacionActiva(sessionId);
+    
+    console.log("📥 Restaurando conversación:", sessionId);
+    
+    const response = await obtenerMensajesConversacion(sessionId);
+    
+    console.log("🔍 Respuesta completa del backend:", response);
+    
+    if (response.success && response.data) { // ✅ Acceder a response.data
+      const { data } = response; // ✅ Destructurar data
+      
+      console.log("✅ Conversación obtenida:", {
+        mensajes: data.mensajes?.length || 0,
+        tieneAnalisis: !!data.ultimoAnalisis,
+        estadoConversacion: data.estadoConversacion,
+        nombreConversacion: data.nombreConversacion
+      });
 
-      const response = await obtenerMensajesConversacion(sessionId);
-
-      if (response.success) {
-        console.log("✅ Conversación obtenida:", {
-          mensajes: response.mensajes?.length || 0,
-          tieneAnalisis: !!response.ultimoAnalisis,
-          estadoConversacion: response.estadoConversacion,
-        });
-
-        setMensajesRestaurados(response.mensajes || []);
-        setAnalisisRestaurado(response.ultimoAnalisis || null);
-
-        // Actualizar nombre si cambió
-        if (response.nombreConversacion) {
-          const convIndex = conversaciones.findIndex(
-            (c) => c.sessionId === sessionId,
-          );
-          if (
-            convIndex !== -1 &&
-            conversaciones[convIndex].nombreConversacion !==
-              response.nombreConversacion
-          ) {
-            actualizarNombreConversacion(
-              sessionId,
-              response.nombreConversacion,
-            );
-          }
+      // ✅ Acceder a través de data
+      setMensajesRestaurados(data.mensajes || []);
+      setAnalisisRestaurado(data.ultimoAnalisis || null);
+      
+      // Actualizar nombre si cambió
+      if (data.nombreConversacion) {
+        const convIndex = conversaciones.findIndex(c => c.sessionId === sessionId);
+        if (convIndex !== -1 && 
+            conversaciones[convIndex].nombreConversacion !== data.nombreConversacion) {
+          actualizarNombreConversacion(sessionId, data.nombreConversacion);
         }
-      } else {
-        console.warn("⚠️ No se pudo cargar la conversación");
-        setMensajesRestaurados([]);
-        setAnalisisRestaurado(null);
       }
-    } catch (error: any) {
-      console.error("❌ Error al restaurar conversación:", error);
+    } else {
+      console.warn("⚠️ No se pudo cargar la conversación");
       setMensajesRestaurados([]);
       setAnalisisRestaurado(null);
-    } finally {
-      setCargandoConversacion(false);
     }
-  };
+  } catch (error: any) {
+    console.error("❌ Error al restaurar conversación:", error);
+    setMensajesRestaurados([]);
+    setAnalisisRestaurado(null);
+  } finally {
+    setCargandoConversacion(false);
+  }
+};
 
   // Seleccionar conversación
   const seleccionarConversacion = async (conv: ConversacionSidebar) => {

@@ -64,8 +64,10 @@ import {
   validateExplanationLength,
 } from "@/util/voiceModeLogic";
 import { MessageList, NoTasksMessage, TasksPanel } from "./chat/MessageList";
+import { messageTemplates } from "./chat/messageTemplates";
 import { ChatInputBar } from "./chat/ChatInputBar";
 import { ReporteActividadesModal } from "./ReporteActividadesModal";
+import { useMessageRestoration } from "@/components/hooks/useMessageRestoration";
 
 export function ChatBot({
   colaborador,
@@ -150,7 +152,7 @@ export function ChatBot({
   const canUserType =
     step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
 
-  const [chatMode, setChatMode] = useState<"normal" | "ia">("normal");
+  const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
 
   const [internalTheme, setInternalTheme] = useState<"light" | "dark">("dark");
   const theme = externalTheme ?? internalTheme;
@@ -191,39 +193,115 @@ export function ChatBot({
     init();
   }, []);
 
-  useEffect(() => {
-    if (!conversacionActiva || !mensajesRestaurados?.length) return;
+  const handleStartVoiceMode = () => {
+    console.log("========== INICIANDO MODO VOZ ==========");
 
-    console.log("🔄 Restaurando conversación en ChatBot");
-    console.log("📝 Mensajes a restaurar:", mensajesRestaurados.length);
+    // ✅ USAR EL REF EN LUGAR DEL ESTADO
+    const analysis = assistantAnalysisRef.current;
 
-    // Mapeo simple de mensajes
-    const mensajes: Message[] = mensajesRestaurados.map((msg) => ({
-      id: msg._id || `${Date.now()}-${Math.random()}`,
-      type: msg.role === "usuario" ? "user" : "bot",
-      content: msg.contenido,
-      timestamp: new Date(msg.timestamp),
-    }));
+    console.log("📊 analysis (desde ref):", analysis);
 
-    setMessages(mensajes);
-
-    // Restaurar análisis si existe
-    if (analisisRestaurado) {
-      console.log("📊 Restaurando análisis del asistente");
-      assistantAnalysisRef.current = analisisRestaurado;
-      setAssistantAnalysis(analisisRestaurado);
+    if (!analysis) {
+      console.log("❌ No hay analysis");
+      speakText("No hay actividades para explicar.");
+      return;
     }
 
-    setStep("ready");
-    setIsTyping(false);
+    console.log(
+      "📋 revisionesPorActividad:",
+      analysis.data.revisionesPorActividad,
+    );
 
-    // Scroll al final
-    setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    }, 100);
-  }, [conversacionActiva, mensajesRestaurados, analisisRestaurado]);
+    const activitiesWithTasks = analysis.data.revisionesPorActividad
+      .filter(
+        (actividad) =>
+          actividad.tareasConTiempo && actividad.tareasConTiempo.length > 0,
+      )
+      .map((actividad) => ({
+        actividadId: actividad.actividadId,
+        actividadTitulo: actividad.actividadTitulo,
+        actividadHorario: actividad.actividadHorario,
+        tareas: actividad.tareasConTiempo.map((tarea) => ({
+          ...tarea,
+          actividadId: actividad.actividadId,
+          actividadTitulo: actividad.actividadTitulo,
+        })),
+      }));
+
+    console.log("✅ Actividades con tareas:", activitiesWithTasks);
+    console.log("📝 Cantidad:", activitiesWithTasks.length);
+
+    if (activitiesWithTasks.length === 0) {
+      console.log("❌ No hay actividades con tareas");
+      speakText("No hay tareas con tiempo asignado para explicar.");
+      return;
+    }
+
+    console.log("🎤 Activando modo voz...");
+
+    // Activar modo voz
+    voiceMode.setVoiceMode(true);
+    voiceMode.setVoiceStep("confirm-start");
+    voiceMode.setExpectedInputType("confirmation");
+    voiceMode.setCurrentActivityIndex(0);
+    voiceMode.setCurrentTaskIndex(0);
+    voiceMode.setTaskExplanations([]);
+
+    // Mensaje de bienvenida
+    const mensaje = `Vamos a explicar ${activitiesWithTasks.length} actividad${activitiesWithTasks.length !== 1 ? "es" : ""} con tareas programadas. ¿Listo para comenzar?`;
+    console.log("🔊 Mensaje:", mensaje);
+    speakText(mensaje);
+  };
+
+  // useEffect(() => {
+  //   if (!conversacionActiva || !mensajesRestaurados?.length) return;
+  //   console.log("🔄 Restaurando conversación en ChatBot");
+  //   console.log("📝 Mensajes a restaurar:", mensajesRestaurados.length);
+
+  //   // Mapeo simple de mensajes
+  //   const mensajes: Message[] = mensajesRestaurados.map((msg) => ({
+  //     id: msg._id || `${Date.now()}-${Math.random()}`,
+  //     type: msg.role === "usuario" ? "user" : "bot",
+  //     content: msg.contenido,
+  //     timestamp: new Date(msg.timestamp),
+  //   }));
+
+  //   setMessages(mensajes);
+
+  //   // Restaurar análisis si existe
+  //   if (analisisRestaurado) {
+  //     console.log("📊 Restaurando análisis del asistente");
+  //     assistantAnalysisRef.current = analisisRestaurado;
+  //     setAssistantAnalysis(analisisRestaurado);
+  //   }
+
+  //   setStep("ready");
+  //   setIsTyping(false);
+
+  //   // Scroll al final
+  //   setTimeout(() => {
+  //     if (scrollRef.current) {
+  //       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  //     }
+  //   }, 100);
+  // }, [conversacionActiva, mensajesRestaurados, analisisRestaurado]);
+
+  useMessageRestoration({
+    conversacionActiva,
+    mensajesRestaurados,
+    analisisRestaurado,
+    theme,
+    displayName,
+    email: colaborador.email,
+    onOpenReport: () => setMostrarModalReporte(true),
+    onStartVoiceMode: handleStartVoiceMode,
+    setMessages,
+    setStep,
+    setIsTyping,
+    setAssistantAnalysis,
+    assistantAnalysisRef,
+    scrollRef,
+  });
 
   useEffect(() => {
     if (!voiceRecognition.voiceTranscript) {
@@ -582,66 +660,6 @@ export function ChatBot({
         explanationProcessedRef.current = false;
       }, 1500);
     }
-  };
-
-  const handleStartVoiceMode = () => {
-    console.log("========== INICIANDO MODO VOZ ==========");
-
-    // ✅ USAR EL REF EN LUGAR DEL ESTADO
-    const analysis = assistantAnalysisRef.current;
-
-    console.log("📊 analysis (desde ref):", analysis);
-
-    if (!analysis) {
-      console.log("❌ No hay analysis");
-      speakText("No hay actividades para explicar.");
-      return;
-    }
-
-    console.log(
-      "📋 revisionesPorActividad:",
-      analysis.data.revisionesPorActividad,
-    );
-
-    const activitiesWithTasks = analysis.data.revisionesPorActividad
-      .filter(
-        (actividad) =>
-          actividad.tareasConTiempo && actividad.tareasConTiempo.length > 0,
-      )
-      .map((actividad) => ({
-        actividadId: actividad.actividadId,
-        actividadTitulo: actividad.actividadTitulo,
-        actividadHorario: actividad.actividadHorario,
-        tareas: actividad.tareasConTiempo.map((tarea) => ({
-          ...tarea,
-          actividadId: actividad.actividadId,
-          actividadTitulo: actividad.actividadTitulo,
-        })),
-      }));
-
-    console.log("✅ Actividades con tareas:", activitiesWithTasks);
-    console.log("📝 Cantidad:", activitiesWithTasks.length);
-
-    if (activitiesWithTasks.length === 0) {
-      console.log("❌ No hay actividades con tareas");
-      speakText("No hay tareas con tiempo asignado para explicar.");
-      return;
-    }
-
-    console.log("🎤 Activando modo voz...");
-
-    // Activar modo voz
-    voiceMode.setVoiceMode(true);
-    voiceMode.setVoiceStep("confirm-start");
-    voiceMode.setExpectedInputType("confirmation");
-    voiceMode.setCurrentActivityIndex(0);
-    voiceMode.setCurrentTaskIndex(0);
-    voiceMode.setTaskExplanations([]);
-
-    // Mensaje de bienvenida
-    const mensaje = `Vamos a explicar ${activitiesWithTasks.length} actividad${activitiesWithTasks.length !== 1 ? "es" : ""} con tareas programadas. ¿Listo para comenzar?`;
-    console.log("🔊 Mensaje:", mensaje);
-    speakText(mensaje);
   };
 
   const guardarReporteDiario = async () => {
@@ -1305,36 +1323,11 @@ export function ChatBot({
     if (!isRestoration) {
       addMessageWithTyping(
         "bot",
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10">
-            <div className="p-2 rounded-full bg-[#6841ea]/10">
-              <User className="w-5 h-5 text-[#6841ea]" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">Hola, {displayName}!</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <Mail className="w-3 h-3" />
-                {colaborador.email}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 mt-3">
-            <div className="p-2 rounded-full bg-[#6841ea]/10">
-              <Brain className="w-5 h-5 text-[#6841ea]" />
-            </div>
-            <div>
-              <h3 className="font-bold text-md">📋 Resumen de tu día</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {new Date().toLocaleDateString("es-MX", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </p>
-            </div>
-          </div>
-        </div>,
+        messageTemplates.welcome.userInfo({
+          theme,
+          displayName,
+          email: colaborador.email,
+        }),
         400,
         true, // isWide
       );
@@ -1342,78 +1335,20 @@ export function ChatBot({
       setTimeout(async () => {
         addMessageWithTyping(
           "bot",
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Target className="w-3 h-3 text-red-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Alta
-                  </span>
-                </div>
-                <div className="text-xl font-bold text-red-500">
-                  {analysis.metrics.tareasAltaPrioridad || 0}
-                </div>
-              </div>
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText className="w-3 h-3 text-green-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Total
-                  </span>
-                </div>
-                <div className="text-xl font-bold">
-                  {analysis.metrics.tareasConTiempo || 0}
-                </div>
-              </div>
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock className="w-3 h-3 text-yellow-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Tiempo
-                  </span>
-                </div>
-                <div className="text-xl font-bold text-yellow-500">
-                  {analysis.metrics.tiempoEstimadoTotal || "0h 0m"}
-                </div>
-              </div>
-            </div>
-
-            {analysis.answer && (
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-start gap-2">
-                  <Bot className="w-4 h-4 text-[#6841ea] mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                      {analysis.answer.split("\n\n")[0]}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>,
+          messageTemplates.analysis.metrics({
+            theme,
+            analysis,
+          }),
           600,
-          false, // isWide
+          false,
         );
 
         setTimeout(() => {
-          console.log("hayTareas", analysis);
           const hayTareas = analysis.data.revisionesPorActividad.some(
             (r) => r.tareasConTiempo.length > 0,
           );
 
-          console.log("hayTareas", hayTareas);
-
           if (hayTareas) {
-            // Filtrar solo las que tienen tareas
             const actividadesConTareas =
               analysis.data.revisionesPorActividad.filter(
                 (r) => r.tareasConTiempo.length > 0,

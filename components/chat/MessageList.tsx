@@ -127,9 +127,15 @@ export function TasksPanel({
         }`}
       >
         {/* Header */}
-        <div className="px-3 py-2 border-b border-[#2a2a2a] bg-[#6841ea]/10 flex justify-between items-center">
-          <h4 className="font-medium text-xs flex items-center gap-2 uppercase tracking-wide">
-            <Target className="w-4 h-4" />
+        <div className={`px-3 py-2 border-b bg-[#6841ea]/10 flex justify-between items-center ${
+          theme === "dark"
+            ? "border-[#2a2a2a]"
+            : "border-gray-200"
+        }`}>
+          <h4 className={`font-medium text-xs flex items-center gap-2 uppercase tracking-wide ${
+            theme === "dark" ? "text-gray-200" : "text-gray-800"
+          }`}>
+            <Target className="w-4 h-4 text-[#6841ea]" />
             Tareas Pendientes ({totalTareasPendientes})
           </h4>
           <Badge
@@ -211,9 +217,20 @@ function ActivityItem({
           >
             {index + 1}
           </div>
-          <h5 className="font-medium text-sm">{actividad.titulo}</h5>
+          <h5 className={`font-medium text-sm ${
+            theme === "dark" ? "text-gray-200" : "text-gray-800"
+          }`}>
+            {actividad.titulo}
+          </h5>
         </div>
-        <Badge variant="outline" className="text-xs">
+        <Badge 
+          variant="outline" 
+          className={`text-xs ${
+            theme === "dark" 
+              ? "border-[#2a2a2a] text-gray-400" 
+              : "border-gray-300 text-gray-600"
+          }`}
+        >
           {actividad.horario}
         </Badge>
       </div>
@@ -229,7 +246,6 @@ function ActivityItem({
     </div>
   );
 }
-
 interface TaskItemProps {
   tarea: any;
   theme: "light" | "dark";
@@ -239,20 +255,38 @@ function TaskItem({ tarea, theme }: TaskItemProps) {
   return (
     <div
       className={`p-2 rounded ${
-        theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
+        theme === "dark" ? "bg-[#1a1a1a]" : "bg-white border border-gray-200"
       }`}
     >
       <div className="flex items-center justify-between">
-        <span className="text-sm">{tarea.nombre}</span>
+        <span className={`text-sm ${
+          theme === "dark" ? "text-gray-300" : "text-gray-700"
+        }`}>
+          {tarea.nombre}
+        </span>
         <Badge
           variant={tarea.prioridad === "ALTA" ? "destructive" : "secondary"}
-          className="text-[10px]"
+          className={`text-[10px] ${
+            tarea.prioridad === "ALTA"
+              ? "bg-red-500/20 text-red-500 border-red-500/30"
+              : theme === "dark"
+              ? "bg-gray-700 text-gray-300"
+              : "bg-gray-200 text-gray-700"
+          }`}
         >
           {tarea.prioridad}
         </Badge>
       </div>
     </div>
   );
+}
+
+interface TasksPanelFooterProps {
+  totalTareasPendientes: number;
+  esHoraReporte: boolean;
+  theme: "light" | "dark";
+  onOpenReport?: () => void;
+  onStartVoiceMode?: () => void;
 }
 
 interface TasksPanelFooterProps {
@@ -290,7 +324,7 @@ function TasksPanelFooter({
       <div className="flex flex-col gap-3">
         {/* Contador de tareas */}
         <div className="flex justify-between items-center text-xs">
-          <span className="text-gray-500">
+          <span className={theme === "dark" ? "text-gray-500" : "text-gray-600"}>
             {totalTareasPendientes} tarea
             {totalTareasPendientes !== 1 ? "s" : ""} sin descripción
           </span>
@@ -301,7 +335,7 @@ function TasksPanelFooter({
           <Button
             onClick={handleMainAction}
             size="sm"
-            className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4] text-xs h-8"
+            className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4] text-white text-xs h-8"
           >
             {esHoraReporte ? (
               <>
@@ -320,7 +354,11 @@ function TasksPanelFooter({
             onClick={onStartVoiceMode}
             size="sm"
             variant="outline"
-            className="flex-1 text-xs h-8"
+            className={`flex-1 text-xs h-8 ${
+              theme === "dark"
+                ? "border-[#2a2a2a] hover:bg-[#1a1a1a] text-gray-300"
+                : "border-gray-300 hover:bg-gray-100 text-gray-700"
+            }`}
           >
             Continuar Chat
           </Button>
@@ -329,6 +367,7 @@ function TasksPanelFooter({
     </div>
   );
 }
+
 
 interface NoTasksMessageProps {
   theme: "light" | "dark";
@@ -345,17 +384,20 @@ export function NoTasksMessage({ theme }: NoTasksMessageProps) {
         }`}
       >
         <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
-        <h4 className="font-semibold mb-1 text-sm">
+        <h4 className={`font-semibold mb-1 text-sm ${
+          theme === "dark" ? "text-gray-200" : "text-gray-800"
+        }`}>
           ✅ Todas las tareas explicadas
         </h4>
-        <p className="text-xs text-gray-500">
+        <p className={`text-xs ${
+          theme === "dark" ? "text-gray-500" : "text-gray-600"
+        }`}>
           No hay tareas pendientes por describir.
         </p>
       </div>
     </div>
   );
 }
-
 interface TypingIndicatorProps {
   theme: "light" | "dark";
 }
