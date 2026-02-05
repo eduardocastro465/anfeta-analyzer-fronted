@@ -18,20 +18,20 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      // {
-      //   url: "/icon-light-32x32.png",
-      //   media: "(prefers-color-scheme: light)",
-      // },
-      // {
-      //   url: "/icon-dark-32x32.png",
-      //   media: "(prefers-color-scheme: dark)",
-      // },
-      // {
-      //   url: "/icon.svg",
-      //   type: "image/svg+xml",
-      // },
+      {
+        url: "/icono.webp",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/icono.webp",
+        media: "(prefers-color-scheme: dark)",
+      },
+      {
+        url: "/icono.webp",
+        type: "image/webp",
+      },
     ],
-    // apple: "/apple-icon.png",
+    apple: "/icono.webp",
   },
 };
 

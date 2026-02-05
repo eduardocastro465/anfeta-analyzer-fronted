@@ -1,5 +1,5 @@
 // hooks/useVoiceRecognition.ts
-import { useRef, useState } from 'react';
+import { useRef, useState } from "react";
 
 export function useVoiceRecognition() {
   const [isRecording, setIsRecording] = useState(false);
@@ -10,12 +10,31 @@ export function useVoiceRecognition() {
 
   const startRecording = (
     onResult?: (transcript: string) => void,
-    onError?: (error: string) => void
+    onError?: (error: string) => void,
   ) => {
     if (typeof window === "undefined") return;
-    
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-      onError?.("Tu navegador no soporta reconocimiento de voz");
+
+    if (
+      !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
+    ) {
+      console.warn(
+        "⚠️ Este navegador no soporta el reconocimiento de voz (Web Speech API)",
+      );
+      const isOpera =
+        (window as any).opr ||
+        (window as any).opera ||
+        navigator.userAgent.indexOf(" OPR/") > -1;
+      const isFirefox = navigator.userAgent.indexOf("Firefox") > -1;
+
+      let browserMessage = "Tu navegador no soporta reconocimiento de voz.";
+      if (isOpera)
+        browserMessage =
+          "Opera no soporta el reconocimiento de voz. Te recomendamos usar Chrome o Edge.";
+      if (isFirefox)
+        browserMessage =
+          "Firefox tiene soporte limitado para el reconocimiento de voz. Te recomendamos usar Chrome o Edge.";
+
+      onError?.(browserMessage);
       return;
     }
 
@@ -58,7 +77,7 @@ export function useVoiceRecognition() {
       const fullTranscript = (finalTranscript + interimTranscript).trim();
       voiceTranscriptRef.current = fullTranscript;
       setVoiceTranscript(fullTranscript);
-      
+
       console.log("📝 Transcripción actualizada:", fullTranscript);
     };
 
@@ -66,17 +85,41 @@ export function useVoiceRecognition() {
       console.error("❌ Error en reconocimiento:", event.error);
       setIsListening(false);
       setIsRecording(false);
-      onError?.(event.error);
+
+      let errorMessage = "Ocurrió un error con el micrófono.";
+
+      switch (event.error) {
+        case "not-allowed":
+        case "permission-denied":
+          errorMessage =
+            "Permiso al micrófono denegado. Por favor, actívalo en la configuración de la barra de direcciones.";
+          break;
+        case "network":
+          errorMessage = "Error de red. Verifica tu conexión a internet.";
+          break;
+        case "no-speech":
+          errorMessage = "No se detectó voz. Por favor, intenta de nuevo.";
+          break;
+        case "audio-capture":
+          errorMessage =
+            "No se encontró un micrófono físicamente o está en uso por otra app.";
+          break;
+      }
+
+      onError?.(errorMessage);
     };
 
     recognition.onend = () => {
       console.log("🛑 Reconocimiento finalizado");
       setIsListening(false);
       setIsRecording(false);
-      
+
       // ✅ Solo llamar onResult si hay transcripción Y se proporcionó el callback
       if (onResult && voiceTranscriptRef.current.trim().length > 0) {
-        console.log("📤 Enviando transcripción final:", voiceTranscriptRef.current);
+        console.log(
+          "📤 Enviando transcripción final:",
+          voiceTranscriptRef.current,
+        );
         onResult(voiceTranscriptRef.current);
       }
     };
@@ -91,7 +134,7 @@ export function useVoiceRecognition() {
 
   const stopRecording = () => {
     console.log("⏹️ Deteniendo grabación...");
-    
+
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -99,7 +142,7 @@ export function useVoiceRecognition() {
         console.error("Error al detener:", error);
       }
     }
-    
+
     setIsRecording(false);
     setIsListening(false);
   };

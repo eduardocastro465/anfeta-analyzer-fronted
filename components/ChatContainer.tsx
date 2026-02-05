@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
-import type { Colaborador, Message, AssistantAnalysis } from "@/lib/types";
+import type {
+  AssistantAnalysis,
+  ChatContainerProps,
+  ConversacionSidebar,
+} from "@/lib/types";
 import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { obtenerLabelDia } from "@/util/labelDia";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,31 +17,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Plus,
 } from "lucide-react";
 import { ChatBot } from "./chat-bot";
-import { obtenerMensajesConversacion } from "@/lib/historial.service";
-
-interface ChatContainerProps {
-  colaborador: Colaborador;
-  actividades: any[];
-  onLogout: () => void;
-}
-
-export type ConversacionSidebar = {
-  sessionId: string;
-  userId: string;
-  nombreConversacion?: string;
-  estadoConversacion: string;
-  createdAt: string;
-  updatedAt?: string;
-};
+import {
+  obtenerMensajesConversacion,
+  obtenerSessionActual,
+} from "@/lib/historial.service";
 
 export function ChatContainer({
   colaborador,
   actividades,
   onLogout,
 }: ChatContainerProps) {
+  console.log("🔥 COMPONENTE MONTADO");
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversaciones, setConversaciones] = useState<ConversacionSidebar[]>(
@@ -83,8 +75,11 @@ export function ChatContainer({
     if (typeof document === "undefined") return;
     document.documentElement.classList.add("dark");
   }, []);
-
-  // Inicialización
+  useEffect(() => {
+    return () => {
+      console.log("💀 COMPONENTE DESMONTADO");
+    };
+  }, []);
   useEffect(() => {
     const init = async () => {
       const user = await validateSession();
@@ -93,97 +88,144 @@ export function ChatContainer({
         return;
       }
 
-      await cargarHistorial();
+      try {
+        setSidebarCargando(true);
+
+        // ✅ 1. OBTENER O CREAR SESIÓN DEL DÍA DESDE EL BACKEND
+        const sessionRes = await obtenerSessionActual();
+
+        if (!sessionRes.success) {
+          throw new Error("No se pudo obtener la sesión actual");
+        }
+
+        const { sessionId, existe } = sessionRes;
+
+        // ✅ 2. RECARGAR HISTORIAL DEL SIDEBAR (ahora incluye la nueva sesión)
+        const historialRes = await obtenerHistorialSidebar();
+
+        if (historialRes.success && historialRes.data) {
+          // ✅ Establecer las conversaciones directamente desde el backend
+
+          const conversacionesOrdenadas = [...historialRes.data].sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          setConversaciones(conversacionesOrdenadas);
+
+          setConversacionActiva(sessionId);
+
+          if (existe) {
+            await restaurarConversacion(sessionId);
+          } else {
+            setMensajesRestaurados([]);
+            setAnalisisRestaurado(null);
+          }
+        } else {
+          setConversaciones([]);
+          setConversacionActiva(sessionId);
+          setMensajesRestaurados([]);
+          setAnalisisRestaurado(null);
+        }
+      } catch (error) {
+        console.error("❌ Error en inicialización:", error);
+        setConversaciones([]);
+        setMensajesRestaurados([]);
+        setAnalisisRestaurado(null);
+        setConversacionActiva(null);
+      } finally {
+        setSidebarCargando(false);
+      }
     };
 
     init();
   }, [router]);
 
-  // Cargar historial del sidebar
-  const cargarHistorial = async () => {
+  // ✅ Restaurar conversación
+  const restaurarConversacion = async (sessionId: string) => {
     try {
-      setSidebarCargando(true);
-      const res = await obtenerHistorialSidebar();
+      setCargandoConversacion(true);
 
-      if (res.success && res.data) {
-        setConversaciones(res.data);
-      } else {
-        setConversaciones([]);
-      }
-    } catch (error) {
-      console.error("Error al cargar sidebar:", error);
-      setConversaciones([]);
-    } finally {
-      setSidebarCargando(false);
-    }
-  };
+      console.log("📥 Restaurando conversación:", sessionId);
 
-  // En ChatContainer.tsx
+      const response = await obtenerMensajesConversacion(sessionId);
 
-const restaurarConversacion = async (sessionId: string) => {
-  try {
-    setCargandoConversacion(true);
-    setConversacionActiva(sessionId);
-    
-    console.log("📥 Restaurando conversación:", sessionId);
-    
-    const response = await obtenerMensajesConversacion(sessionId);
-    
-    console.log("🔍 Respuesta completa del backend:", response);
-    
-    if (response.success && response.data) { // ✅ Acceder a response.data
-      const { data } = response; // ✅ Destructurar data
-      
-      console.log("✅ Conversación obtenida:", {
-        mensajes: data.mensajes?.length || 0,
-        tieneAnalisis: !!data.ultimoAnalisis,
-        estadoConversacion: data.estadoConversacion,
-        nombreConversacion: data.nombreConversacion
-      });
+      if (response.success && response.data) {
+        const { data } = response;
 
-      // ✅ Acceder a través de data
-      setMensajesRestaurados(data.mensajes || []);
-      setAnalisisRestaurado(data.ultimoAnalisis || null);
-      
-      // Actualizar nombre si cambió
-      if (data.nombreConversacion) {
-        const convIndex = conversaciones.findIndex(c => c.sessionId === sessionId);
-        if (convIndex !== -1 && 
-            conversaciones[convIndex].nombreConversacion !== data.nombreConversacion) {
-          actualizarNombreConversacion(sessionId, data.nombreConversacion);
+        console.log("✅ Conversación obtenida:", {
+          mensajes: data.mensajes?.length || 0,
+          tieneAnalisis: !!data.ultimoAnalisis,
+          estadoConversacion: data.estadoConversacion,
+          nombreConversacion: data.nombreConversacion,
+        });
+
+        if (!data.mensajes || data.mensajes.length <= 1) {
+          console.log(
+            "Conversación con 1 mensaje o menos, omitiendo restauración",
+          );
+          setMensajesRestaurados([]);
+          setAnalisisRestaurado(null);
+          setConversacionActiva(sessionId);
+          return; // ⚠️ SALIR sin restaurar
         }
+
+        // Actualizar estados
+        setMensajesRestaurados(data.mensajes || []);
+        setAnalisisRestaurado(data.ultimoAnalisis || null);
+        setConversacionActiva(sessionId);
+
+        // Actualizar nombre si cambió
+        if (data.nombreConversacion) {
+          const convIndex = conversaciones.findIndex(
+            (c) => c.sessionId === sessionId,
+          );
+          if (
+            convIndex !== -1 &&
+            conversaciones[convIndex].nombreConversacion !==
+              data.nombreConversacion
+          ) {
+            actualizarNombreConversacion(sessionId, data.nombreConversacion);
+          }
+        }
+      } else {
+        console.warn("⚠️ No se pudo cargar la conversación");
+        setMensajesRestaurados([]);
+        setAnalisisRestaurado(null);
+        setConversacionActiva(sessionId);
       }
-    } else {
-      console.warn("⚠️ No se pudo cargar la conversación");
+    } catch (error: any) {
+      console.error("❌ Error al restaurar conversación:", error);
       setMensajesRestaurados([]);
       setAnalisisRestaurado(null);
+      setConversacionActiva(sessionId);
+    } finally {
+      setCargandoConversacion(false);
     }
-  } catch (error: any) {
-    console.error("❌ Error al restaurar conversación:", error);
-    setMensajesRestaurados([]);
-    setAnalisisRestaurado(null);
-  } finally {
-    setCargandoConversacion(false);
-  }
-};
+  };
 
   // Seleccionar conversación
   const seleccionarConversacion = async (conv: ConversacionSidebar) => {
-    // Si ya está activa, no hacer nada
     if (conversacionActiva === conv.sessionId) return;
-
     await restaurarConversacion(conv.sessionId);
   };
 
-  // Crear nueva conversación
-  const crearNuevaConversacion = () => {
-    setConversacionActiva(null);
-    setMensajesRestaurados([]);
-    setAnalisisRestaurado(null);
-  };
-
-  // Agregar nueva conversación al sidebar
+  // ✅ Agregar nueva conversación al sidebar (con validación anti-duplicados)
   const agregarNuevaConversacion = (nuevaConv: ConversacionSidebar) => {
+    console.log("🆕 Intentando agregar conversación:", nuevaConv.sessionId);
+
+    // ✅ Verificar si ya existe
+    const yaExiste = conversaciones.some(
+      (conv) => conv.sessionId === nuevaConv.sessionId,
+    );
+
+    if (yaExiste) {
+      console.log("⚠️ La conversación ya existe en el sidebar, omitiendo...");
+      // Solo actualizar la conversación activa
+      setConversacionActiva(nuevaConv.sessionId);
+      return;
+    }
+
+    console.log("✅ Agregando nueva conversación al sidebar");
     setConversaciones((prev) => [nuevaConv, ...prev]);
     setConversacionActiva(nuevaConv.sessionId);
   };
@@ -238,21 +280,6 @@ const restaurarConversacion = async (sessionId: string) => {
               </div>
             </div>
 
-            {/* Botón Nueva Conversación */}
-            <div className="p-3">
-              <button
-                onClick={crearNuevaConversacion}
-                className={`w-full p-2.5 rounded-lg transition-all flex items-center justify-center gap-2 ${
-                  theme === "dark"
-                    ? "bg-[#6841ea] hover:bg-[#5a36d4]"
-                    : "bg-[#6841ea] hover:bg-[#5a36d4]"
-                } text-white font-medium`}
-              >
-                <Plus className="w-4 h-4" />
-                Nueva conversación
-              </button>
-            </div>
-
             {/* Lista de Conversaciones */}
             <ScrollArea className="flex-1 px-2 py-2">
               <div className="space-y-4">
@@ -272,10 +299,7 @@ const restaurarConversacion = async (sessionId: string) => {
                         <button
                           key={conv.sessionId}
                           onClick={() => seleccionarConversacion(conv)}
-                          disabled={
-                            cargandoConversacion &&
-                            conversacionActiva === conv.sessionId
-                          }
+                          disabled={cargandoConversacion}
                           className={`w-full text-left p-2.5 rounded-lg transition-all group relative ${
                             conversacionActiva === conv.sessionId
                               ? theme === "dark"
@@ -284,7 +308,7 @@ const restaurarConversacion = async (sessionId: string) => {
                               : theme === "dark"
                                 ? "hover:bg-[#1a1a1a]"
                                 : "hover:bg-gray-100"
-                          } ${cargandoConversacion && conversacionActiva === conv.sessionId ? "opacity-50" : ""}`}
+                          } ${cargandoConversacion ? "opacity-50" : ""}`}
                         >
                           <div className="flex items-start gap-2">
                             <MessageSquare
@@ -322,14 +346,14 @@ const restaurarConversacion = async (sessionId: string) => {
                               </p>
                             </div>
 
-                            {/* Indicadores */}
-                            {cargandoConversacion &&
-                              conversacionActiva === conv.sessionId && (
-                                <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                                  <Loader2 className="w-4 h-4 animate-spin text-[#6841ea]" />
-                                </div>
-                              )}
+                            {/* Indicador de carga */}
+                            {cargandoConversacion && (
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                <Loader2 className="w-4 h-4 animate-spin text-[#6841ea]" />
+                              </div>
+                            )}
 
+                            {/* Indicador de typing */}
                             {conversacionActiva === conv.sessionId &&
                               isTyping &&
                               !cargandoConversacion && (
@@ -416,6 +440,7 @@ const restaurarConversacion = async (sessionId: string) => {
         }`}
       >
         <ChatBot
+          key={conversacionActiva || "nueva"}
           colaborador={colaborador}
           actividades={actividades}
           onLogout={onLogout}

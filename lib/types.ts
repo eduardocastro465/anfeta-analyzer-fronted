@@ -253,14 +253,7 @@ export interface Message {
   isWide?: boolean;
 }
 
-export type ConversacionSidebar = {
-  sessionId: string;
-  userId: string;
-  nombreConversacion?: string;
-  estadoConversacion: string;
-  createdAt: string;
-  updatedAt?: string;
-};
+
 export interface AssistantAnalysis {
   success: boolean;
   answer: string;
@@ -331,7 +324,7 @@ export interface ChatBotProps {
   onNuevaConversacion?: (conv: ConversacionSidebar) => void;
   onActualizarNombre?: (sessionId: string, nombre: string) => void;
   onActualizarTyping?: (isTyping: boolean) => void;
-
+  
 }
 
 export type ChatStep =
@@ -421,3 +414,33 @@ export interface IAResponse {
   timestamp?: Date;
   error?: string;
 }
+
+
+export interface ChatContainerProps {
+  colaborador: Colaborador;
+  actividades: any[];
+  onLogout: () => void;
+}
+
+export type ConversacionSidebar = {
+  sessionId: string;
+  userId: string;
+  nombreConversacion?: string;
+  estadoConversacion: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+
+export type TranscripcionRequest = {
+  audioBase64: string;
+  mimetype: string;
+  filename?: string;
+};
+
+export type TranscripcionResponse = {
+  texto?: string;
+  success: boolean;
+  error?: string;
+};
+

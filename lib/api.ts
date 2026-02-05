@@ -1,3 +1,4 @@
+
 import type {
   Colaborador,
   Actividad,
@@ -471,13 +472,13 @@ export async function obtenerConversacionCompleta(
   }
 }
 
-export async function chatGeneralIA(mensaje: string) {
+export async function chatGeneralIA(mensaje: string, sessionId: string | null) {
   try {
     const response = await fetch(`${BASE_URL_BACK}/assistant/consultar-ia`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mensaje: mensaje }),
+      body: JSON.stringify({ mensaje: mensaje, sessionId: sessionId }),
     });
 
     if (!response.ok) throw new Error(`Error: ${response.status}`);
@@ -489,7 +490,7 @@ export async function chatGeneralIA(mensaje: string) {
   }
 }
 
-export async function consultarIAProyecto(mensaje: string) {
+export async function consultarIAProyecto(mensaje: string, sessionId: string | null) {
   try {
     const response = await fetch(
       `${BASE_URL_BACK}/assistant/consultar-ia-proyecto`,
@@ -497,7 +498,7 @@ export async function consultarIAProyecto(mensaje: string) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensaje: mensaje }),
+        body: JSON.stringify({ mensaje: mensaje, sessionId: sessionId }),
       },
     );
 

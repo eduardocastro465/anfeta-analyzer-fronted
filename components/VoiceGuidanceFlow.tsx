@@ -97,52 +97,51 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
     return null;
   };
 
-  // ✅ FUNCIÓN PARA EDITAR UNA TAREA DESDE EL RESUMEN
-  const handleEditTask = React.useCallback((activityIndex: number, taskIndex: number) => {
-    console.log(`📝 Editando tarea: Actividad ${activityIndex}, Tarea ${taskIndex}`);
-    
-    // Detener cualquier reproducción de audio
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    
-    // Detener reconocimiento de voz si está activo
-    if (recognitionRef?.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        console.log("Recognition ya estaba detenido");
+  // FUNCIÓN PARA EDITAR UNA TAREA DESDE EL RESUMEN
+  const handleEditTask = React.useCallback(
+    (activityIndex: number, taskIndex: number) => {
+      // Detener cualquier reproducción de audio
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
       }
-    }
-    
-    // Resetear estados de grabación
-    if (setIsRecording) setIsRecording(false);
-    if (setIsListening) setIsListening(false);
-    if (setCurrentListeningFor) setCurrentListeningFor("");
-    
-    // Primero ir a un estado de transición
-    setVoiceStep("activity-presentation");
-    
-    // Usar requestAnimationFrame para asegurar que React procese el cambio
-    requestAnimationFrame(() => {
-      // Navegar a esa tarea específica
-      if (setCurrentActivityIndex) setCurrentActivityIndex(activityIndex);
-      if (setCurrentTaskIndex) setCurrentTaskIndex(taskIndex);
-      
-      // Esperar otro frame antes de ir a waiting-for-explanation
+
+      // Detener reconocimiento de voz si está activo
+      if (recognitionRef?.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+
+      // Resetear estados de grabación
+      if (setIsRecording) setIsRecording(false);
+      if (setIsListening) setIsListening(false);
+      if (setCurrentListeningFor) setCurrentListeningFor("");
+
+      // Primero ir a un estado de transición
+      setVoiceStep("activity-presentation");
+
+      // Usar requestAnimationFrame para asegurar que React procese el cambio
       requestAnimationFrame(() => {
-        setVoiceStep("waiting-for-explanation");
+        // Navegar a esa tarea específica
+        if (setCurrentActivityIndex) setCurrentActivityIndex(activityIndex);
+        if (setCurrentTaskIndex) setCurrentTaskIndex(taskIndex);
+
+        // Esperar otro frame antes de ir a waiting-for-explanation
+        requestAnimationFrame(() => {
+          setVoiceStep("waiting-for-explanation");
+        });
       });
-    });
-  }, [
-    recognitionRef,
-    setIsRecording,
-    setIsListening,
-    setCurrentListeningFor,
-    setCurrentActivityIndex,
-    setCurrentTaskIndex,
-    setVoiceStep,
-  ]);
+    },
+    [
+      recognitionRef,
+      setIsRecording,
+      setIsListening,
+      setCurrentListeningFor,
+      setCurrentActivityIndex,
+      setCurrentTaskIndex,
+      setVoiceStep,
+    ],
+  );
 
   const currentActivity = getCurrentActivity();
   const currentTask = getCurrentTask();
@@ -153,14 +152,15 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
   );
 
   const isInFinalSteps = voiceStep === "summary" || voiceStep === "sending";
-  const isInTransition = voiceStep === "activity-presentation" && !currentActivity;
+  const isInTransition =
+    voiceStep === "activity-presentation" && !currentActivity;
 
   // Durante transiciones, mostrar un loading simple en lugar de error
   if (!currentActivity && !isInFinalSteps && !isInTransition) {
     console.error("ERROR: No hay actividad en el índice actual");
     return null;
   }
-  
+
   // Si estamos en transición, mostrar un loading
   if (isInTransition) {
     return (
@@ -347,7 +347,7 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
             />
           )}
 
-          {/* ✅ Estado de procesamiento/validación */}
+          {/* Estado de procesamiento/validación */}
           {voiceStep === "processing-explanation" && (
             <div className="text-center space-y-4">
               <div className="relative">
@@ -387,7 +387,7 @@ export const VoiceGuidanceFlow: React.FC<VoiceGuidanceFlowProps> = ({
                       : "bg-blue-50 border border-blue-200"
                   }`}
                 >
-                  <p className="text-sm font-medium">📋 {currentTask.nombre}</p>
+                  <p className="text-sm font-medium"> {currentTask.nombre}</p>
                 </div>
               )}
 

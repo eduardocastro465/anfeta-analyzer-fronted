@@ -6,8 +6,20 @@ export interface MensajeHistorial {
   role: "usuario" | "bot";
   contenido: string;
   timestamp: Date | string;
-  tipoMensaje?: "texto" | "analisis_inicial" | "respuesta_ia" | "error" | "sistema";
+  tipoMensaje?:
+    | "texto"
+    | "analisis_inicial"
+    | "respuesta_ia"
+    | "error"
+    | "sistema";
   analisis?: AssistantAnalysis | null;
+}
+
+export interface Message {
+  id: string;
+  type: "user" | "bot";
+  content: string;
+  timestamp: Date;
 }
 
 export interface EstadoTarea {
@@ -29,9 +41,15 @@ export interface HistorialData {
   mensajes: MensajeHistorial[];
   ultimoAnalisis: AssistantAnalysis | null;
   tareasEstado: EstadoTarea[];
-  estadoConversacion?: "inicio" | "esperando_usuario" | "esperando_bot" | "mostrando_actividades" | 
-                      "esperando_descripcion_pendientes" | "esperando_confirmacion_pendientes" | 
-                      "motivo_pendiente_resagado" | "finalizado";
+  estadoConversacion?:
+    | "inicio"
+    | "esperando_usuario"
+    | "esperando_bot"
+    | "mostrando_actividades"
+    | "esperando_descripcion_pendientes"
+    | "esperando_confirmacion_pendientes"
+    | "motivo_pendiente_resagado"
+    | "finalizado";
   createdAt: string;
   updatedAt?: string;
   __v?: number;
@@ -56,4 +74,13 @@ export interface ConversacionResponse {
     sessionId: string;
     timestamp: string;
   };
+}
+
+export interface VerificarAnalisisResponse {
+  success: boolean;
+  tieneAnalisis: boolean;
+  sessionId: string;
+  analisis?: AssistantAnalysis;
+  mensajes?: MensajeHistorial[];
+  existe: boolean;
 }

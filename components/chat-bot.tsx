@@ -37,16 +37,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Bot,
-  FileText,
   LogOut,
   AlertCircle,
   PartyPopper,
-  Clock,
   CheckCircle2,
   Brain,
-  Target,
-  User,
-  Mail,
   Check,
 } from "lucide-react";
 import { getDisplayName } from "@/util/utils-chat";
@@ -68,6 +63,9 @@ import { messageTemplates } from "./chat/messageTemplates";
 import { ChatInputBar } from "./chat/ChatInputBar";
 import { ReporteActividadesModal } from "./ReporteActividadesModal";
 import { useMessageRestoration } from "@/components/hooks/useMessageRestoration";
+import { useAudioRecorder } from "./hooks/useAudioRecorder";
+import { transcribirAudioCliente } from "@/lib/transcription";
+import { isReportTime } from "@/util/Timeutils";
 
 export function ChatBot({
   colaborador,
@@ -83,7 +81,6 @@ export function ChatBot({
 }: ChatBotProps) {
   // ==================== REFS ====================
   const scrollRef = useRef<HTMLDivElement>(null);
-  const welcomeSentRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const pipWindowRef = useRef<Window | null>(null);
   const explanationProcessedRef = useRef<boolean>(false);
@@ -156,14 +153,361 @@ export function ChatBot({
 
   const [internalTheme, setInternalTheme] = useState<"light" | "dark">("dark");
   const theme = externalTheme ?? internalTheme;
+  const fetchingAnalysisRef = useRef(false);
 
-  // ==================== FUNCIONES ====================
+  const { startRecording, stopRecording, currentStream } = useAudioRecorder();
+  const isRecordingRef = useRef(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+    console.log("🔄 [SYNC] isRecordingRef actualizado:", isRecording);
+  }, [isRecording]);
+
+  const processAndSendAudio = async () => {
+    if (isProcessingRef.current) {
+      console.log("⚠️ Ya se está procesando audio");
+      return;
+    }
+
+    console.log("📤 [PROCESO] Enviando audio después de 3s de silencio");
+    isProcessingRef.current = true;
+    setIsRecording(false);
+    isRecordingRef.current = false;
+    setIsTranscribing(true);
+    setAudioLevel(0);
+
+    // Detener detección de audio
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
+
+    // Obtener el audio grabado
+    const audio = await stopRecording();
+    const sessionId =
+      conversacionActiva || assistantAnalysis?.sessionId || null;
+
+    try {
+      console.log("🔄 [TRANSCRIPCIÓN] Transcribiendo audio...");
+      const result = await transcribirAudioCliente(audio);
+
+      if (result && result.trim().length > 0) {
+        console.log("✅ [TRANSCRIPCIÓN] Texto:", result);
+        addMessage("user", result);
+        setIsTyping(true);
+        setIsLoadingIA(true);
+
+        console.log("🤖 [IA] Enviando a la IA...");
+        const response = await chatGeneralIA(result, sessionId);
+
+        if (response.respuesta) {
+          console.log("✅ [IA] Respuesta recibida");
+          addMessage("bot", response.respuesta);
+        }
+
+        setIsLoadingIA(false);
+        setIsTyping(false);
+      } else {
+        console.warn("⚠️ [TRANSCRIPCIÓN] Texto vacío o nulo");
+      }
+    } catch (error) {
+      console.error("❌ [ERROR] Error al transcribir:", error);
+      addMessage(
+        "system",
+        <div className="text-xs text-red-500">
+          Error al transcribir el audio
+        </div>,
+      );
+    } finally {
+      setIsTranscribing(false);
+      setUserInput("");
+      isProcessingRef.current = false;
+      console.log("✅ [PROCESO] Proceso completado");
+    }
+  };
+
+  const resetSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+
+    console.log("⏱️ [TIMER] Reiniciado - esperando 3 segundos de silencio");
+
+    silenceTimerRef.current = setTimeout(() => {
+      console.log("✅ [TIMER] 3 segundos completados - enviando audio");
+      processAndSendAudio();
+    }, 3000);
+  };
+
+  const startAudioLevelDetection = (stream: MediaStream) => {
+    try {
+
+      micStreamRef.current = stream;
+
+      const audioContext = new AudioContext();
+
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
+      microphone.connect(analyser);
+
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let frameCount = 0;
+
+      // Test inmediato
+      const testAudioImmediate = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((a, b) => a + b, 0);
+        const average = sum / dataArray.length;
+
+        console.log(
+          "🔍 [DIAG] TEST INMEDIATO - Nivel promedio:",
+          average.toFixed(2),
+        );
+        console.log(
+          "🔍 [DIAG] Primeros 10 valores del array:",
+          dataArray.slice(0, 10),
+        );
+
+        if (average === 0) {
+          console.error("❌ [DIAG] PROBLEMA DETECTADO: Nivel es 0");
+        } else {
+          console.log("✅ [DIAG] Audio funcionando correctamente");
+        }
+      };
+
+      setTimeout(testAudioImmediate, 100);
+      setTimeout(testAudioImmediate, 500);
+
+      // ✅ FUNCIÓN DE DETECCIÓN CORREGIDA
+      const checkAudioLevel = () => {
+        // ✅ USAR REF EN LUGAR DE STATE
+        if (!isRecordingRef.current) {
+          console.log("⚠️ [DETECCIÓN] isRecording es false, deteniendo...");
+          setAudioLevel(0);
+          return;
+        }
+
+        analyser.getByteFrequencyData(dataArray);
+
+        const sum = dataArray.reduce((a, b) => a + b, 0);
+        const average = sum / dataArray.length;
+        const normalizedLevel = Math.min(average * 2, 100);
+
+        setAudioLevel(normalizedLevel);
+
+        // Log primeros 10 frames
+        if (frameCount < 10) {
+          console.log(
+            `🔍 [DIAG] Frame ${frameCount} - Average: ${average.toFixed(2)}, Normalized: ${normalizedLevel.toFixed(2)}, isRecording: ${isRecordingRef.current}`,
+          );
+        }
+
+        const SPEECH_THRESHOLD = 8;
+        frameCount++;
+
+        if (average > SPEECH_THRESHOLD) {
+          // 🎤 VOZ DETECTADA
+          console.log(
+            `🎤 [VOZ] Nivel: ${average.toFixed(1)} | Normalizado: ${normalizedLevel.toFixed(1)} | Frame: ${frameCount}`,
+          );
+          resetSilenceTimer();
+        } else {
+          // 🔇 SILENCIO
+          if (frameCount % 30 === 0) {
+            console.log(
+              `🔇 [SILENCIO] Nivel: ${average.toFixed(1)} | Frame: ${frameCount}`,
+            );
+          }
+        }
+
+        animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
+      };
+
+      resetSilenceTimer();
+      checkAudioLevel();
+
+      console.log("✅ [DETECCIÓN] Configuración completada");
+    } catch (error) {
+      console.error("❌ [ERROR] No se pudo configurar detección:", error);
+      resetSilenceTimer();
+    }
+  };
+
+  // ✅ FUNCIÓN onVoiceClick CORREGIDA
+  const onVoiceClick = async () => {
+    // Evitar clicks mientras se procesa
+    if (isTranscribing || isProcessingRef.current) {
+      console.log("⚠️ Ignorando click - procesando...");
+      return;
+    }
+
+    // Si está grabando, cancelar y reiniciar
+    if (isRecording) {
+      console.log("🔄 [CORRECCIÓN] Cancelando y reiniciando grabación...");
+
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((track) => track.stop());
+        micStreamRef.current = null;
+      }
+
+      await stopRecording();
+      setUserInput("");
+      setAudioLevel(0);
+      setIsRecording(false);
+      isRecordingRef.current = false; // ✅ ACTUALIZAR REF
+
+      console.log("✅ Grabación cancelada");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    // Iniciar nueva grabación
+    console.log("🎙️ [INICIO] Iniciando nueva grabación...");
+
+    try {
+      console.log("📞 Llamando a startRecording()...");
+      const stream = await startRecording();
+
+      console.log("✅ Stream obtenido:", {
+        id: stream.id,
+        active: stream.active,
+        tracks: stream.getTracks().map((t) => ({
+          kind: t.kind,
+          label: t.label,
+          enabled: t.enabled,
+        })),
+      });
+
+      // ✅ ACTUALIZAR STATE Y REF
+      setIsRecording(true);
+      isRecordingRef.current = true;
+      console.log("✅ Estado isRecording = true, ref = true");
+
+      console.log("🎧 Iniciando detección de audio con el mismo stream...");
+      startAudioLevelDetection(stream);
+
+      console.log("✅ [INICIO] Grabación iniciada correctamente");
+    } catch (error) {
+      console.error("❌ [ERROR] Error al iniciar grabación:", error);
+
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          alert(
+            "❌ Permisos denegados. Por favor, permite el acceso al micrófono.",
+          );
+        } else if (error.name === "NotFoundError") {
+          alert(
+            "❌ No se encontró ningún micrófono. Conecta uno e intenta de nuevo.",
+          );
+        } else {
+          alert(`❌ Error: ${error.message}`);
+        }
+      } else {
+        alert("❌ No se pudo acceder al micrófono. Verifica los permisos.");
+      }
+
+      setIsRecording(false);
+      isRecordingRef.current = false;
+      setAudioLevel(0);
+    }
+  };
+
+  // ✅ Limpiar al desmontar
+  useEffect(() => {
+    console.log("✅ [MOUNT] Componente de voz montado");
+
+    return () => {
+      console.log("🧹 [UNMOUNT] Limpiando componente de voz");
+
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (audioLevel > 0) {
+      console.log("📊 [NIVEL] Audio actual:", audioLevel.toFixed(1));
+    }
+  }, [audioLevel]);
+
+  const initializationRef = useRef(false);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.classList.add("dark");
-    if (welcomeSentRef.current) return;
-    welcomeSentRef.current = true;
+
+    // Prevenir múltiples ejecuciones
+    if (initializationRef.current) {
+      return;
+    }
+
+    const hayDatosRestauracion =
+      (mensajesRestaurados && mensajesRestaurados.length > 1) ||
+      analisisRestaurado;
+
+    if (hayDatosRestauracion) {
+      initializationRef.current = true;
+
+      if (analisisRestaurado) {
+        assistantAnalysisRef.current = analisisRestaurado;
+        
+        setAssistantAnalysis(analisisRestaurado);
+        setStep("ready");
+        setIsTyping(false); 
+      }
+
+      return;
+    }
+
+    initializationRef.current = true;
 
     const init = async () => {
       const user = await validateSession();
@@ -172,7 +516,6 @@ export function ChatBot({
         return;
       }
 
-      // Inicializar la aplicación...
       addMessageWithTyping(
         "bot",
         `¡Hola ${displayName}! 👋 Soy tu asistente.`,
@@ -187,30 +530,19 @@ export function ChatBot({
         </div>,
       );
 
-      fetchAssistantAnalysis();
+      await fetchAssistantAnalysis();
     };
 
     init();
   }, []);
 
   const handleStartVoiceMode = () => {
-    console.log("========== INICIANDO MODO VOZ ==========");
-
-    // ✅ USAR EL REF EN LUGAR DEL ESTADO
+    // USAR EL REF EN LUGAR DEL ESTADO
     const analysis = assistantAnalysisRef.current;
-
-    console.log("📊 analysis (desde ref):", analysis);
-
     if (!analysis) {
-      console.log("❌ No hay analysis");
       speakText("No hay actividades para explicar.");
       return;
     }
-
-    console.log(
-      "📋 revisionesPorActividad:",
-      analysis.data.revisionesPorActividad,
-    );
 
     const activitiesWithTasks = analysis.data.revisionesPorActividad
       .filter(
@@ -228,16 +560,10 @@ export function ChatBot({
         })),
       }));
 
-    console.log("✅ Actividades con tareas:", activitiesWithTasks);
-    console.log("📝 Cantidad:", activitiesWithTasks.length);
-
     if (activitiesWithTasks.length === 0) {
-      console.log("❌ No hay actividades con tareas");
       speakText("No hay tareas con tiempo asignado para explicar.");
       return;
     }
-
-    console.log("🎤 Activando modo voz...");
 
     // Activar modo voz
     voiceMode.setVoiceMode(true);
@@ -249,42 +575,12 @@ export function ChatBot({
 
     // Mensaje de bienvenida
     const mensaje = `Vamos a explicar ${activitiesWithTasks.length} actividad${activitiesWithTasks.length !== 1 ? "es" : ""} con tareas programadas. ¿Listo para comenzar?`;
-    console.log("🔊 Mensaje:", mensaje);
     speakText(mensaje);
   };
 
-  // useEffect(() => {
-  //   if (!conversacionActiva || !mensajesRestaurados?.length) return;
-  //   console.log("🔄 Restaurando conversación en ChatBot");
-  //   console.log("📝 Mensajes a restaurar:", mensajesRestaurados.length);
-
-  //   // Mapeo simple de mensajes
-  //   const mensajes: Message[] = mensajesRestaurados.map((msg) => ({
-  //     id: msg._id || `${Date.now()}-${Math.random()}`,
-  //     type: msg.role === "usuario" ? "user" : "bot",
-  //     content: msg.contenido,
-  //     timestamp: new Date(msg.timestamp),
-  //   }));
-
-  //   setMessages(mensajes);
-
-  //   // Restaurar análisis si existe
-  //   if (analisisRestaurado) {
-  //     console.log("📊 Restaurando análisis del asistente");
-  //     assistantAnalysisRef.current = analisisRestaurado;
-  //     setAssistantAnalysis(analisisRestaurado);
-  //   }
-
-  //   setStep("ready");
-  //   setIsTyping(false);
-
-  //   // Scroll al final
-  //   setTimeout(() => {
-  //     if (scrollRef.current) {
-  //       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  //     }
-  //   }, 100);
-  // }, [conversacionActiva, mensajesRestaurados, analisisRestaurado]);
+  useEffect(() => {
+    onActualizarTyping?.(isTyping);
+  }, [isTyping, onActualizarTyping]);
 
   useMessageRestoration({
     conversacionActiva,
@@ -308,12 +604,6 @@ export function ChatBot({
       return;
     }
 
-    console.log(
-      "EFECTO: Procesando voiceTranscript:",
-      voiceRecognition.voiceTranscript,
-    );
-    console.log("voiceMode activo?:", voiceMode.voiceMode);
-
     if (!voiceMode.voiceMode) {
       return;
     }
@@ -326,11 +616,7 @@ export function ChatBot({
     if (!("speechSynthesis" in window)) return;
 
     const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      console.log(
-        "Voces disponibles:",
-        voices.map((v) => `${v.name} (${v.lang})`),
-      );
+      window.speechSynthesis.getVoices();
     };
 
     loadVoices();
@@ -361,11 +647,7 @@ export function ChatBot({
           try {
             window.moveTo(window.screenX, window.screenY);
             window.resizeTo(400, 600);
-          } catch (e) {
-            console.log(
-              "No se pueden aplicar ciertas restricciones de ventana",
-            );
-          }
+          } catch (e) {}
         }
 
         window.addEventListener("message", handleParentMessage);
@@ -380,7 +662,6 @@ export function ChatBot({
 
     const checkPiPWindowInterval = setInterval(() => {
       if (pipWindowRef.current && pipWindowRef.current.closed) {
-        console.log("Ventana PiP cerrada detectada");
         setIsPiPMode(false);
         pipWindowRef.current = null;
       }
@@ -520,48 +801,6 @@ export function ChatBot({
         autoSendTimerRef.current = null;
         console.log("🚫 Envío automático cancelado por edición");
       }
-    }
-  };
-
-  // ✅ FUNCIÓN: Envío automático
-  const handleAutoSend = async () => {
-    if (!userInput.trim()) return;
-
-    console.log("📤 Enviando automáticamente:", userInput);
-
-    try {
-      const mensajeAEnviar = userInput.trim();
-
-      // Agregar mensaje del usuario
-      addMessage("user", mensajeAEnviar);
-      setUserInput("");
-      setIsTyping(true);
-      setIsLoadingIA(true);
-
-      // Reset de estados
-      setIsUserEditing(false);
-      lastTranscriptRef.current = "";
-
-      let response;
-      if (chatMode === "ia" && assistantAnalysis) {
-        response = await consultarIAProyecto(mensajeAEnviar);
-      } else {
-        response = await chatGeneralIA(mensajeAEnviar);
-      }
-
-      if (response.respuesta) {
-        addMessage("bot", response.respuesta);
-      } else {
-        addMessage("bot", "Lo siento, no pude procesar tu mensaje.");
-      }
-
-      setIsLoadingIA(false);
-      setIsTyping(false);
-    } catch (error) {
-      console.error("Error al enviar mensaje:", error);
-      setIsTyping(false);
-      setIsLoadingIA(false);
-      addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
     }
   };
   const preguntarPendiente = (index: number) => {
@@ -1012,8 +1251,6 @@ export function ChatBot({
       // ✅ ENVIAR AL BACKEND PARA VALIDAR
       const response = await sendPendienteValidarYGuardar(payload);
 
-      console.log("📡 Respuesta del backend:", response);
-
       if (response.esValida) {
         console.log("✅ EXPLICACIÓN VÁLIDA");
 
@@ -1358,12 +1595,14 @@ export function ChatBot({
               0,
             );
 
+            const esHoraReporte = isReportTime(horaInicioReporte, horaFinReporte);
+
             addMessage(
               "bot",
               <TasksPanel
                 actividadesConTareasPendientes={actividadesConTareas}
                 totalTareasPendientes={totalTareas}
-                esHoraReporte={false}
+                esHoraReporte={esHoraReporte}
                 theme={theme}
                 assistantAnalysis={analysis}
                 onOpenReport={() => setMostrarModalReporte(true)}
@@ -1382,6 +1621,13 @@ export function ChatBot({
     showAll = false,
     isRestoration = false,
   ) => {
+    if (fetchingAnalysisRef.current) {
+      console.log("⚠️ Ya hay un análisis en proceso, omitiendo...");
+      return;
+    }
+
+    fetchingAnalysisRef.current = true;
+
     try {
       setIsTyping(true);
       setStep("loading-analysis");
@@ -1458,33 +1704,15 @@ export function ChatBot({
         multiActividad: data.multiActividad || false,
       };
 
-      console.log("========== GUARDANDO ANÁLISIS EN ESTADO ==========");
-      console.log("📊 adaptedData:", adaptedData);
-      console.log(
-        "📋 revisionesPorActividad:",
-        adaptedData.data.revisionesPorActividad,
-      );
-
       assistantAnalysisRef.current = adaptedData;
-
-      // ✅ Guardar en el estado (para re-renders)
       setAssistantAnalysis(adaptedData);
-
-      setTimeout(() => {
-        console.log("✅ Estado guardado, verificando...");
-        console.log(
-          "📊 assistantAnalysis después de setear:",
-          assistantAnalysis,
-        );
-      }, 100);
-
       setStep("ready");
       showAssistantAnalysis(adaptedData, isRestoration);
     } catch (error) {
       console.error("Error al obtener análisis del asistente:", error);
       setIsTyping(false);
       setStep("error");
-      // sin datos de ejemplo ni estatico
+
       addMessage(
         "bot",
         <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
@@ -1502,144 +1730,9 @@ export function ChatBot({
       );
     } finally {
       setIsTyping(false);
-    }
-  };
-
-  // const startRecording = () => {
-  //   if (typeof window === "undefined") return;
-  //   if (
-  //     !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
-  //   ) {
-  //     alert("Tu navegador no soporta reconocimiento de voz");
-  //     return;
-  //   }
-
-  //   if (isRecording) {
-  //     stopRecording();
-  //     return;
-  //   }
-
-  //   window.speechSynthesis.cancel();
-
-  //   if (recognitionRef.current) {
-  //     try {
-  //       recognitionRef.current.stop();
-  //       recognitionRef.current = null;
-  //     } catch (e) {
-  //       console.log("Error al detener reconocimiento previo:", e);
-  //     }
-  //   }
-
-  //   setIsRecording(true);
-  //   setIsListening(true);
-  //   setVoiceTranscript("");
-  //   voiceTranscriptRef.current = "";
-
-  //   const SpeechRecognition =
-  //     (window as any).SpeechRecognition ||
-  //     (window as any).webkitSpeechRecognition;
-  //   const recognition = new SpeechRecognition();
-  //   recognition.lang = "es-MX";
-  //   recognition.continuous = true;
-  //   recognition.interimResults = true;
-  //   recognition.maxAlternatives = 1;
-
-  //   recognitionRef.current = recognition;
-
-  //   recognition.onstart = () => {
-  //     console.log("✅ Reconocimiento de voz INICIADO");
-  //     setIsListening(true);
-  //   };
-
-  //   recognition.onresult = (event: any) => {
-  //     // Acumular TODOS los resultados para evitar pérdida al pausar
-  //     let finalTranscript = "";
-  //     let interimTranscript = "";
-
-  //     for (let i = 0; i < event.results.length; i++) {
-  //       const result = event.results[i];
-  //       if (result.isFinal) {
-  //         finalTranscript += result[0].transcript + " ";
-  //       } else {
-  //         interimTranscript += result[0].transcript;
-  //       }
-  //     }
-
-  //     const fullTranscript = (finalTranscript + interimTranscript).trim();
-  //     voiceTranscriptRef.current = fullTranscript;
-  //     setVoiceTranscript(fullTranscript);
-  //   };
-
-  //   recognition.onerror = (event: any) => {
-  //     console.warn("⚠️ SpeechRecognition error:", event.error);
-
-  //     if (event.error === "aborted") {
-  //       console.log("🔄 Abortado intencionalmente");
-  //       setIsListening(false);
-  //       setIsRecording(false);
-
-  //       return;
-  //     }
-
-  //     setIsListening(false);
-  //     setIsRecording(false);
-  //   };
-
-  //   recognition.onend = () => {
-  //     console.log("🛑 Reconocimiento de voz FINALIZADO");
-  //     setIsListening(false);
-  //     setIsRecording(false);
-  //   };
-
-  //   setTimeout(() => {
-  //     try {
-  //       recognition.start();
-  //       console.log(" Iniciando reconocimiento...");
-  //     } catch (error) {
-  //       console.error("❌ Error al iniciar reconocimiento:", error);
-  //       setIsListening(false);
-  //       setIsRecording(false);
-
-  //       setTimeout(() => {
-  //         try {
-  //           recognition.start();
-  //         } catch (retryError) {
-  //           console.error("❌ Error en reintento:", retryError);
-  //           alert(
-  //             "No se pudo acceder al micrófono. Por favor, verifica los permisos.",
-  //           );
-  //         }
-  //       }, 300);
-  //     }
-  //   }, 100);
-  // };
-
-  const stopRecording = () => {
-    console.log("========== DETENIENDO GRABACIÓN ==========");
-
-    // ✅ Usar el hook
-    voiceRecognition.stopRecording();
-
-    const currentTranscript = voiceRecognition.voiceTranscript;
-    console.log("📝 Transcripción capturada:", currentTranscript);
-
-    // Validar que estemos en modo voz
-    if (
-      voiceMode.voiceMode &&
-      voiceMode.voiceStep === "listening-explanation" &&
-      currentTranscript.trim()
-    ) {
-      console.log("✅ Procesando explicación de voz...");
-      processVoiceExplanation(currentTranscript);
-    } else if (
-      voiceMode.voiceMode &&
-      voiceMode.voiceStep === "listening-explanation" &&
-      !currentTranscript.trim()
-    ) {
-      console.warn("⚠️ No hay transcripción para procesar");
-      speakText("No escuché tu explicación. Por favor, intenta de nuevo.");
+      // ✅ Liberar el lock después de un pequeño delay
       setTimeout(() => {
-        voiceMode.setVoiceStep("waiting-for-explanation");
+        fetchingAnalysisRef.current = false;
       }, 1000);
     }
   };
@@ -1705,27 +1798,50 @@ export function ChatBot({
 
       const mensajeAEnviar = userInput.trim();
 
-      // Agregar mensaje del usuario al historial
       addMessage("user", mensajeAEnviar);
       setUserInput("");
       setIsTyping(true);
       setIsLoadingIA(true);
 
+      const sessionId =
+        conversacionActiva || assistantAnalysis?.sessionId || null;
+
       if (chatMode === "ia" && assistantAnalysis) {
-        response = await consultarIAProyecto(mensajeAEnviar);
+        response = await consultarIAProyecto(mensajeAEnviar, sessionId);
       } else {
-        response = await chatGeneralIA(mensajeAEnviar);
+        // response = await chatGeneralIA(mensajeAEnviar, sessionId);
       }
 
       if (response.respuesta) {
         addMessage("bot", response.respuesta);
+
+        // 🆕 Si es una conversación nueva, agregarla al sidebar
+        if (response.sessionId && !conversacionActiva) {
+          console.log("🆕 Nueva conversación creada:", response.sessionId);
+
+          onNuevaConversacion?.({
+            sessionId: response.sessionId,
+            userId: colaborador.email,
+            estadoConversacion: "activa",
+            createdAt: new Date().toISOString(),
+            nombreConversacion: "Nueva conversación", // 👈 Agregar nombre temporal
+          });
+        }
+
+        // 🔄 Si la conversación ya existía y el backend devolvió un nuevo nombre
+        if (
+          response.sessionId &&
+          conversacionActiva &&
+          response.nombreConversacion
+        ) {
+          onActualizarNombre?.(response.sessionId, response.nombreConversacion);
+        }
       } else {
         addMessage("bot", "Lo siento, no pude procesar tu mensaje.");
       }
 
       setIsLoadingIA(false);
       setIsTyping(false);
-      console.log("Respuesta:", response);
     } catch (error) {
       console.error("Error al enviar mensaje:", error);
       setIsTyping(false);
@@ -1828,10 +1944,13 @@ export function ChatBot({
           userInput={userInput}
           setUserInput={handleUserInputChange}
           onSubmit={handleUserInput}
-          onVoiceClick={startChatVoiceRecording}
-          isRecording={voiceRecognition.isRecording}
+          // onVoiceClick={startChatVoiceRecording}
+          // isRecording={voiceRecognition.isRecording}
+          onVoiceClick={onVoiceClick}
+          isRecording={isRecording}
           canUserType={canUserType}
           theme={theme}
+          audioLevel={audioLevel}
           isLoadingIA={isLoadingIA}
           inputRef={inputRef}
           chatMode={chatMode}
