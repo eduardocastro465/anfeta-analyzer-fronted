@@ -32,7 +32,7 @@ export const useReporteData = () => {
       );
 
       const responseTime = Date.now() - startTime;
-      console.log(`⏱️ Tiempo de respuesta: ${responseTime}ms`);
+      // console.log(`⏱️ Tiempo de respuesta: ${responseTime}ms`);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -45,9 +45,9 @@ export const useReporteData = () => {
         throw new Error("La API respondió con success: false");
       }
 
-      console.log("✅ Datos recibidos correctamente");
-      console.log(`👥 ${result.data.usuarios.length} usuarios`);
-      console.log(`📊 ${result.estadisticas.totalTareas} tareas totales`);
+      // console.log("✅ Datos recibidos correctamente");
+      // console.log(`👥 ${result.data.usuarios.length} usuarios`);
+      // console.log(`📊 ${result.estadisticas.totalTareas} tareas totales`);
       
       setDatos(result);
       setTiempoUltimaCarga(new Date().toLocaleTimeString());

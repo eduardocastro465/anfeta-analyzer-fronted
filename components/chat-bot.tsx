@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -64,8 +63,10 @@ import {
   validateExplanationLength,
 } from "@/util/voiceModeLogic";
 import { MessageList, NoTasksMessage, TasksPanel } from "./chat/MessageList";
+import { messageTemplates } from "./chat/messageTemplates";
 import { ChatInputBar } from "./chat/ChatInputBar";
 import { ReporteActividadesModal } from "./ReporteActividadesModal";
+import { useMessageRestoration } from "@/components/hooks/useMessageRestoration";
 
 export function ChatBot({
   colaborador,
@@ -78,6 +79,7 @@ export function ChatBot({
   onNuevaConversacion,
   onActualizarNombre,
   onActualizarTyping,
+  onViewReports
 }: ChatBotProps) {
   // ==================== REFS ====================
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -103,7 +105,7 @@ export function ChatBot({
   const displayName = getDisplayName(colaborador);
   const router = useRouter();
 
-  // ==================== ESTADOS: CHAT PRINCIPAL ====================
+  // ==================== ESTADOS PRINCIPALES ====================
   const [step, setStep] = useState<ChatStep>("welcome");
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -112,24 +114,24 @@ export function ChatBot({
     useState<AssistantAnalysis | null>(null);
   const [isLoadingIA, setIsLoadingIA] = useState(false);
 
-  // ==================== ESTADOS: DIÁLOGOS Y MODALS ====================
+  // ==================== DIÁLOGOS Y MODALS ====================
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [mostrarModalReporte, setMostrarModalReporte] = useState(false);
 
-  // ==================== ESTADOS: SIDEBAR ====================
+  // ==================== SIDEBAR ====================
   const [sidebarCargado, setSidebarCargado] = useState(false);
   const [sidebarCargando, setSidebarCargando] = useState(true);
   const [data, setData] = useState<ConversacionSidebar[]>([]);
 
-  // ==================== ESTADOS: REPORTE DE ACTIVIDADES ====================
+  // ==================== REPORTE DE ACTIVIDADES ====================
   const [actividadesDiarias] = useState<ActividadDiaria[]>([]);
   const [pendientesReporte, setPendientesReporte] = useState<
     PendienteEstadoLocal[]
   >([]);
   const [guardandoReporte, setGuardandoReporte] = useState(false);
 
-  // ==================== ESTADOS: MODAL VOZ REPORTE ====================
+  // ==================== MODAL VOZ REPORTE ====================
   const [indicePendienteActual, setIndicePendienteActual] = useState(0);
   const [pasoModalVoz, setPasoModalVoz] = useState<
     "esperando" | "escuchando" | "procesando"
@@ -138,19 +140,23 @@ export function ChatBot({
   const lastTranscriptRef = useRef<string>("");
   const [isUserEditing, setIsUserEditing] = useState(false);
 
-  // ==================== ESTADOS: HORARIOS REPORTE ====================
-  const [horaInicioReporte] = useState("1:33 PM"); // Formato: "HH:MM AM/PM"
+  // ==================== HORARIOS REPORTE ====================
+  const [horaInicioReporte] = useState("1:33 PM");
   const [horaFinReporte] = useState("11:59 PM");
 
-  // ==================== ESTADOS: PiP (PICTURE-IN-PICTURE) ====================
+  // ==================== PiP ====================
   const [isPiPMode, setIsPiPMode] = useState(false);
   const [isInPiPWindow, setIsInPiPWindow] = useState(false);
+
+  // ==================== ✅ NUEVO: ESTADOS PARA TAREAS SELECCIONADAS ====================
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [filteredActivitiesForVoice, setFilteredActivitiesForVoice] = useState<any[]>([]);
 
   // ==================== VALORES COMPUTADOS ====================
   const canUserType =
     step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
 
-  const [chatMode, setChatMode] = useState<"normal" | "ia">("normal");
+  const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
 
   const [internalTheme, setInternalTheme] = useState<"light" | "dark">("dark");
   const theme = externalTheme ?? internalTheme;
@@ -170,7 +176,6 @@ export function ChatBot({
         return;
       }
 
-      // Inicializar la aplicación...
       addMessageWithTyping(
         "bot",
         `¡Hola ${displayName}! 👋 Soy tu asistente.`,
@@ -191,39 +196,136 @@ export function ChatBot({
     init();
   }, []);
 
-  useEffect(() => {
-    if (!conversacionActiva || !mensajesRestaurados?.length) return;
+  // ✅ FUNCIÓN MODIFICADA: Iniciar modo voz CON tareas seleccionadas
+  const handleStartVoiceMode = () => {
+    console.log("========== INICIANDO MODO VOZ GENERAL ==========");
 
-    console.log("🔄 Restaurando conversación en ChatBot");
-    console.log("📝 Mensajes a restaurar:", mensajesRestaurados.length);
+    const analysis = assistantAnalysisRef.current;
 
-    // Mapeo simple de mensajes
-    const mensajes: Message[] = mensajesRestaurados.map((msg) => ({
-      id: msg._id || `${Date.now()}-${Math.random()}`,
-      type: msg.role === "usuario" ? "user" : "bot",
-      content: msg.contenido,
-      timestamp: new Date(msg.timestamp),
-    }));
-
-    setMessages(mensajes);
-
-    // Restaurar análisis si existe
-    if (analisisRestaurado) {
-      console.log("📊 Restaurando análisis del asistente");
-      assistantAnalysisRef.current = analisisRestaurado;
-      setAssistantAnalysis(analisisRestaurado);
+    if (!analysis) {
+      console.log("❌ No hay analysis");
+      speakText("No hay actividades para explicar.");
+      return;
     }
 
-    setStep("ready");
-    setIsTyping(false);
+    const activitiesWithTasks = analysis.data.revisionesPorActividad
+      .filter(
+        (actividad) =>
+          actividad.tareasConTiempo && actividad.tareasConTiempo.length > 0,
+      )
+      .map((actividad) => ({
+        actividadId: actividad.actividadId,
+        actividadTitulo: actividad.actividadTitulo,
+        actividadHorario: actividad.actividadHorario,
+        colaboradores: actividad.colaboradores || [],
+        tareas: actividad.tareasConTiempo.map((tarea) => ({
+          ...tarea,
+          actividadId: actividad.actividadId,
+          actividadTitulo: actividad.actividadTitulo,
+        })),
+      }));
 
-    // Scroll al final
-    setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    }, 100);
-  }, [conversacionActiva, mensajesRestaurados, analisisRestaurado]);
+    if (activitiesWithTasks.length === 0) {
+      speakText("No hay tareas con tiempo asignado para explicar.");
+      return;
+    }
+
+    // ✅ Usar todas las actividades (sin filtrar)
+    setFilteredActivitiesForVoice(activitiesWithTasks);
+    voiceMode.setVoiceMode(true);
+    voiceMode.setVoiceStep("confirm-start");
+    voiceMode.setExpectedInputType("confirmation");
+    voiceMode.setCurrentActivityIndex(0);
+    voiceMode.setCurrentTaskIndex(0);
+    voiceMode.setTaskExplanations([]);
+
+    const mensaje = `Vamos a explicar ${activitiesWithTasks.length} actividad${activitiesWithTasks.length !== 1 ? "es" : ""} con tareas programadas. ¿Listo para comenzar?`;
+    speakText(mensaje);
+  };
+
+  // ✅ NUEVA FUNCIÓN: Iniciar modo voz CON tareas seleccionadas específicas
+  const handleStartVoiceModeWithTasks = (taskIds: string[]) => {
+    console.log("========== INICIANDO MODO VOZ CON TAREAS SELECCIONADAS ==========");
+    console.log("🎯 Tareas seleccionadas:", taskIds);
+
+    if (!taskIds || taskIds.length === 0) {
+      console.warn("❌ No hay tareas seleccionadas");
+      speakText("No hay tareas seleccionadas para explicar.");
+      return;
+    }
+
+    const analysis = assistantAnalysisRef.current;
+    if (!analysis) {
+      console.log("❌ No hay analysis");
+      speakText("No hay actividades para explicar.");
+      return;
+    }
+
+    // ✅ Filtrar actividades que contengan las tareas seleccionadas
+    const filteredActivities = analysis.data.revisionesPorActividad
+      .map((actividad) => {
+        // Filtrar solo las tareas seleccionadas en esta actividad
+        const tareasFiltradas = actividad.tareasConTiempo
+          .filter((tarea) => taskIds.includes(tarea.id))
+          .map((tarea) => ({
+            ...tarea,
+            actividadId: actividad.actividadId,
+            actividadTitulo: actividad.actividadTitulo,
+          }));
+
+        // Si no hay tareas seleccionadas en esta actividad, omitirla
+        if (tareasFiltradas.length === 0) return null;
+
+        return {
+          actividadId: actividad.actividadId,
+          actividadTitulo: actividad.actividadTitulo,
+          actividadHorario: actividad.actividadHorario,
+          colaboradores: actividad.colaboradores || [],
+          tareas: tareasFiltradas,
+        };
+      })
+      .filter((act): act is any => act !== null);
+
+    console.log("✅ Actividades filtradas:", filteredActivities);
+
+    if (filteredActivities.length === 0) {
+      console.warn("⚠️ No se encontraron actividades con las tareas seleccionadas");
+      speakText("No se encontraron actividades con las tareas seleccionadas.");
+      return;
+    }
+
+    // ✅ Guardar en estado para VoiceGuidanceFlow
+    setSelectedTaskIds(taskIds);
+    setFilteredActivitiesForVoice(filteredActivities);
+
+    // ✅ Configurar modo voz
+    voiceMode.setVoiceMode(true);
+    voiceMode.setVoiceStep("confirm-start");
+    voiceMode.setExpectedInputType("confirmation");
+    voiceMode.setCurrentActivityIndex(0);
+    voiceMode.setCurrentTaskIndex(0);
+    voiceMode.setTaskExplanations([]);
+
+    const mensaje = `Vamos a explicar ${taskIds.length} tarea${taskIds.length !== 1 ? 's' : ''} seleccionada${taskIds.length !== 1 ? 's' : ''} en ${filteredActivities.length} actividad${filteredActivities.length !== 1 ? 'es' : ''}. ¿Listo para comenzar?`;
+    speakText(mensaje);
+  };
+
+  useMessageRestoration({
+    conversacionActiva,
+    mensajesRestaurados,
+    analisisRestaurado,
+    theme,
+    displayName,
+    email: colaborador.email,
+    onOpenReport: () => setMostrarModalReporte(true),
+    onStartVoiceMode: handleStartVoiceMode,
+    setMessages,
+    setStep,
+    setIsTyping,
+    setAssistantAnalysis,
+    assistantAnalysisRef,
+    scrollRef,
+  });
 
   useEffect(() => {
     if (!voiceRecognition.voiceTranscript) {
@@ -234,7 +336,6 @@ export function ChatBot({
       "EFECTO: Procesando voiceTranscript:",
       voiceRecognition.voiceTranscript,
     );
-    console.log("voiceMode activo?:", voiceMode.voiceMode);
 
     if (!voiceMode.voiceMode) {
       return;
@@ -341,18 +442,18 @@ export function ChatBot({
     if (!assistantAnalysis) return;
     if (sidebarCargado) return;
 
-    setSidebarCargando(true); // ✅ Ahora existe
+    setSidebarCargando(true);
     obtenerHistorialSidebar()
       .then((res) => {
         console.log("Historial del sidebar cargado:", res.data);
-        setData(res.data); // ✅ Ahora existe
+        setData(res.data);
         setSidebarCargado(true);
       })
       .catch((error) => {
         console.error("Error al cargar sidebar:", error);
-        setData([]); // ✅ Ahora existe
+        setData([]);
       })
-      .finally(() => setSidebarCargando(false)); // ✅ Ahora existe
+      .finally(() => setSidebarCargando(false));
   }, [assistantAnalysis, sidebarCargado]);
 
   useEffect(() => {
@@ -382,6 +483,7 @@ export function ChatBot({
         actividadId: actividad.actividadId,
         actividadTitulo: actividad.actividadTitulo,
         actividadHorario: actividad.actividadHorario,
+        colaboradores: actividad.colaboradores || [],
         tareas: actividad.tareasConTiempo.map((tarea) => ({
           ...tarea,
           actividadId: actividad.actividadId,
@@ -398,11 +500,10 @@ export function ChatBot({
       addMessage(
         "system",
         <div
-          className={`p-3 rounded-lg border ${
-            theme === "dark"
-              ? "bg-[#6841ea]/10 border-[#6841ea]/20"
-              : "bg-purple-50 border-purple-200"
-          }`}
+          className={`p-3 rounded-lg border ${theme === "dark"
+            ? "bg-[#6841ea]/10 border-[#6841ea]/20"
+            : "bg-purple-50 border-purple-200"
+            }`}
         >
           <div className="flex items-center gap-2">
             <Bot className="w-4 h-4 text-[#6841ea]" />
@@ -425,10 +526,10 @@ export function ChatBot({
       );
     }
   };
+
   const handleUserInputChange = (value: string) => {
     setUserInput(value);
 
-    // Si el valor es diferente a la última transcripción, el usuario está editando
     if (
       value !== lastTranscriptRef.current &&
       voiceRecognition.voiceTranscript
@@ -436,7 +537,6 @@ export function ChatBot({
       console.log("✏️ Usuario editando manualmente");
       setIsUserEditing(true);
 
-      // Cancelar envío automático
       if (autoSendTimerRef.current) {
         clearTimeout(autoSendTimerRef.current);
         autoSendTimerRef.current = null;
@@ -445,7 +545,6 @@ export function ChatBot({
     }
   };
 
-  // ✅ FUNCIÓN: Envío automático
   const handleAutoSend = async () => {
     if (!userInput.trim()) return;
 
@@ -454,13 +553,11 @@ export function ChatBot({
     try {
       const mensajeAEnviar = userInput.trim();
 
-      // Agregar mensaje del usuario
       addMessage("user", mensajeAEnviar);
       setUserInput("");
       setIsTyping(true);
       setIsLoadingIA(true);
 
-      // Reset de estados
       setIsUserEditing(false);
       lastTranscriptRef.current = "";
 
@@ -486,6 +583,7 @@ export function ChatBot({
       addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
     }
   };
+
   const preguntarPendiente = (index: number) => {
     if (index >= pendientesReporte.length) {
       speakText("Terminamos. ¿Quieres guardar el reporte?");
@@ -499,7 +597,6 @@ export function ChatBot({
     speakText(texto);
 
     setTimeout(() => {
-      // ✅ Usar el hook
       voiceRecognition.startRecording(
         (transcript) => {
           console.log("Transcripción del reporte:", transcript);
@@ -552,10 +649,10 @@ export function ChatBot({
         prev.map((item) =>
           item.pendienteId === p.pendienteId
             ? {
-                ...item,
-                completadoLocal: fueCompletado,
-                motivoLocal: fueCompletado ? "" : trimmedTranscript,
-              }
+              ...item,
+              completadoLocal: fueCompletado,
+              motivoLocal: fueCompletado ? "" : trimmedTranscript,
+            }
             : item,
         ),
       );
@@ -569,7 +666,6 @@ export function ChatBot({
         explanationProcessedRef.current = false;
         setIndicePendienteActual((prev) => prev + 1);
 
-        // Si hay más tareas, preguntarlas
         if (indicePendienteActual + 1 < pendientesReporte.length) {
           setTimeout(() => preguntarPendiente(indicePendienteActual + 1), 500);
         }
@@ -584,71 +680,10 @@ export function ChatBot({
     }
   };
 
-  const handleStartVoiceMode = () => {
-    console.log("========== INICIANDO MODO VOZ ==========");
-
-    // ✅ USAR EL REF EN LUGAR DEL ESTADO
-    const analysis = assistantAnalysisRef.current;
-
-    console.log("📊 analysis (desde ref):", analysis);
-
-    if (!analysis) {
-      console.log("❌ No hay analysis");
-      speakText("No hay actividades para explicar.");
-      return;
-    }
-
-    console.log(
-      "📋 revisionesPorActividad:",
-      analysis.data.revisionesPorActividad,
-    );
-
-    const activitiesWithTasks = analysis.data.revisionesPorActividad
-      .filter(
-        (actividad) =>
-          actividad.tareasConTiempo && actividad.tareasConTiempo.length > 0,
-      )
-      .map((actividad) => ({
-        actividadId: actividad.actividadId,
-        actividadTitulo: actividad.actividadTitulo,
-        actividadHorario: actividad.actividadHorario,
-        tareas: actividad.tareasConTiempo.map((tarea) => ({
-          ...tarea,
-          actividadId: actividad.actividadId,
-          actividadTitulo: actividad.actividadTitulo,
-        })),
-      }));
-
-    console.log("✅ Actividades con tareas:", activitiesWithTasks);
-    console.log("📝 Cantidad:", activitiesWithTasks.length);
-
-    if (activitiesWithTasks.length === 0) {
-      console.log("❌ No hay actividades con tareas");
-      speakText("No hay tareas con tiempo asignado para explicar.");
-      return;
-    }
-
-    console.log("🎤 Activando modo voz...");
-
-    // Activar modo voz
-    voiceMode.setVoiceMode(true);
-    voiceMode.setVoiceStep("confirm-start");
-    voiceMode.setExpectedInputType("confirmation");
-    voiceMode.setCurrentActivityIndex(0);
-    voiceMode.setCurrentTaskIndex(0);
-    voiceMode.setTaskExplanations([]);
-
-    // Mensaje de bienvenida
-    const mensaje = `Vamos a explicar ${activitiesWithTasks.length} actividad${activitiesWithTasks.length !== 1 ? "es" : ""} con tareas programadas. ¿Listo para comenzar?`;
-    console.log("🔊 Mensaje:", mensaje);
-    speakText(mensaje);
-  };
-
   const guardarReporteDiario = async () => {
     try {
       setGuardandoReporte(true);
 
-      // Validar que las tareas no completadas tengan motivo
       const pendientesSinMotivo = pendientesReporte.filter(
         (p) =>
           !p.completadoLocal &&
@@ -682,11 +717,10 @@ export function ChatBot({
         addMessage(
           "bot",
           <div
-            className={`p-4 rounded-lg border ${
-              theme === "dark"
-                ? "bg-green-900/20 border-green-500/20"
-                : "bg-green-50 border-green-200"
-            }`}
+            className={`p-4 rounded-lg border ${theme === "dark"
+              ? "bg-green-900/20 border-green-500/20"
+              : "bg-green-50 border-green-200"
+              }`}
           >
             <div className="flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -710,11 +744,10 @@ export function ChatBot({
       addMessage(
         "bot",
         <div
-          className={`p-4 rounded-lg border ${
-            theme === "dark"
-              ? "bg-red-900/20 border-red-500/20"
-              : "bg-red-50 border-red-200"
-          }`}
+          className={`p-4 rounded-lg border ${theme === "dark"
+            ? "bg-red-900/20 border-red-500/20"
+            : "bg-red-50 border-red-200"
+            }`}
         >
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-500" />
@@ -730,17 +763,14 @@ export function ChatBot({
   const finishVoiceMode = () => {
     console.log("========== FINALIZANDO MODO VOZ ==========");
 
-    // Detener voz
     stopVoice();
 
-    // Resetear modo voz
     voiceMode.setVoiceMode(false);
     voiceMode.setVoiceStep("idle");
     voiceMode.setExpectedInputType("none");
     voiceMode.setCurrentActivityIndex(0);
     voiceMode.setCurrentTaskIndex(0);
 
-    // Mensaje de confirmación
     addMessage(
       "bot",
       <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
@@ -774,7 +804,7 @@ export function ChatBot({
   };
 
   const confirmStartVoiceMode = () => {
-    if (activitiesWithTasks.length === 0) {
+    if (filteredActivitiesForVoice.length === 0) {
       speakText("No hay actividades con tareas para explicar.");
       setTimeout(() => voiceMode.cancelVoiceMode(), 1000);
       return;
@@ -787,8 +817,9 @@ export function ChatBot({
       speakActivityByIndex(0);
     }, 300);
   };
+
   const speakActivityByIndex = (activityIndex: number) => {
-    if (activityIndex >= activitiesWithTasks.length) {
+    if (activityIndex >= filteredActivitiesForVoice.length) {
       voiceMode.setVoiceStep("summary");
       voiceMode.setExpectedInputType("confirmation");
 
@@ -800,8 +831,8 @@ export function ChatBot({
       return;
     }
 
-    const activity = activitiesWithTasks[activityIndex];
-    const activityText = `Actividad ${activityIndex + 1} de ${activitiesWithTasks.length}: ${activity.actividadTitulo}. Tiene ${activity.tareas.length} tarea${activity.tareas.length !== 1 ? "s" : ""}.`;
+    const activity = filteredActivitiesForVoice[activityIndex];
+    const activityText = `Actividad ${activityIndex + 1} de ${filteredActivitiesForVoice.length}: ${activity.actividadTitulo}. Tiene ${activity.tareas.length} tarea${activity.tareas.length !== 1 ? "s" : ""}.`;
 
     voiceMode.setVoiceStep("activity-presentation");
     voiceMode.setExpectedInputType("none");
@@ -819,7 +850,7 @@ export function ChatBot({
   };
 
   const speakTaskByIndices = (activityIndex: number, taskIndex: number) => {
-    if (activityIndex >= activitiesWithTasks.length) {
+    if (activityIndex >= filteredActivitiesForVoice.length) {
       voiceMode.setVoiceStep("summary");
       voiceMode.setExpectedInputType("confirmation");
 
@@ -831,7 +862,7 @@ export function ChatBot({
       return;
     }
 
-    const activity = activitiesWithTasks[activityIndex];
+    const activity = filteredActivitiesForVoice[activityIndex];
 
     if (taskIndex >= activity.tareas.length) {
       const nextActivityIndex = activityIndex + 1;
@@ -880,7 +911,7 @@ export function ChatBot({
     const currentTask = getCurrentTask(
       voiceMode.currentActivityIndex,
       voiceMode.currentTaskIndex,
-      activitiesWithTasks,
+      filteredActivitiesForVoice,
     );
 
     if (currentTask) {
@@ -904,21 +935,16 @@ export function ChatBot({
     });
   };
 
-  // funcion para iniciar grabacion de voz en chat no
   const startChatVoiceRecording = () => {
     if (voiceRecognition.isRecording) {
-      // Si ya está grabando, detene onVoiceClick={startRecordingWrapper}r
       voiceRecognition.stopRecording();
       return;
     }
 
-    // Iniciar grabación para chat normal
     voiceRecognition.startRecording(
       (transcript) => {
-        // Cuando termine de grabar, poner el texto en el input
         if (transcript.trim()) {
           setUserInput(transcript.trim());
-          // Opcional: Enfocar el input
           if (inputRef.current) {
             inputRef.current.focus();
           }
@@ -959,11 +985,11 @@ export function ChatBot({
     const currentTask = getCurrentTask(
       voiceMode.currentActivityIndex,
       voiceMode.currentTaskIndex,
-      activitiesWithTasks,
+      filteredActivitiesForVoice,
     );
     const currentActivity = getCurrentActivity(
       voiceMode.currentActivityIndex,
-      activitiesWithTasks,
+      filteredActivitiesForVoice,
     );
 
     console.log("📋 Tarea actual:", currentTask);
@@ -974,7 +1000,6 @@ export function ChatBot({
       return;
     }
 
-    // ✅ CAMBIAR ESTADO A "processing-explanation"
     voiceMode.setVoiceStep("processing-explanation");
     speakText("Validando tu explicación...");
 
@@ -987,11 +1012,10 @@ export function ChatBot({
         nombrePendiente: currentTask.nombre,
         idPendiente: currentTask.id,
         explicacion: trimmedTranscript,
+        userEmail: colaborador.email,
+
       };
 
-      console.log("currentTask", currentTask);
-
-      // ✅ ENVIAR AL BACKEND PARA VALIDAR
       const response = await sendPendienteValidarYGuardar(payload);
 
       console.log("📡 Respuesta del backend:", response);
@@ -999,7 +1023,6 @@ export function ChatBot({
       if (response.esValida) {
         console.log("✅ EXPLICACIÓN VÁLIDA");
 
-        // ✅ EXPLICACIÓN VÁLIDA - GUARDAR Y CONTINUAR
         const newExplanation: TaskExplanation = {
           taskId: currentTask.id,
           taskName: currentTask.nombre,
@@ -1020,7 +1043,6 @@ export function ChatBot({
           "Perfecto, explicación validada. Pasamos a la siguiente tarea.",
         );
 
-        // ✅ PASAR A LA SIGUIENTE TAREA
         setTimeout(() => {
           const nextTaskIndex = voiceMode.currentTaskIndex + 1;
 
@@ -1036,7 +1058,7 @@ export function ChatBot({
             voiceMode.setCurrentTaskIndex(0);
             voiceMode.setRetryCount(0);
 
-            if (nextActivityIndex < activitiesWithTasks.length) {
+            if (nextActivityIndex < filteredActivitiesForVoice.length) {
               speakActivityByIndex(nextActivityIndex);
             } else {
               console.log("🎉 Todas las actividades completadas");
@@ -1053,7 +1075,6 @@ export function ChatBot({
       } else {
         console.warn("❌ EXPLICACIÓN NO VÁLIDA:", response.razon);
 
-        // ❌ EXPLICACIÓN NO VÁLIDA - PEDIR CORRECCIÓN
         voiceMode.setRetryCount((prev) => prev + 1);
         speakText(
           `${response.razon || "Por favor, explica con más detalle cómo resolverás esta tarea."}`,
@@ -1079,7 +1100,7 @@ export function ChatBot({
     const currentTask = getCurrentTask(
       voiceMode.currentActivityIndex,
       voiceMode.currentTaskIndex,
-      activitiesWithTasks,
+      filteredActivitiesForVoice,
     );
 
     if (!currentTask) return;
@@ -1104,11 +1125,11 @@ export function ChatBot({
     const currentTask = getCurrentTask(
       voiceMode.currentActivityIndex,
       voiceMode.currentTaskIndex,
-      activitiesWithTasks,
+      filteredActivitiesForVoice,
     );
     const currentActivity = getCurrentActivity(
       voiceMode.currentActivityIndex,
-      activitiesWithTasks,
+      filteredActivitiesForVoice,
     );
 
     if (!currentTask || !currentActivity) return;
@@ -1144,7 +1165,7 @@ export function ChatBot({
       voiceMode.setCurrentTaskIndex(0);
       voiceMode.resetForNextTask();
 
-      if (nextActivityIndex < activitiesWithTasks.length) {
+      if (nextActivityIndex < filteredActivitiesForVoice.length) {
         setTimeout(() => speakActivityByIndex(nextActivityIndex), 500);
       } else {
         voiceMode.setVoiceStep("summary");
@@ -1166,14 +1187,12 @@ export function ChatBot({
 
     if (!voiceMode.voiceMode) return;
 
-    // Procesar comandos según el tipo de input esperado
     switch (voiceMode.expectedInputType) {
       case "confirmation":
         if (
           isClearCommand(lowerTranscript, ["sí", "si", "confirmar", "correcto"])
         ) {
           sendExplanationsToBackend();
-
           return;
         }
 
@@ -1197,7 +1216,6 @@ export function ChatBot({
         break;
     }
 
-    // Comandos globales
     if (isClearCommand(lowerTranscript, ["saltar", "skip"])) {
       skipTask();
       return;
@@ -1218,7 +1236,6 @@ export function ChatBot({
     }
 
     try {
-      // ✅ CORRECTO - Usa voiceMode
       voiceMode.setVoiceStep("sending");
       voiceMode.setExpectedInputType("none");
       speakText("Enviando tu reporte...");
@@ -1251,7 +1268,7 @@ export function ChatBot({
 
       setTimeout(() => {
         voiceMode.setVoiceStep("idle");
-        voiceMode.setVoiceMode(false); // ✅ CORRECTO
+        voiceMode.setVoiceMode(false);
         voiceMode.setExpectedInputType("none");
 
         addMessage(
@@ -1305,115 +1322,32 @@ export function ChatBot({
     if (!isRestoration) {
       addMessageWithTyping(
         "bot",
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10">
-            <div className="p-2 rounded-full bg-[#6841ea]/10">
-              <User className="w-5 h-5 text-[#6841ea]" />
-            </div>
-            <div>
-              <p className="font-medium text-sm">Hola, {displayName}!</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <Mail className="w-3 h-3" />
-                {colaborador.email}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 mt-3">
-            <div className="p-2 rounded-full bg-[#6841ea]/10">
-              <Brain className="w-5 h-5 text-[#6841ea]" />
-            </div>
-            <div>
-              <h3 className="font-bold text-md">📋 Resumen de tu día</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {new Date().toLocaleDateString("es-MX", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </p>
-            </div>
-          </div>
-        </div>,
+        messageTemplates.welcome.userInfo({
+          theme,
+          displayName,
+          email: colaborador.email,
+        }),
         400,
-        true, // isWide
+        true,
       );
 
       setTimeout(async () => {
         addMessageWithTyping(
           "bot",
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Target className="w-3 h-3 text-red-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Alta
-                  </span>
-                </div>
-                <div className="text-xl font-bold text-red-500">
-                  {analysis.metrics.tareasAltaPrioridad || 0}
-                </div>
-              </div>
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText className="w-3 h-3 text-green-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Total
-                  </span>
-                </div>
-                <div className="text-xl font-bold">
-                  {analysis.metrics.tareasConTiempo || 0}
-                </div>
-              </div>
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock className="w-3 h-3 text-yellow-500" />
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Tiempo
-                  </span>
-                </div>
-                <div className="text-xl font-bold text-yellow-500">
-                  {analysis.metrics.tiempoEstimadoTotal || "0h 0m"}
-                </div>
-              </div>
-            </div>
-
-            {analysis.answer && (
-              <div
-                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-gray-50 border-gray-200"}`}
-              >
-                <div className="flex items-start gap-2">
-                  <Bot className="w-4 h-4 text-[#6841ea] mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                      {analysis.answer.split("\n\n")[0]}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>,
+          messageTemplates.analysis.metrics({
+            theme,
+            analysis,
+          }),
           600,
-          false, // isWide
+          false,
         );
 
         setTimeout(() => {
-          console.log("hayTareas", analysis);
           const hayTareas = analysis.data.revisionesPorActividad.some(
             (r) => r.tareasConTiempo.length > 0,
           );
 
-          console.log("hayTareas", hayTareas);
-
           if (hayTareas) {
-            // Filtrar solo las que tienen tareas
             const actividadesConTareas =
               analysis.data.revisionesPorActividad.filter(
                 (r) => r.tareasConTiempo.length > 0,
@@ -1460,12 +1394,13 @@ export function ChatBot({
 
       console.log("Respuesta del endpoint con revisiones:", data);
 
-      const adaptedData: AssistantAnalysis = {
+      const adaptedData: AssistantAnalysis & { colaboradoresInvolucrados?: any[] } = {
         success: data.success,
         answer: data.answer,
         provider: data.provider || "Gemini",
         sessionId: data.sessionId,
         proyectoPrincipal: data.proyectoPrincipal || "Sin proyecto principal",
+        colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
         metrics: {
           totalActividades: data.metrics?.totalActividadesProgramadas || 0,
           actividadesConTiempoTotal:
@@ -1482,6 +1417,7 @@ export function ChatBot({
             horario: a.horario,
             status: a.status,
             proyecto: a.proyecto,
+            colaboradores: a.colaboradores || [],
             esHorarioLaboral: a.esHorarioLaboral || false,
             tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
           })),
@@ -1502,6 +1438,7 @@ export function ChatBot({
                   fechaFinTerminada: t.fechaFinTerminada || null,
                   diasPendiente: t.diasPendiente || 0,
                   prioridad: t.prioridad || "BAJA",
+                  colaboradores: t.colaboradores || [],
                 }),
               );
 
@@ -1511,6 +1448,8 @@ export function ChatBot({
                 actividadId: act.actividadId,
                 actividadTitulo: act.actividadTitulo,
                 actividadHorario: act.actividadHorario,
+                colaboradores: act.colaboradores || [],
+                assigneesOriginales: act.assigneesOriginales || [],
                 tareasConTiempo: tareasMapeadas,
                 totalTareasConTiempo: act.totalTareasConTiempo || 0,
                 tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
@@ -1525,22 +1464,17 @@ export function ChatBot({
 
       console.log("========== GUARDANDO ANÁLISIS EN ESTADO ==========");
       console.log("📊 adaptedData:", adaptedData);
+      console.log("👥 colaboradoresInvolucrados:", adaptedData.colaboradoresInvolucrados);
       console.log(
         "📋 revisionesPorActividad:",
         adaptedData.data.revisionesPorActividad,
       );
 
       assistantAnalysisRef.current = adaptedData;
-
-      // ✅ Guardar en el estado (para re-renders)
       setAssistantAnalysis(adaptedData);
 
       setTimeout(() => {
         console.log("✅ Estado guardado, verificando...");
-        console.log(
-          "📊 assistantAnalysis después de setear:",
-          assistantAnalysis,
-        );
       }, 100);
 
       setStep("ready");
@@ -1549,7 +1483,6 @@ export function ChatBot({
       console.error("Error al obtener análisis del asistente:", error);
       setIsTyping(false);
       setStep("error");
-      // sin datos de ejemplo ni estatico
       addMessage(
         "bot",
         <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
@@ -1570,125 +1503,14 @@ export function ChatBot({
     }
   };
 
-  // const startRecording = () => {
-  //   if (typeof window === "undefined") return;
-  //   if (
-  //     !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
-  //   ) {
-  //     alert("Tu navegador no soporta reconocimiento de voz");
-  //     return;
-  //   }
-
-  //   if (isRecording) {
-  //     stopRecording();
-  //     return;
-  //   }
-
-  //   window.speechSynthesis.cancel();
-
-  //   if (recognitionRef.current) {
-  //     try {
-  //       recognitionRef.current.stop();
-  //       recognitionRef.current = null;
-  //     } catch (e) {
-  //       console.log("Error al detener reconocimiento previo:", e);
-  //     }
-  //   }
-
-  //   setIsRecording(true);
-  //   setIsListening(true);
-  //   setVoiceTranscript("");
-  //   voiceTranscriptRef.current = "";
-
-  //   const SpeechRecognition =
-  //     (window as any).SpeechRecognition ||
-  //     (window as any).webkitSpeechRecognition;
-  //   const recognition = new SpeechRecognition();
-  //   recognition.lang = "es-MX";
-  //   recognition.continuous = true;
-  //   recognition.interimResults = true;
-  //   recognition.maxAlternatives = 1;
-
-  //   recognitionRef.current = recognition;
-
-  //   recognition.onstart = () => {
-  //     console.log("✅ Reconocimiento de voz INICIADO");
-  //     setIsListening(true);
-  //   };
-
-  //   recognition.onresult = (event: any) => {
-  //     // Acumular TODOS los resultados para evitar pérdida al pausar
-  //     let finalTranscript = "";
-  //     let interimTranscript = "";
-
-  //     for (let i = 0; i < event.results.length; i++) {
-  //       const result = event.results[i];
-  //       if (result.isFinal) {
-  //         finalTranscript += result[0].transcript + " ";
-  //       } else {
-  //         interimTranscript += result[0].transcript;
-  //       }
-  //     }
-
-  //     const fullTranscript = (finalTranscript + interimTranscript).trim();
-  //     voiceTranscriptRef.current = fullTranscript;
-  //     setVoiceTranscript(fullTranscript);
-  //   };
-
-  //   recognition.onerror = (event: any) => {
-  //     console.warn("⚠️ SpeechRecognition error:", event.error);
-
-  //     if (event.error === "aborted") {
-  //       console.log("🔄 Abortado intencionalmente");
-  //       setIsListening(false);
-  //       setIsRecording(false);
-
-  //       return;
-  //     }
-
-  //     setIsListening(false);
-  //     setIsRecording(false);
-  //   };
-
-  //   recognition.onend = () => {
-  //     console.log("🛑 Reconocimiento de voz FINALIZADO");
-  //     setIsListening(false);
-  //     setIsRecording(false);
-  //   };
-
-  //   setTimeout(() => {
-  //     try {
-  //       recognition.start();
-  //       console.log(" Iniciando reconocimiento...");
-  //     } catch (error) {
-  //       console.error("❌ Error al iniciar reconocimiento:", error);
-  //       setIsListening(false);
-  //       setIsRecording(false);
-
-  //       setTimeout(() => {
-  //         try {
-  //           recognition.start();
-  //         } catch (retryError) {
-  //           console.error("❌ Error en reintento:", retryError);
-  //           alert(
-  //             "No se pudo acceder al micrófono. Por favor, verifica los permisos.",
-  //           );
-  //         }
-  //       }, 300);
-  //     }
-  //   }, 100);
-  // };
-
   const stopRecording = () => {
     console.log("========== DETENIENDO GRABACIÓN ==========");
 
-    // ✅ Usar el hook
     voiceRecognition.stopRecording();
 
     const currentTranscript = voiceRecognition.voiceTranscript;
     console.log("📝 Transcripción capturada:", currentTranscript);
 
-    // Validar que estemos en modo voz
     if (
       voiceMode.voiceMode &&
       voiceMode.voiceStep === "listening-explanation" &&
@@ -1711,9 +1533,8 @@ export function ChatBot({
 
   const toggleTheme = () => {
     if (externalToggle) {
-      externalToggle(); // Usa la función del padre
+      externalToggle();
     } else {
-      // Fallback local
       const newTheme = internalTheme === "light" ? "dark" : "light";
       setInternalTheme(newTheme);
       document.documentElement.classList.toggle("dark", newTheme === "dark");
@@ -1738,7 +1559,6 @@ export function ChatBot({
     setMessages((prev) => {
       const updated = [...prev, newMessage];
 
-      // Actualizar caché de conversación
       if (conversationHistory.conversacionActiva) {
         conversationHistory.actualizarCache(
           conversationHistory.conversacionActiva,
@@ -1770,7 +1590,6 @@ export function ChatBot({
 
       const mensajeAEnviar = userInput.trim();
 
-      // Agregar mensaje del usuario al historial
       addMessage("user", mensajeAEnviar);
       setUserInput("");
       setIsTyping(true);
@@ -1822,9 +1641,10 @@ export function ChatBot({
         changeRate={changeRate}
         isSpeaking={isSpeaking}
         isPiPMode={isPiPMode}
-        openPiPWindow={() => {}} // Implementar si necesitas PiP
-        closePiPWindow={() => {}}
+        openPiPWindow={() => { }}
+        closePiPWindow={() => { }}
         setShowLogoutDialog={setShowLogoutDialog}
+        onViewReports={onViewReports}
       />
 
       <VoiceGuidanceFlow
@@ -1835,7 +1655,8 @@ export function ChatBot({
         finishVoiceMode={finishVoiceMode}
         currentActivityIndex={voiceMode.currentActivityIndex}
         currentTaskIndex={voiceMode.currentTaskIndex}
-        activitiesWithTasks={activitiesWithTasks}
+        // ✅ MODIFICADO: Usar filteredActivitiesForVoice en lugar de activitiesWithTasks
+        activitiesWithTasks={filteredActivitiesForVoice}
         taskExplanations={voiceMode.taskExplanations}
         voiceTranscript={voiceRecognition.voiceTranscript}
         currentListeningFor={voiceMode.currentListeningFor}
@@ -1853,13 +1674,14 @@ export function ChatBot({
         retryExplanation={retryExplanation}
         sendExplanationsToBackend={sendExplanationsToBackend}
         recognitionRef={voiceRecognition.recognitionRef}
-        setIsRecording={() => {}}
-        setIsListening={() => {}}
+        setIsRecording={() => { }}
+        setIsListening={() => { }}
         setVoiceStep={voiceMode.setVoiceStep}
         setCurrentListeningFor={voiceMode.setCurrentListeningFor}
+        // ✅ NUEVO: Pasar selectedTaskIds al VoiceGuidanceFlow
+        selectedTaskIds={selectedTaskIds}
       />
 
-      {/* CONTENIDO DE MENSAJES - PADDING AJUSTADO */}
       <div
         className={`flex-1 overflow-y-auto
     [scrollbar-width:none]
@@ -1879,15 +1701,17 @@ export function ChatBot({
             assistantAnalysis={assistantAnalysis}
             onOpenReport={() => setMostrarModalReporte(true)}
             onStartVoiceMode={handleStartVoiceMode}
+            // ✅ NUEVO: Pasar la nueva función con tareas seleccionadas
+            onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
             reportConfig={{
               horaInicio: horaInicioReporte,
               horaFin: horaFinReporte,
             }}
+            userEmail={colaborador.email}
           />
         </div>
       </div>
 
-      {/* INPUT BAR - Z-INDEX AJUSTADO */}
       {!voiceMode.voiceMode && (
         <ChatInputBar
           userInput={userInput}
@@ -1905,8 +1729,6 @@ export function ChatBot({
         />
       )}
 
-      {/* Modal de Reporte de Actividades Diarias */}
-
       <ReporteActividadesModal
         isOpen={mostrarModalReporte}
         onOpenChange={setMostrarModalReporte}
@@ -1918,7 +1740,6 @@ export function ChatBot({
         onGuardarReporte={guardarReporteDiario}
         guardandoReporte={guardandoReporte}
       />
-      {/* ========== FIN CONTENIDO PRINCIPAL ========== */}
 
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent

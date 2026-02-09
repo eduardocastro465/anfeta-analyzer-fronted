@@ -12,6 +12,8 @@ export interface MessageListProps {
   messages: Message[];
   isTyping: boolean;
   theme: "light" | "dark";
+    // ✅ AÑADE ESTA LÍNEA
+  userEmail?: string;
   onVoiceMessageClick: (voiceText: string) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   assistantAnalysis?: AssistantAnalysis | null; // ✅ NUEVO
@@ -23,6 +25,7 @@ export interface MessageListProps {
     horaFin: string;
   };
 }
+
 export interface HeaderProps {
   isInPiPWindow: boolean;
   sidebarOpen: boolean;
@@ -38,6 +41,8 @@ export interface HeaderProps {
   openPiPWindow: () => void;
   closePiPWindow: () => void;
   setShowLogoutDialog: (show: boolean) => void;
+  // Nueva prop opcional para reportes
+  onViewReports?: () => void;
 }
 
 export interface Actividad {
@@ -97,45 +102,6 @@ export interface ActividadesApiResponse {
   success: boolean;
   data: Actividad[];
 }
-// export interface AssistantAnalysis {
-//   success: boolean;
-//   answer: string;
-//   provider: string;
-//   metrics: {
-//     totalActividades: number;
-//     totalPendientes: number;
-//     pendientesAltaPrioridad: number;
-//     tiempoEstimadoTotal: string;
-//     actividadesConPendientes: number;
-//   };
-//   data: {
-//     actividades: Array<{
-//       id: string;
-//       titulo: string;
-//       horario: string;
-//       status: string;
-//       proyecto: string;
-//       tieneRevisiones: boolean;
-//     }>;
-//     revisionesPorActividad: Array<{
-//       actividadId: string;
-//       actividadTitulo: string;
-//       totalPendientes: number;
-//       pendientesAlta: number;
-//       tiempoTotal: number;
-//       pendientes: Array<{
-//         id: string;
-//         nombre: string;
-//         terminada: boolean;
-//         confirmada: boolean;
-//         duracionMin: number;
-//         fechaCreacion: string;
-//         fechaFinTerminada: string | null;
-//         prioridad: string;
-//       }>;
-//     }>;
-//   };
-// }
 
 interface HistorialMensaje {
   analisis: any;
@@ -197,12 +163,12 @@ export interface ActividadDiaria {
   status: string;
   pendientes: PendienteDiario[];
 }
+
 export interface PendienteEstadoLocal extends PendienteDiario {
   actividadId: string;
   completadoLocal: boolean;
   motivoLocal: string;
 }
-// Agregar estos tipos a tu archivo @/lib/types.ts existente
 
 export interface TaskExplanation {
   taskId: string;
@@ -221,6 +187,7 @@ export interface ActividadConTareas {
   actividadHorario: string;
   tareas: TareaConTiempo[];
 }
+
 export interface TareaConTiempo {
   id: string;
   nombre: string;
@@ -234,6 +201,7 @@ export interface TareaConTiempo {
   actividadId?: string;
   actividadTitulo?: string;
 }
+
 export interface ActividadBase {
   id: string;
   titulo: string;
@@ -243,6 +211,7 @@ export interface ActividadBase {
   esHorarioLaboral: boolean;
   tieneRevisionesConTiempo: boolean;
 }
+
 export interface Message {
   id: string;
   type: "bot" | "user" | "system" | "voice" | "analysis";
@@ -261,6 +230,7 @@ export type ConversacionSidebar = {
   createdAt: string;
   updatedAt?: string;
 };
+
 export interface AssistantAnalysis {
   success: boolean;
   answer: string;
@@ -307,6 +277,7 @@ export interface AssistantAnalysis {
     }>;
   };
   multiActividad: boolean;
+  colaboradoresInvolucrados?: string[]; // ✅ AÑADIDO: Para TasksPanel
 }
 
 export interface TaskExplanation {
@@ -319,6 +290,7 @@ export interface TaskExplanation {
   duration: number;
   timestamp: Date;
 }
+
 export interface ChatBotProps {
   colaborador: Colaborador;
   actividades?: any[];
@@ -331,7 +303,9 @@ export interface ChatBotProps {
   onNuevaConversacion?: (conv: ConversacionSidebar) => void;
   onActualizarNombre?: (sessionId: string, nombre: string) => void;
   onActualizarTyping?: (isTyping: boolean) => void;
-
+  showLogoutDialog: boolean;
+  setShowLogoutDialog: (show: boolean) => void;
+  onViewReports?: () => void;
 }
 
 export type ChatStep =
@@ -420,4 +394,87 @@ export interface IAResponse {
   respuesta?: string;
   timestamp?: Date;
   error?: string;
+}
+
+// ✅ AÑADIDO: Tipo para TasksPanel
+export interface TasksPanelProps {
+  actividadesConTareasPendientes: Array<{
+    actividadId: string;
+    actividadTitulo: string;
+    actividadHorario: string;
+    tareasConTiempo: Array<{
+      id: string;
+      nombre: string;
+      terminada: boolean;
+      confirmada: boolean;
+      duracionMin: number;
+      fechaCreacion: string;
+      fechaFinTerminada: string | null;
+      diasPendiente: number;
+      prioridad: string;
+      colaboradores?: string[];
+    }>;
+    totalTareasConTiempo: number;
+    tareasAltaPrioridad: number;
+    tiempoTotal: number;
+    tiempoFormateado: string;
+    colaboradores?: string[];
+  }>;
+  totalTareasPendientes: number;
+  esHoraReporte: boolean;
+  theme: "light" | "dark";
+  assistantAnalysis: AssistantAnalysis;
+  onOpenReport?: () => void;
+  onStartVoiceMode?: () => void;
+  // ✅ Props para manejar selección
+  tareasSeleccionadas?: Set<string>;
+  onToggleTarea?: (tareaId: string) => void;
+  onSeleccionarTodas?: () => void;
+  onDeseleccionarTodas?: () => void;
+  // ✅ Función para explicar tareas seleccionadas
+  onExplicarTareasSeleccionadas?: () => void;
+}
+
+// ✅ AÑADIDO: Tipo para NoTasksMessage
+export interface NoTasksMessageProps {
+  theme: "light" | "dark";
+}
+
+// ✅ AÑADIDO: Tipo para ActivityItem
+export interface ActivityItemProps {
+  revision: any;
+  actividad: any;
+  index: number;
+  theme: "light" | "dark";
+  tareasSeleccionadas: Set<string>;
+  onToggleTarea: (tareaId: string) => void;
+  todosColaboradores: string[];
+}
+
+// ✅ AÑADIDO: Tipo para TaskItem
+export interface TaskItemProps {
+  tarea: any;
+  theme: "light" | "dark";
+  estaSeleccionada: boolean;
+  onToggleSeleccion: () => void;
+}
+
+// ✅ AÑADIDO: Tipo para TasksPanelFooter
+export interface TasksPanelFooterProps {
+  totalTareasPendientes: number;
+  esHoraReporte: boolean;
+  theme: "light" | "dark";
+  onOpenReport?: () => void;
+  onStartVoiceMode?: () => void;
+  todosColaboradores: string[];
+  // ✅ Nuevos props
+  tareasSeleccionadas: Set<string>;
+  onSeleccionarTodas: () => void;
+  onDeseleccionarTodas: () => void;
+  onExplicarTareasSeleccionadas: () => void;
+}
+
+// ✅ AÑADIDO: Tipo para TypingIndicator
+export interface TypingIndicatorProps {
+  theme: "light" | "dark";
 }

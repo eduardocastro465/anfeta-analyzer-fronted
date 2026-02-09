@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChatContainer } from "@/components/ChatContainer";
+import ChatContainer from "@/components/ChatContainer";
 import type { Colaborador, Actividad } from "@/lib/types";
 
 export default function ChatPage({

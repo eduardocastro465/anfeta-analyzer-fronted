@@ -86,6 +86,7 @@ interface ChatBotProps {
   colaborador: Colaborador;
   actividades: any[];
   onLogout: () => void;
+  onViewReports?: () => void; // 🔹 Agrega esto
 }
 
 type ChatStep = "welcome" | "loading-analysis" | "show-analysis" | "finished";
@@ -291,11 +292,10 @@ const SpeedControlHeader = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={isSpeaking}
-        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-          theme === "dark"
+        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${theme === "dark"
             ? "bg-[#2a2a2a] hover:bg-[#353535] disabled:opacity-50"
             : "bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-        }`}
+          }`}
         title="Control de velocidad"
       >
         <Volume2 className="w-4 h-4 text-[#6841ea]" />
@@ -306,11 +306,10 @@ const SpeedControlHeader = ({
 
       {isOpen && (
         <div
-          className={`absolute right-0 top-12 w-56 rounded-lg border p-3 shadow-lg z-50 ${
-            theme === "dark"
+          className={`absolute right-0 top-12 w-56 rounded-lg border p-3 shadow-lg z-50 ${theme === "dark"
               ? "bg-[#1a1a1a] border-[#2a2a2a]"
               : "bg-white border-gray-200"
-          }`}
+            }`}
         >
           <div className="space-y-3">
             <div className="space-y-1">
@@ -385,13 +384,12 @@ const SpeedControlModal = ({
           <button
             key={speed}
             onClick={() => changeRate(speed)}
-            className={`px-2 py-1 text-xs rounded-md font-medium transition-all ${
-              Math.abs(rate - speed) < 0.05
+            className={`px-2 py-1 text-xs rounded-md font-medium transition-all ${Math.abs(rate - speed) < 0.05
                 ? "bg-[#6841ea] text-white"
                 : theme === "dark"
                   ? "bg-[#2a2a2a] hover:bg-[#353535] text-gray-300"
                   : "bg-gray-100 hover:bg-gray-200 text-gray-700"
-            }`}
+              }`}
           >
             {speed}x
           </button>
@@ -407,7 +405,7 @@ const getDisplayName = (colaborador: Colaborador) => {
   return colaborador.email.split("@")[0];
 };
 
-export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
+export function ChatBot({ colaborador, onLogout, onViewReports }: ChatBotProps) {
   const [step, setStep] = useState<ChatStep>("welcome");
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -739,10 +737,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         prev.map((item) =>
           item.pendienteId === p.pendienteId
             ? {
-                ...item,
-                completadoLocal: data.completado,
-                motivoLocal: data.completado ? "" : trimmedTranscript,
-              }
+              ...item,
+              completadoLocal: data.completado,
+              motivoLocal: data.completado ? "" : trimmedTranscript,
+            }
             : item,
         ),
       );
@@ -802,11 +800,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
         addMessage(
           "bot",
           <div
-            className={`p-4 rounded-lg border ${
-              theme === "dark"
+            className={`p-4 rounded-lg border ${theme === "dark"
                 ? "bg-green-900/20 border-green-500/20"
                 : "bg-green-50 border-green-200"
-            }`}
+              }`}
           >
             <div className="flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -830,11 +827,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       addMessage(
         "bot",
         <div
-          className={`p-4 rounded-lg border ${
-            theme === "dark"
+          className={`p-4 rounded-lg border ${theme === "dark"
               ? "bg-red-900/20 border-red-500/20"
               : "bg-red-50 border-red-200"
-          }`}
+            }`}
         >
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-500" />
@@ -1240,7 +1236,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     }, 100);
   };
 
-  
+
   const startRecordingForExplanation = () => {
     console.log("Iniciando grabación específica para explicación...");
 
@@ -1304,9 +1300,9 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       }
 
       const fullTranscript = (finalTranscript + interimTranscript).trim();
-      console.log("[v0] Transcripción acumulada:", fullTranscript);
+      console.log(" Transcripción acumulada:", fullTranscript);
       console.log(
-        "[v0] Final:",
+        " Final:",
         finalTranscript.trim(),
         "| Interim:",
         interimTranscript,
@@ -1325,7 +1321,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       if (fullTranscript.length > 0) {
         silenceTimerRef.current = setTimeout(() => {
           console.log(
-            "[v0] 3 segundos de silencio detectados, enviando explicación automáticamente",
+            " 3 segundos de silencio detectados, enviando explicación automáticamente",
           );
 
           // Verificar que no se haya procesado ya y que hay texto
@@ -1783,13 +1779,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div
                               className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                              ${
-                                tarea.prioridad === "ALTA"
+                              ${tarea.prioridad === "ALTA"
                                   ? "bg-red-500/20 text-red-500"
                                   : tarea.prioridad === "MEDIA"
                                     ? "bg-yellow-500/20 text-yellow-500"
                                     : "bg-green-500/20 text-green-500"
-                              }`}
+                                }`}
                             >
                               {tIdx + 1}
                             </div>
@@ -2501,13 +2496,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                         <div className="flex items-center gap-2">
                           <div
                             className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                          ${
-                            idx % 3 === 0
-                              ? "bg-blue-500/20 text-blue-500"
-                              : idx % 3 === 1
-                                ? "bg-purple-500/20 text-purple-500"
-                                : "bg-pink-500/20 text-pink-500"
-                          }`}
+                          ${idx % 3 === 0
+                                ? "bg-blue-500/20 text-blue-500"
+                                : idx % 3 === 1
+                                  ? "bg-purple-500/20 text-purple-500"
+                                  : "bg-pink-500/20 text-pink-500"
+                              }`}
                           >
                             {idx + 1}
                           </div>
@@ -2531,13 +2525,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                                 <div className="flex items-center gap-2">
                                   <div
                                     className={`w-5 h-5 rounded-full flex items-center justify-center text-xs
-                                  ${
-                                    tarea.prioridad === "ALTA"
-                                      ? "bg-red-500/20 text-red-500"
-                                      : tarea.prioridad === "MEDIA"
-                                        ? "bg-yellow-500/20 text-yellow-500"
-                                        : "bg-green-500/20 text-green-500"
-                                  }`}
+                                  ${tarea.prioridad === "ALTA"
+                                        ? "bg-red-500/20 text-red-500"
+                                        : tarea.prioridad === "MEDIA"
+                                          ? "bg-yellow-500/20 text-yellow-500"
+                                          : "bg-green-500/20 text-green-500"
+                                      }`}
                                   >
                                     {tIdx + 1}
                                   </div>
@@ -2657,11 +2650,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                               addMessage(
                                 "bot",
                                 <div
-                                  className={`p-4 rounded-lg border ${
-                                    theme === "dark"
+                                  className={`p-4 rounded-lg border ${theme === "dark"
                                       ? "bg-yellow-900/20 border-yellow-500/20"
                                       : "bg-yellow-50 border-yellow-200"
-                                  }`}
+                                    }`}
                                 >
                                   <div className="flex items-center gap-3">
                                     <AlertCircle className="w-5 h-5 text-yellow-500" />
@@ -2743,7 +2735,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       };
 
       const response = await fetch(
-        "http://localhost:4000/api/v1/assistant/actividades-con-revisiones",
+        "http://localhost:4001/api/v1/assistant/actividades-con-revisiones",
         {
           method: "POST",
           credentials: "include",
@@ -2751,6 +2743,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           body: JSON.stringify(requestBody),
         },
       );
+      console.log("Respuesta cruda del endpoint:", response);
 
       if (!response.ok) throw new Error(`Error: ${response.status}`);
       const data = await response.json();
@@ -3271,11 +3264,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                       addMessage(
                         "bot",
                         <div
-                          className={`p-4 rounded-lg border ${
-                            theme === "dark"
+                          className={`p-4 rounded-lg border ${theme === "dark"
                               ? "bg-yellow-900/20 border-yellow-500/20"
                               : "bg-yellow-50 border-yellow-200"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-3">
                             <AlertCircle className="w-5 h-5 text-yellow-500" />
@@ -3361,7 +3353,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       ? 100
       : totalActivities > 0
         ? (currentActivityIndex * 100) / totalActivities +
-          (currentTaskIndex * 100) / (totalActivities * safeActivityTasksCount)
+        (currentTaskIndex * 100) / (totalActivities * safeActivityTasksCount)
         : 0;
 
     // Texto seguro para el header
@@ -3472,9 +3464,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-1.5">
                   <div
-                    className={`p-2 rounded-md ${
-                      theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
-                    }`}
+                    className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
+                      }`}
                   >
                     <div className="flex items-center gap-1">
                       <FolderOpen className="w-3.5 h-3.5 text-blue-500" />
@@ -3486,9 +3477,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   </div>
 
                   <div
-                    className={`p-2 rounded-md ${
-                      theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
-                    }`}
+                    className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
+                      }`}
                   >
                     <div className="flex items-center gap-1">
                       <ListChecks className="w-3.5 h-3.5 text-green-500" />
@@ -3506,11 +3496,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
     max-h-72 overflow-y-auto rounded-lg border
     scrollbar-thin scrollbar-thumb-rounded
     scrollbar-thumb-gray-400/40 hover:scrollbar-thumb-gray-400/70
-    ${
-      theme === "dark"
-        ? "border-[#2a2a2a] scrollbar-thumb-white/20"
-        : "border-gray-200"
-    }
+    ${theme === "dark"
+                      ? "border-[#2a2a2a] scrollbar-thumb-white/20"
+                      : "border-gray-200"
+                    }
   `}
                 >
                   {activitiesWithTasks.map((activity, aIdx) => (
@@ -3539,13 +3528,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div
                               className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                                  ${
-                                    tarea.prioridad === "ALTA"
-                                      ? "bg-red-500/20 text-red-500"
-                                      : tarea.prioridad === "MEDIA"
-                                        ? "bg-yellow-500/20 text-yellow-500"
-                                        : "bg-green-500/20 text-green-500"
-                                  }`}
+                                  ${tarea.prioridad === "ALTA"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : tarea.prioridad === "MEDIA"
+                                    ? "bg-yellow-500/20 text-yellow-500"
+                                    : "bg-green-500/20 text-green-500"
+                                }`}
                             >
                               {tIdx + 1}
                             </div>
@@ -3704,13 +3692,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                           <div className="flex items-center gap-2 mb-2">
                             <div
                               className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                          ${
-                            currentTask.prioridad === "ALTA"
-                              ? "bg-red-500/20 text-red-500"
-                              : currentTask.prioridad === "MEDIA"
-                                ? "bg-yellow-500/20 text-yellow-500"
-                                : "bg-green-500/20 text-green-500"
-                          }`}
+                          ${currentTask.prioridad === "ALTA"
+                                  ? "bg-red-500/20 text-red-500"
+                                  : currentTask.prioridad === "MEDIA"
+                                    ? "bg-yellow-500/20 text-yellow-500"
+                                    : "bg-green-500/20 text-green-500"
+                                }`}
                             >
                               {currentTaskIndex + 1}
                             </div>
@@ -4018,7 +4005,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4]"
                     disabled={isSpeaking}
                   >
-                    Comenzar jornada
+                      enviar y comenzar jornada
                   </Button>
                   <Button
                     variant="outline"
@@ -4171,25 +4158,22 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       {/* ========== SIDEBAR DE HISTORIAL ========== */}
       {!isInPiPWindow && (
         <aside
-          className={`fixed left-0 top-0 h-screen z-30 flex flex-col transition-all duration-300 ${
-            sidebarOpen ? "w-64" : "w-0"
-          } ${
-            theme === "dark"
+          className={`fixed left-0 top-0 h-screen z-30 flex flex-col transition-all duration-300 ${sidebarOpen ? "w-64" : "w-0"
+            } ${theme === "dark"
               ? "bg-[#0a0a0a] border-r border-[#1a1a1a]"
               : "bg-gray-50 border-r border-gray-200"
-          }`}
+            }`}
         >
           {sidebarOpen && (
             <>
               {/* Header del Sidebar */}
               <div
-                className={`p-4 border-b ${
-                  theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
-                }`}
+                className={`p-4 border-b ${theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <History className="w-5 h-5 text-[#6841ea]" />
+                    {/* <History className="w-5 h-5 text-[#6841ea]" /> */}
                     <h2 className="font-semibold text-sm">Historial</h2>
                   </div>
                   {/* <button
@@ -4214,9 +4198,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                       <div key={dia}>
                         {/* Label del día */}
                         <div
-                          className={`px-2 py-1.5 text-xs font-medium uppercase tracking-wider ${
-                            theme === "dark" ? "text-gray-500" : "text-gray-400"
-                          }`}
+                          className={`px-2 py-1.5 text-xs font-medium uppercase tracking-wider ${theme === "dark" ? "text-gray-500" : "text-gray-400"
+                            }`}
                         >
                           {dia}
                         </div>
@@ -4227,26 +4210,24 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                               <button
                                 key={conv.sessionId}
                                 onClick={() => seleccionarConversacion(conv)}
-                                className={`w-full text-left p-2.5 rounded-lg transition-all group relative ${
-                                  conversacionActiva === conv.sessionId
+                                className={`w-full text-left p-2.5 rounded-lg transition-all group relative ${conversacionActiva === conv.sessionId
                                     ? theme === "dark"
                                       ? "bg-[#6841ea]/20 border border-[#6841ea]/30"
                                       : "bg-[#6841ea]/10 border border-[#6841ea]/20"
                                     : theme === "dark"
                                       ? "hover:bg-[#1a1a1a]"
                                       : "hover:bg-gray-100"
-                                }`}
+                                  }`}
                               >
                                 <div className="flex items-start gap-2">
-                                  <MessageSquare
-                                    className={`w-4 h-4 mt-0.5 shrink-0 ${
-                                      conversacionActiva === conv.sessionId
+                                  {/* <MessageSquare
+                                    className={`w-4 h-4 mt-0.5 shrink-0 ${conversacionActiva === conv.sessionId
                                         ? "text-[#6841ea]"
                                         : theme === "dark"
                                           ? "text-gray-500"
                                           : "text-gray-400"
-                                    }`}
-                                  />
+                                      }`}
+                                  /> */}
 
                                   <p className="text-sm font-medium truncate">
                                     {conv.nombreConversacion ||
@@ -4256,17 +4237,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                                   <p className="text-xs text-gray-500 mt-0.5">
                                     {conv.updatedAt
                                       ? new Date(
-                                          conv.updatedAt,
-                                        ).toLocaleTimeString("es-MX", {
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })
+                                        conv.updatedAt,
+                                      ).toLocaleTimeString("es-MX", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
                                       : new Date(
-                                          conv.createdAt,
-                                        ).toLocaleTimeString("es-MX", {
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })}
+                                        conv.createdAt,
+                                      ).toLocaleTimeString("es-MX", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
                                   </p>
 
                                   {/* AGREGAR ESTE LOADING INDICATOR */}
@@ -4305,14 +4286,12 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
               {/* Footer del Sidebar */}
               <div
-                className={`p-3 border-t ${
-                  theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
-                }`}
+                className={`p-3 border-t ${theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
+                  }`}
               >
                 <p
-                  className={`text-xs text-center ${
-                    theme === "dark" ? "text-gray-600" : "text-gray-400"
-                  }`}
+                  className={`text-xs text-center ${theme === "dark" ? "text-gray-600" : "text-gray-400"
+                    }`}
                 >
                   {/* Fecha de hoy */}
                   {new Date().toLocaleDateString("es-MX", {
@@ -4331,13 +4310,11 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       {!isInPiPWindow && (
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`fixed z-40 top-1/2 -translate-y-1/2 transition-all duration-300 p-1.5 rounded-r-lg ${
-            sidebarOpen ? "left-64" : "left-0"
-          } ${
-            theme === "dark"
+          className={`fixed z-40 top-1/2 -translate-y-1/2 transition-all duration-300 p-1.5 rounded-r-lg ${sidebarOpen ? "left-64" : "left-0"
+            } ${theme === "dark"
               ? "bg-[#1a1a1a] hover:bg-[#252525] text-gray-400 hover:text-white border-y border-r border-[#2a2a2a]"
               : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 border-y border-r border-gray-200"
-          }`}
+            }`}
           title={sidebarOpen ? "Cerrar sidebar" : "Abrir sidebar"}
         >
           {sidebarOpen ? (
@@ -4350,9 +4327,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
       {/* ========== CONTENIDO PRINCIPAL ========== */}
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ${
-          !isInPiPWindow && sidebarOpen ? "ml-64" : "ml-0"
-        }`}
+        className={`flex-1 flex flex-col transition-all duration-300 ${!isInPiPWindow && sidebarOpen ? "ml-64" : "ml-0"
+          }`}
       >
         <VoiceGuidanceFlow />
 
@@ -4390,6 +4366,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     isSpeaking={isSpeaking}
                     theme={theme}
                   />
+                  {/* 🔹 AGREGAR BOTÓN DE REPORTES AQUÍ */}
+                  {onViewReports && colaborador.email === "jjohn@pprin.com" && (
+                    <button
+                      onClick={onViewReports}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${theme === "dark" ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                    >
+                      Reportes
+                    </button>
+                  )}
+
+
                   {!isPiPMode ? (
                     <button
                       onClick={openPiPWindow}
@@ -4651,11 +4638,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
       {/* Modal de Reporte de Actividades Diarias */}
       <Dialog open={mostrarModalReporte} onOpenChange={setMostrarModalReporte}>
         <DialogContent
-          className={`max-w-4xl max-h-[85vh] overflow-hidden flex flex-col ${
-            theme === "dark"
+          className={`max-w-4xl max-h-[85vh] overflow-hidden flex flex-col ${theme === "dark"
               ? "bg-[#1a1a1a] border-[#2a2a2a]"
               : "bg-white border-gray-200"
-          }`}
+            }`}
         >
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
@@ -4685,11 +4671,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
           {/* 🎤 INDICADOR DE MODO VOZ ACTIVO */}
           {modoVozReporte && (
             <div
-              className={`px-4 py-3 border-b ${
-                theme === "dark"
+              className={`px-4 py-3 border-b ${theme === "dark"
                   ? "bg-[#252527] border-[#2a2a2a]"
                   : "bg-blue-50 border-blue-200"
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -4712,7 +4697,7 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                     {isListening
                       ? "🎙️ Escuchando..."
                       : isSpeaking
-                        ? "🔊 Asistente hablando..."
+                        ? " Asistente hablando..."
                         : `Tarea ${indicePendienteActual + 1} de ${pendientesReporte.length}`}
                   </span>
                 </div>
@@ -4744,9 +4729,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               {/* Transcripción en vivo */}
               {isListening && voiceTranscript && (
                 <div
-                  className={`mt-3 p-2 rounded text-xs ${
-                    theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
-                  }`}
+                  className={`mt-3 p-2 rounded text-xs ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
+                    }`}
                 >
                   <span className="text-gray-500">Transcripción:</span>
                   <p className="mt-1">{voiceTranscript}</p>
@@ -4762,11 +4746,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
               <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                 {/* Resumen */}
                 <div
-                  className={`p-4 rounded-lg border ${
-                    theme === "dark"
+                  className={`p-4 rounded-lg border ${theme === "dark"
                       ? "bg-[#252527] border-[#2a2a2a]"
                       : "bg-gray-50 border-gray-200"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">
@@ -4794,19 +4777,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                 {actividadesDiarias.map((actividad) => (
                   <div
                     key={actividad.actividadId}
-                    className={`rounded-lg border overflow-hidden ${
-                      theme === "dark"
+                    className={`rounded-lg border overflow-hidden ${theme === "dark"
                         ? "bg-[#1a1a1a] border-[#2a2a2a]"
                         : "bg-white border-gray-200"
-                    }`}
+                      }`}
                   >
                     {/* Header de actividad */}
                     <div
-                      className={`p-3 border-b ${
-                        theme === "dark"
+                      className={`p-3 border-b ${theme === "dark"
                           ? "bg-[#252527] border-[#2a2a2a]"
                           : "bg-gray-50 border-gray-200"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -4837,15 +4818,14 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                         return (
                           <div
                             key={pendiente.pendienteId}
-                            className={`p-3 rounded-lg border transition-all ${
-                              estado.completadoLocal
+                            className={`p-3 rounded-lg border transition-all ${estado.completadoLocal
                                 ? theme === "dark"
                                   ? "bg-green-900/20 border-green-500/20"
                                   : "bg-green-50 border-green-200"
                                 : theme === "dark"
                                   ? "bg-[#252527] border-[#2a2a2a]"
                                   : "bg-gray-50 border-gray-200"
-                            }`}
+                              }`}
                           >
                             {/* Checkbox y nombre */}
                             <div className="flex items-start gap-3 mb-2">
@@ -4858,11 +4838,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                               />
                               <div className="flex-1">
                                 <p
-                                  className={`font-medium ${
-                                    estado.completadoLocal
+                                  className={`font-medium ${estado.completadoLocal
                                       ? "line-through opacity-60"
                                       : ""
-                                  }`}
+                                    }`}
                                 >
                                   {pendiente.nombre}
                                 </p>
@@ -4900,11 +4879,10 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                                     )
                                   }
                                   placeholder="Explica el motivo (ej: faltó información del cliente, bloqueo técnico, etc.)"
-                                  className={`text-sm h-20 ${
-                                    theme === "dark"
+                                  className={`text-sm h-20 ${theme === "dark"
                                       ? "bg-[#1a1a1a] border-[#2a2a2a]"
                                       : "bg-white border-gray-200"
-                                  }`}
+                                    }`}
                                 />
                               </div>
                             )}
@@ -4918,9 +4896,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
 
               {/* Footer con botones */}
               <div
-                className={`flex justify-end gap-2 pt-4 border-t ${
-                  theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"
-                }`}
+                className={`flex justify-end gap-2 pt-4 border-t ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"
+                  }`}
               >
                 <Button
                   variant="outline"
@@ -4955,19 +4932,17 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                   <div className="space-y-4">
                     {/* Tarea actual */}
                     <div
-                      className={`p-4 rounded-lg border ${
-                        theme === "dark"
+                      className={`p-4 rounded-lg border ${theme === "dark"
                           ? "bg-[#252527] border-[#2a2a2a]"
                           : "bg-gray-50 border-gray-200"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start gap-3">
                         <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${
-                            theme === "dark"
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${theme === "dark"
                               ? "bg-[#6841ea]/20 text-[#6841ea]"
                               : "bg-[#6841ea]/10 text-[#6841ea]"
-                          }`}
+                            }`}
                         >
                           {indicePendienteActual + 1}
                         </div>
@@ -4977,13 +4952,13 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                           </h4>
                           {pendientesReporte[indicePendienteActual]
                             .descripcion && (
-                            <p className="text-sm text-gray-500 mb-2">
-                              {
-                                pendientesReporte[indicePendienteActual]
-                                  .descripcion
-                              }
-                            </p>
-                          )}
+                              <p className="text-sm text-gray-500 mb-2">
+                                {
+                                  pendientesReporte[indicePendienteActual]
+                                    .descripcion
+                                }
+                              </p>
+                            )}
                           <div className="flex items-center gap-3 text-xs text-gray-500">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
@@ -5076,9 +5051,8 @@ export function ChatBot({ colaborador, onLogout }: ChatBotProps) {
                 {indicePendienteActual >= pendientesReporte.length && (
                   <div className="text-center space-y-4 py-8">
                     <div
-                      className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center ${
-                        theme === "dark" ? "bg-green-900/20" : "bg-green-100"
-                      }`}
+                      className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center ${theme === "dark" ? "bg-green-900/20" : "bg-green-100"
+                        }`}
                     >
                       <CheckCircle2 className="w-10 h-10 text-green-500" />
                     </div>

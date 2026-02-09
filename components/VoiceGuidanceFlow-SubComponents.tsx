@@ -297,6 +297,7 @@ export const TaskPresentationStep: React.FC<{
   theme: string;
   voiceStep: string;
   isSpeaking: boolean;
+  isPaused: boolean;
   startTaskExplanation: () => void;
   skipTask: () => void;
 }> = ({
@@ -813,7 +814,7 @@ export const SummaryStep: React.FC<{
   className="flex-1 bg-[#6841ea] hover:bg-[#5a36d4]"
   disabled={isSpeaking}
 >
-  Comenzar jornada
+  enviar y comenzar jornada
 </Button>
     </div>
   </div>
