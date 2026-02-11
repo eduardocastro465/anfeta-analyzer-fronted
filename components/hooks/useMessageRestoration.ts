@@ -3,11 +3,11 @@ import type { Message, AssistantAnalysis } from "@/lib/types";
 import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { restaurarMensajesConComponentes } from "@/components/chat/restaurarMensaje";
 
-// ✅ INTERFAZ CORREGIDA - Todos los tipos opcionales donde sea necesario
+// INTERFAZ CORREGIDA - Todos los tipos opcionales donde sea necesario
 interface UseMessageRestorationProps {
-  conversacionActiva?: string | null; // ✅ Opcional
-  mensajesRestaurados?: MensajeHistorial[]; // ✅ Opcional
-  analisisRestaurado?: AssistantAnalysis | null; // ✅ Opcional
+  conversacionActiva?: string | null; // Opcional
+  mensajesRestaurados?: MensajeHistorial[]; // Opcional
+  analisisRestaurado?: AssistantAnalysis | null; // Opcional
   theme: "light" | "dark";
   displayName: string;
   email: string;
@@ -18,7 +18,7 @@ interface UseMessageRestorationProps {
   setIsTyping: (isTyping: boolean) => void;
   setAssistantAnalysis: (analysis: AssistantAnalysis | null) => void;
   assistantAnalysisRef: React.MutableRefObject<AssistantAnalysis | null>;
-  scrollRef: React.RefObject<HTMLDivElement | null>; // ✅ Acepta null
+  scrollRef: React.RefObject<HTMLDivElement | null>; // Acepta null
 }
 
 /**
@@ -91,7 +91,7 @@ export function useMessageRestoration({
 
     const mensajes = restaurarMensajesConComponentes(
       mensajesRestaurados,
-      analisisRestaurado ?? null, // ✅ Convertir undefined a null
+      analisisRestaurado ?? null, // Convertir undefined a null
       theme,
       displayName,
       email,

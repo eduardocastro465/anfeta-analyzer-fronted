@@ -202,6 +202,7 @@ export interface TareaConTiempo {
   fechaFinTerminada: string | null;
   diasPendiente: number;
   prioridad: string;
+  reportada: boolean;
   actividadId?: string;
   actividadTitulo?: string;
 }
@@ -273,6 +274,7 @@ export interface AssistantAnalysis {
         fechaFinTerminada: string | null;
         diasPendiente: number;
         prioridad: string;
+        reportada: boolean;
         colaboradores?: string[];
       }>;
       totalTareasConTiempo: number;
@@ -311,9 +313,10 @@ export interface ChatBotProps {
   onActualizarNombre?: (sessionId: string, nombre: string) => void;
   onActualizarTyping?: (isTyping: boolean) => void;
   memoriasUsuario?: string[];
-  showLogoutDialog: boolean;
-  setShowLogoutDialog: (show: boolean) => void;
+  showLogoutDialog?: boolean;
+  setShowLogoutDialog?: (show: boolean) => void;
   onViewReports?: () => void;
+  
 }
 
 export type ChatStep =
@@ -418,6 +421,7 @@ export interface ChatContainerProps {
   colaborador: Colaborador;
   actividades: any[];
   onLogout: () => void;
+  onViewReports?: () => void;
 }
 
 export type ConversacionSidebar = {

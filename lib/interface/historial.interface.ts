@@ -32,7 +32,7 @@ export interface EstadoTarea {
   ultimoIntento: Date | null;
 }
 
-// ✅ Esta es la estructura interna (lo que viene en response.data)
+// Esta es la estructura interna (lo que viene en response.data)
 export interface HistorialData {
   _id: string;
   sessionId: string;
@@ -55,7 +55,7 @@ export interface HistorialData {
   __v?: number;
 }
 
-// ✅ Esta es la respuesta completa del backend
+// Esta es la respuesta completa del backend
 export interface ConversacionResponse {
   success: boolean;
   data: HistorialData; // ← Los datos vienen aquí

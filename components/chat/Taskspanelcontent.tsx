@@ -20,12 +20,18 @@ import {
   Calendar,
   UserCheck,
   ChevronDown,
+  Mic,
+  Edit2,      // NUEVO
+  Save,       // NUEVO
+  X,          // NUEVO
+
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 
 import { AssistantAnalysis, TareaConTiempo } from "@/lib/types";
+import { ReporteActividadesModal } from "../ReporteActividadesModal";
 
 interface RevisionProcesada {
   actividadId: string;
@@ -36,25 +42,36 @@ interface RevisionProcesada {
   esActividadIndividual: boolean;
   tareasReportadas: TareaConTiempo[];
   tareasNoReportadas: TareaConTiempo[];
-  [key: string]: any;
+  [key: string]: any;onDescripcionActualizada?: () => void; 
+
 }
 
 interface TasksPanelContentProps {
   assistantAnalysis: AssistantAnalysis;
   theme: "light" | "dark";
   userEmail: string;
+  turno: "mañana" | "tarde";
   onStartVoiceMode: () => void;
   onStartVoiceModeWithTasks: (selectedTaskIds: string[]) => void;
   onReportCompleted?: () => void;
+  actividadesDiarias?: any[]; // NUEVO: Para el modal de reportes
+  stopVoice?: () => void; // NUEVO
+  isSpeaking?: boolean; // NUEVO
+  speakText?: (text: string) => void; // NUEVO
 }
 
 export function TasksPanelContent({
   assistantAnalysis,
   theme,
+  turno,
   userEmail,
   onStartVoiceMode,
   onStartVoiceModeWithTasks,
   onReportCompleted,
+  actividadesDiarias = [], // NUEVO
+  stopVoice = () => {}, // NUEVO
+  isSpeaking = false, // NUEVO
+  speakText = () => {},
 }: TasksPanelContentProps) {
   // ========== ESTADOS ==========
   const [tareasConDescripcion] = useState<Set<string>>(new Set());
@@ -72,7 +89,8 @@ export function TasksPanelContent({
   const [mostrandoReportesDeOtros, setMostrandoReportesDeOtros] =
     useState(false);
   const [estadisticasServidor, setEstadisticasServidor] = useState<any>(null);
-
+  const [mostrarModalReporte, setMostrarModalReporte] = useState(false);
+  const [guardandoReporte, setGuardandoReporte] = useState(false);
   const actualizandoRef = useRef(false);
   const currentUserEmail = userEmail || "";
 
@@ -266,16 +284,30 @@ export function TasksPanelContent({
     [currentUserEmail, mostrandoReportesDeOtros],
   );
 
+  const handleAbrirModalReporte = useCallback(() => {
+    if (tareasSeleccionadas.size === 0) {
+      mostrarAlertaMensaje(
+        "Por favor selecciona al menos una tarea para reportar",
+      );
+      return;
+    }
+    console.log(
+      "Abriendo modal de reportes con tareas:",
+      Array.from(tareasSeleccionadas),
+    );
+    setMostrarModalReporte(true);
+  }, [tareasSeleccionadas, mostrarAlertaMensaje]);
+
   // Función para cargar tareas reportadas (VERSIÓN CON METADATA)
   const cargarTareasReportadas = useCallback(
     async (esForzado: boolean = false) => {
       if (!currentUserEmail) {
-        console.warn("⚠️ No hay email para cargar tareas reportadas");
+        console.warn("No hay email para cargar tareas reportadas");
         return;
       }
 
       if (actualizandoRef.current && !esForzado) {
-        console.log("⏳ Ya se está actualizando, omitiendo...");
+        console.log("Ya se está actualizando, omitiendo...");
         return;
       }
 
@@ -346,6 +378,33 @@ export function TasksPanelContent({
       tareasReportadasMap,
     ],
   );
+
+  // NUEVO: Función para guardar reporte completado
+  const handleGuardarReporte = useCallback(async () => {
+    setGuardandoReporte(true);
+    try {
+      // Recargar tareas reportadas
+      await cargarTareasReportadas(true);
+
+      // Limpiar selección
+      setTareasSeleccionadas(new Set());
+
+      // Cerrar modal
+      setMostrarModalReporte(false);
+
+      // Notificar completado
+      if (onReportCompleted) {
+        onReportCompleted();
+      }
+
+      mostrarAlertaMensaje("Reporte completado exitosamente");
+    } catch (error) {
+      console.error("Error al completar reporte:", error);
+      mostrarAlertaMensaje("Error al completar el reporte");
+    } finally {
+      setGuardandoReporte(false);
+    }
+  }, [cargarTareasReportadas, onReportCompleted, mostrarAlertaMensaje]);
 
   // Cargar tareas reportadas cuando haya email y assistantAnalysis
   useEffect(() => {
@@ -601,7 +660,7 @@ export function TasksPanelContent({
 
   return (
     <div className="w-full animate-in slide-in-from-bottom-2 duration-300">
-      {/* ✅ Alerta flotante */}
+      {/* Alerta flotante */}
       {mostrarAlerta && (
         <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300">
           <div
@@ -625,7 +684,7 @@ export function TasksPanelContent({
         </div>
       )}
 
-      {/* ✅ BANNER ESPECIAL SI SOLO HAY REPORTES DE OTROS */}
+      {/* BANNER ESPECIAL SI SOLO HAY REPORTES DE OTROS */}
       {mostrandoReportesDeOtros && estadisticasServidor && (
         <div
           className={`p-3 rounded-lg mb-3 border ${
@@ -714,7 +773,7 @@ export function TasksPanelContent({
                         : "bg-purple-100 text-purple-700"
                     }`}
                   >
-                    👥 De otros
+                    De otros
                   </span>
                 )}
               </h4>
@@ -836,6 +895,22 @@ export function TasksPanelContent({
             </div>
           </div>
 
+          <ReporteActividadesModal
+            isOpen={mostrarModalReporte}
+            onOpenChange={setMostrarModalReporte}
+            theme={theme}
+            actividadesDiarias={actividadesDiarias}
+            tareasSeleccionadas={tareasSeleccionadas} // Pasar tareas seleccionadas
+            actividadesConTareas={actividadesConTareas} // Pasar actividades procesadas
+            tareasReportadasMap={tareasReportadasMap} // Para filtrar
+            stopVoice={stopVoice}
+            isSpeaking={isSpeaking}
+            onGuardarReporte={handleGuardarReporte}
+            guardandoReporte={guardandoReporte}
+            speakText={speakText}
+            turno={turno}
+          />
+
           {/* Footer con acciones */}
           <TasksPanelFooter
             totalTareasPendientes={estadisticas.totalNoReportadas}
@@ -857,6 +932,8 @@ export function TasksPanelContent({
             currentUserEmail={currentUserEmail}
             mostrandoReportesDeOtros={mostrandoReportesDeOtros}
             estadisticasServidor={estadisticasServidor}
+            turno={turno} // AGREGAR ESTO
+            onOpenReporteModal={handleAbrirModalReporte} // AGREGAR ESTO
           />
         </div>
       ) : (
@@ -935,7 +1012,7 @@ function ActivityItem({
             >
               {actividad.titulo}
             </h5>
-            {/* 📌 Indicador del usuario actual */}
+            {/* Indicador del usuario actual */}
             {currentUserEmail && (
               <span
                 className={`text-[10px] ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
@@ -947,7 +1024,7 @@ function ActivityItem({
               <span
                 className={`text-[10px] block mt-1 ${theme === "dark" ? "text-purple-300" : "text-purple-600"}`}
               >
-                👥 Mostrando reportes de otros colaboradores
+                Mostrando reportes de otros colaboradores
               </span>
             )}
           </div>
@@ -964,7 +1041,7 @@ function ActivityItem({
         </Badge>
       </div>
 
-      {/* ✅ INDICADOR DE TIPO DE TRABAJO */}
+      {/* INDICADOR DE TIPO DE TRABAJO */}
       <div className="ml-8 mb-3">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
@@ -1006,7 +1083,7 @@ function ActivityItem({
         </div>
       </div>
 
-      {/* ✅ SECCIÓN ÚNICA: TAREAS YA REPORTADAS (TUS REPORTES + REPORTES DE OTROS) */}
+      {/* SECCIÓN ÚNICA: TAREAS YA REPORTADAS (TUS REPORTES + REPORTES DE OTROS) */}
       {revision.tareasReportadas.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
@@ -1057,7 +1134,7 @@ function ActivityItem({
         </div>
       )}
 
-      {/* ✅ SECCIÓN DE TAREAS PENDIENTES */}
+      {/* SECCIÓN DE TAREAS PENDIENTES */}
       {revision.tareasNoReportadas.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -1081,7 +1158,7 @@ function ActivityItem({
 
           <div className="ml-8 space-y-2">
             {revision.tareasNoReportadas.map((tarea: any) => {
-              // ✅ Verificar que no esté reportada
+              // Verificar que no esté reportada
               const estaReportada = Array.from(
                 tareasReportadasMap.values(),
               ).some((r) => {
@@ -1091,7 +1168,7 @@ function ActivityItem({
               });
 
               if (estaReportada) {
-                return null; // ✅ NO renderizar si ya está reportada
+                return null; // NO renderizar si ya está reportada
               }
 
               return (
@@ -1137,7 +1214,7 @@ function ReportedTaskItem({
   const reportadoPor = reporteInfo.reportadoPor || "Usuario";
   const emailReportado = reporteInfo.emailReportado || "";
 
-  // 📌 Determinar si realmente es mi reporte
+  // Determinar si realmente es mi reporte
   const esRealmenteMiReporte =
     esMiReporte &&
     currentUserEmail &&
@@ -1254,7 +1331,7 @@ function ReportedTaskItem({
               )}
             </div>
 
-            {/* ✅ Botón para mostrar/ocultar descripción */}
+            {/* Botón para mostrar/ocultar descripción */}
             {reporteInfo.texto && (
               <div className="mt-2">
                 <Button
@@ -1496,6 +1573,8 @@ interface TasksPanelFooterProps {
   currentUserEmail?: string;
   mostrandoReportesDeOtros?: boolean;
   estadisticasServidor?: any;
+  turno?: "mañana" | "tarde"; // AGREGAR
+  onOpenReporteModal?: () => void; // AGREGAR
 }
 
 function TasksPanelFooter({
@@ -1517,6 +1596,8 @@ function TasksPanelFooter({
   currentUserEmail = "",
   mostrandoReportesDeOtros = false,
   estadisticasServidor = null,
+  turno,
+  onOpenReporteModal,
 }: TasksPanelFooterProps) {
   const countSeleccionadas = tareasSeleccionadas ? tareasSeleccionadas.size : 0;
   const todasSeleccionadas = countSeleccionadas === totalTareasPendientes;
@@ -1525,18 +1606,26 @@ function TasksPanelFooter({
     ? currentUserEmail.split("@")[0]
     : currentUserEmail;
 
+  const esTurnoTarde = turno === "tarde";
+
   const handleMainAction = () => {
     if (esHoraReporte) {
       onOpenReport?.();
     } else {
       if (countSeleccionadas === 0) {
         console.warn(
-          "⚠️ Por favor selecciona al menos una tarea pendiente para explicar",
+          "Por favor selecciona al menos una tarea pendiente para explicar",
         );
         return;
       }
-      console.log("🚀 Ejecutando explicación de tareas seleccionadas");
-      onExplicarTareasSeleccionadas();
+      if (esTurnoTarde && onOpenReporteModal) {
+        console.log("Abriendo modal de reportes (turno tarde)");
+        onOpenReporteModal();
+      } else {
+        // Turno mañana o fallback: usar modo voz directo
+        console.log("Ejecutando explicación de tareas seleccionadas");
+        onExplicarTareasSeleccionadas();
+      }
     }
   };
 
@@ -1544,7 +1633,7 @@ function TasksPanelFooter({
     if (onStartVoiceMode) {
       onStartVoiceMode();
     } else {
-      console.warn("⚠️ onStartVoiceMode no está definido");
+      console.warn("onStartVoiceMode no está definido");
     }
   };
 
@@ -1575,7 +1664,7 @@ function TasksPanelFooter({
                         : "bg-purple-500/10 text-purple-700"
                     }`}
                   >
-                    👥 De otros: {tareasReportadasPorOtros}
+                    De otros: {tareasReportadasPorOtros}
                   </span>
                   {estadisticasServidor?.tareasUsuario !== undefined && (
                     <span
@@ -1633,7 +1722,7 @@ function TasksPanelFooter({
               <span
                 className={`text-[10px] mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
               >
-                👤 {nombreUsuario}
+                {nombreUsuario}
                 {mostrandoReportesDeOtros && " (No tienes reportes propios)"}
               </span>
             )}
@@ -1728,6 +1817,13 @@ function TasksPanelFooter({
                 <ListChecks className="w-3.5 h-3.5 mr-2" />
                 Iniciar Reporte
               </>
+            ) : esTurnoTarde ? (
+              // MODIFICAR: Texto diferente para turno tarde
+              <>
+                <Mic className="w-3.5 h-3.5 mr-2" />
+                Explicar Tareas{" "}
+                {countSeleccionadas > 0 && `(${countSeleccionadas})`}
+              </>
             ) : (
               <>
                 <Headphones className="w-3.5 h-3.5 mr-2" />
@@ -1735,19 +1831,6 @@ function TasksPanelFooter({
                 {countSeleccionadas > 0 && `(${countSeleccionadas})`}
               </>
             )}
-          </Button>
-
-          <Button
-            onClick={handleContinuarChat}
-            size="sm"
-            variant="outline"
-            className={`flex-1 text-xs h-8 ${
-              theme === "dark"
-                ? "border-[#2a2a2a] hover:bg-[#1a1a1a] text-gray-300"
-                : "border-gray-300 hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            {esHoraReporte ? "Posponer" : "Continuar Chat"}
           </Button>
         </div>
       </div>
@@ -1879,7 +1962,7 @@ export function TypingIndicator({ theme }: TypingIndicatorProps) {
   );
 }
 
-// ✅ TasksPanel para exportar
+// TasksPanel para exportar
 export function TasksPanel({
   actividadesConTareasPendientes = [],
   totalTareasPendientes = 0,

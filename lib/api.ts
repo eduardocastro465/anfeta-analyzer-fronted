@@ -65,7 +65,7 @@ export async function logout(): Promise<boolean> {
   try {
     const response = await fetch(`${BASE_URL_BACK}/auth/logout`, {
       method: "POST",
-      credentials: "include", // 🍪 envía la cookie
+      credentials: "include", // envía la cookie
     });
 
     return response.ok;
@@ -78,7 +78,7 @@ export async function validateSession(): Promise<any | null> {
   try {
     const response = await fetch(`${BASE_URL_BACK}/auth/verifyToken`, {
       method: "GET",
-      credentials: "include", // 🍪 envía la cookie
+      credentials: "include",
     });
 
     if (response.status === 401) {
@@ -86,11 +86,13 @@ export async function validateSession(): Promise<any | null> {
     }
 
     if (!response.ok) {
-      throw new Error(`401 Usuario no autotizado`);
+      throw new Error("SESSION_EXPIRED");
     }
 
-    return response.json();
-  } catch (error) {}
+    return await response.json();
+  } catch (error) {
+    return null; // 🔥 CLAVE
+  }
 }
 
 export async function fetchActividadesByUser(
@@ -139,7 +141,6 @@ export async function sendPendienteValidarYGuardar(data: {
   idPendiente: string;
   explicacion: string;
   userEmail?: string;
-
 }) {
   try {
     const response = await fetch(
@@ -154,7 +155,7 @@ export async function sendPendienteValidarYGuardar(data: {
           nombrePendiente: data.nombrePendiente,
           idPendiente: data.idPendiente,
           explicacion: data.explicacion,
-          userEmail: data.userEmail, // 🔹 Enviar también como userEmail
+          userEmail: data.userEmail, // Enviar también como userEmail
         }),
       },
     );
@@ -493,5 +494,31 @@ export async function consultarIAProyecto(
     return data;
   } catch (error) {
     return { success: false, actividades: [] };
+  }
+}
+
+// lib/api.ts
+
+export async function obtenerCambiosTareas() {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/verificar-cambios-tareas`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Error al verificar cambios");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Error de conexión:", error);
+    return { success: false };
   }
 }

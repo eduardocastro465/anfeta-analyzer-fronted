@@ -579,11 +579,13 @@ export const ListeningExplanationStep: React.FC<{
 
       {/* INDICADOR DE GRABACIÓN ACTIVA - Cuando no hay transcript todavía */}
       {!voiceTranscript && !isValidating && (
-        <div className={`p-4 rounded-lg border-2 border-dashed ${
-          theme === "dark" 
-            ? "border-red-500/30 bg-red-900/10" 
-            : "border-red-300 bg-red-50"
-        }`}>
+        <div
+          className={`p-4 rounded-lg border-2 border-dashed ${
+            theme === "dark"
+              ? "border-red-500/30 bg-red-900/10"
+              : "border-red-300 bg-red-50"
+          }`}
+        >
           <div className="flex items-center justify-center gap-3 mb-2">
             <div className="flex gap-1">
               {[0, 1, 2, 3, 4].map((i) => (
@@ -593,13 +595,13 @@ export const ListeningExplanationStep: React.FC<{
                   style={{
                     height: `${12 + (i % 3) * 8}px`,
                     animationDelay: `${i * 0.15}s`,
-                    animationDuration: '0.8s'
+                    animationDuration: "0.8s",
                   }}
                 />
               ))}
             </div>
             <span className="text-sm font-medium text-red-500">
-              🎤 Grabando... Habla ahora
+              Grabando... Habla ahora
             </span>
           </div>
           <p className="text-xs text-center text-gray-500">
@@ -610,11 +612,13 @@ export const ListeningExplanationStep: React.FC<{
 
       {/* CONTADOR DE SILENCIO GRANDE Y PROMINENTE */}
       {countdown !== null && !isValidating && voiceTranscript && (
-        <div className={`p-4 rounded-lg border-2 ${
-          theme === "dark"
-            ? "border-[#6841ea] bg-[#6841ea]/10"
-            : "border-[#6841ea] bg-[#6841ea]/5"
-        }`}>
+        <div
+          className={`p-4 rounded-lg border-2 ${
+            theme === "dark"
+              ? "border-[#6841ea] bg-[#6841ea]/10"
+              : "border-[#6841ea] bg-[#6841ea]/5"
+          }`}
+        >
           <div className="flex items-center justify-center gap-3 mb-2">
             <Clock className="w-5 h-5 text-[#6841ea] animate-pulse" />
             <span className="text-lg font-bold text-[#6841ea]">
@@ -622,11 +626,12 @@ export const ListeningExplanationStep: React.FC<{
             </span>
           </div>
           <p className="text-xs text-center text-gray-500">
-            Detecté silencio. Si no hablas más, enviaré automáticamente tu explicación.
+            Detecté silencio. Si no hablas más, enviaré automáticamente tu
+            explicación.
           </p>
           {/* Barra de progreso visual */}
           <div className="mt-3 w-full h-2 bg-gray-300 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-[#6841ea] transition-all duration-1000 ease-linear"
               style={{ width: `${(countdown / 3) * 100}%` }}
             />
@@ -646,7 +651,7 @@ export const ListeningExplanationStep: React.FC<{
             {isValidating
               ? "Validando con IA..."
               : countdown !== null
-                ? "⏱️ Timer activo - Continúa hablando para cancelar el auto-envío"
+                ? "Timer activo - Continúa hablando para cancelar el auto-envío"
                 : "Continúa hablando o haz clic en un botón"}
           </p>
         </div>

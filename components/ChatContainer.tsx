@@ -58,6 +58,7 @@ export function ChatContainer({
   colaborador,
   actividades,
   onLogout,
+  onViewReports,
 }: ChatContainerProps) {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -66,6 +67,7 @@ export function ChatContainer({
   const [sidebarCargando, setSidebarCargando] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  
 
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
 
@@ -800,6 +802,7 @@ export function ChatContainer({
         `}
       >
         <ChatBot
+          onViewReports={onViewReports}
           key={conversacionActiva || "nueva"}
           colaborador={colaborador}
           actividades={actividades}

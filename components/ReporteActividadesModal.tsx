@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,10 @@ interface ReporteActividadesModalProps {
   onGuardarReporte: () => Promise<void>;
   guardandoReporte: boolean;
   speakText: (text: string) => void;
+  turno: "mañana" | "tarde";
+  tareasSeleccionadas?: Set<string>;
+  actividadesConTareas?: any[];
+  tareasReportadasMap?: Map<string, any>;
 }
 
 type PasoModal =
@@ -55,6 +59,10 @@ export function ReporteActividadesModal({
   onGuardarReporte,
   guardandoReporte,
   speakText,
+  turno,
+  tareasSeleccionadas = new Set(),
+  actividadesConTareas = [],
+  tareasReportadasMap = new Map(),
 }: ReporteActividadesModalProps) {
   // ==================== ESTADOS ====================
   const [paso, setPaso] = useState<PasoModal>("inicial");
@@ -107,27 +115,71 @@ export function ReporteActividadesModal({
     },
   });
 
-  // ==================== TAREAS FILTRADAS ====================
-  const tareasConDescripcion = actividadesDiarias.flatMap((actividad) =>
-    actividad.pendientes
-      .filter((p) => p.descripcion && p.descripcion.trim().length > 0)
-      .map((p) => ({
-        pendienteId: p.pendienteId,
-        nombre: p.nombre,
-        descripcion: p.descripcion || "",
-        duracionMin: p.duracionMin,
-        terminada: p.terminada,
-        motivoNoCompletado: p.motivoNoCompletado || null,
-        actividadId: actividad.actividadId,
-        completadoLocal: false,
-        motivoLocal: "",
-        actividadTitulo: actividad.titulo,
-        actividadHorario: `${actividad.horaInicio} - ${actividad.horaFin}`,
-      })),
-  );
+  // MODIFICADO: Obtener tareas a reportar según contexto
+  const tareasParaReportar = useMemo(() => {
+    console.log("Determinando tareas para reportar:", {
+      tareasSeleccionadas: tareasSeleccionadas.size,
+      actividadesConTareas: actividadesConTareas.length,
+      actividadesDiarias: actividadesDiarias.length,
+      turno,
+    });
 
-  const tareaActual = tareasConDescripcion[indiceActual];
-  const totalTareas = tareasConDescripcion.length;
+    // CASO 1: Tareas seleccionadas desde el panel (turno tarde)
+    if (tareasSeleccionadas.size > 0 && actividadesConTareas.length > 0) {
+      const tareas: any[] = [];
+
+      actividadesConTareas.forEach((revision) => {
+        revision.tareasNoReportadas?.forEach((tarea: any) => {
+          if (tareasSeleccionadas.has(tarea.id)) {
+            tareas.push({
+              pendienteId: tarea.id,
+              nombre: tarea.nombre,
+              descripcion: "", // Se llenará con la explicación del usuario
+              duracionMin: tarea.duracionMin || 0,
+              terminada: false,
+              motivoNoCompletado: null,
+              actividadId: revision.actividadId,
+              completadoLocal: false,
+              motivoLocal: "",
+              actividadTitulo: revision.actividadTitulo,
+              actividadHorario: revision.actividadHorario,
+            });
+          }
+        });
+      });
+
+      console.log("Tareas seleccionadas para reportar:", tareas.length);
+      return tareas;
+    }
+
+    // CASO 2: Flujo original con actividades diarias (turno mañana)
+    const tareasConDescripcion = actividadesDiarias.flatMap((actividad) =>
+      actividad.pendientes
+        .filter((p) => p.descripcion && p.descripcion.trim().length > 0)
+        .map((p) => ({
+          pendienteId: p.pendienteId,
+          nombre: p.nombre,
+          descripcion: p.descripcion || "",
+          duracionMin: p.duracionMin,
+          terminada: p.terminada,
+          motivoNoCompletado: p.motivoNoCompletado || null,
+          actividadId: actividad.actividadId,
+          completadoLocal: false,
+          motivoLocal: "",
+          actividadTitulo: actividad.titulo,
+          actividadHorario: `${actividad.horaInicio} - ${actividad.horaFin}`,
+        })),
+    );
+
+    console.log(
+      "Tareas con descripción (flujo original):",
+      tareasConDescripcion.length,
+    );
+    return tareasConDescripcion;
+  }, [tareasSeleccionadas, actividadesConTareas, actividadesDiarias, turno]);
+
+  const tareaActual = tareasParaReportar[indiceActual];
+  const totalTareas = tareasParaReportar.length;
   const progreso = totalTareas > 0 ? (indiceActual / totalTareas) * 100 : 0;
 
   // ==================== PROCESAR RESPUESTA ====================
@@ -206,7 +258,6 @@ export function ReporteActividadesModal({
         } else {
           throw new Error(data.error || "Error al guardar motivo");
         }
-      } else {
       }
     } catch (error) {
       setErrorValidacion("Hubo un problema. Inténtalo de nuevo.");
@@ -235,7 +286,7 @@ export function ReporteActividadesModal({
 
   const iniciarReporte = () => {
     if (totalTareas === 0) {
-      alert("No hay tareas con descripción para reportar");
+      alert("No hay tareas para reportar");
       return;
     }
 
@@ -253,12 +304,20 @@ export function ReporteActividadesModal({
     setPaso("inicial");
   };
 
-  // ==================== EFECTOS ====================
+  // MODIFICADO: Efecto para preguntar según si tiene descripción previa
   useEffect(() => {
     let active = true;
 
     if (paso === "preguntando-que-hizo" && tareaActual && isOpen) {
-      const textoPrompt = `Tarea ${indiceActual + 1} de ${totalTareas}: ${tareaActual.nombre}. ¿Qué hiciste hoy?`;
+      const tieneDescripcionPrevia =
+        tareaActual.descripcion && tareaActual.descripcion.trim().length > 0;
+
+      // Texto adaptado según contexto
+      const textoPrompt = tieneDescripcionPrevia
+        ? `Tarea ${indiceActual + 1} de ${totalTareas}: ${tareaActual.nombre}. ¿Qué hiciste en esta tarea?`
+        : `Tarea ${indiceActual + 1} de ${totalTareas}: ${tareaActual.nombre}. Explica qué hiciste.`;
+
+      console.log("Hablando:", textoPrompt);
 
       if (window.speechSynthesis) window.speechSynthesis.cancel();
       speakText(textoPrompt);
@@ -278,14 +337,22 @@ export function ReporteActividadesModal({
         clearTimeout(timer);
       };
     }
-  }, [paso, indiceActual, isOpen]);
+  }, [
+    paso,
+    indiceActual,
+    isOpen,
+    tareaActual,
+    totalTareas,
+    speakText,
+    startVoiceRecording,
+  ]);
 
   useEffect(() => {
     if (!isOpen) {
       cancelVoiceRecording();
       if (window.speechSynthesis) window.speechSynthesis.cancel();
     }
-  }, [isOpen]);
+  }, [isOpen, cancelVoiceRecording]);
 
   useEffect(() => {
     return () => {
@@ -313,7 +380,10 @@ export function ReporteActividadesModal({
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#6841ea]" />
-              Reporte de Actividades del Día
+              {/* MODIFICADO: Título según turno */}
+              {turno === "tarde"
+                ? "Explicación de Tareas Completadas"
+                : "Reporte de Actividades del Día"}
             </div>
             {paso !== "inicial" && paso !== "completado" && (
               <Badge variant="outline">
@@ -335,12 +405,19 @@ export function ReporteActividadesModal({
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">Tareas a reportar</span>
+                  <span className="font-medium">
+                    {/* MODIFICADO: Texto según turno */}
+                    {turno === "tarde"
+                      ? "Tareas seleccionadas para explicar"
+                      : "Tareas a reportar"}
+                  </span>
                   <Badge>{totalTareas} tareas</Badge>
                 </div>
                 <p className="text-sm text-gray-500">
-                  El asistente te preguntará qué hiciste en cada tarea. Responde
-                  con voz.
+                  {/* MODIFICADO: Texto según turno */}
+                  {turno === "tarde"
+                    ? "El asistente te preguntará qué hiciste en cada tarea seleccionada. Responde con voz."
+                    : "El asistente te preguntará qué hiciste en cada tarea. Responde con voz."}
                 </p>
               </div>
 
@@ -348,7 +425,10 @@ export function ReporteActividadesModal({
                 <div className="text-center py-8">
                   <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
                   <p className="text-sm text-gray-500">
-                    No hay tareas con descripción para reportar hoy.
+                    {/* MODIFICADO: Texto según turno */}
+                    {turno === "tarde"
+                      ? "No hay tareas seleccionadas para reportar."
+                      : "No hay tareas con descripción para reportar hoy."}
                   </p>
                 </div>
               ) : (
@@ -357,7 +437,10 @@ export function ReporteActividadesModal({
                   className="w-full bg-[#6841ea] hover:bg-[#5a36d4] h-12"
                 >
                   <Mic className="w-5 h-5 mr-2" />
-                  Iniciar Reporte por Voz
+                  {/* MODIFICADO: Texto según turno */}
+                  {turno === "tarde"
+                    ? "Iniciar Explicación por Voz"
+                    : "Iniciar Reporte por Voz"}
                 </Button>
               )}
             </div>
@@ -396,9 +479,13 @@ export function ReporteActividadesModal({
                 </div>
                 <div className="flex-1">
                   <h4 className="font-bold mb-1">{tareaActual.nombre}</h4>
-                  <p className="text-sm text-gray-500 mb-2">
-                    {tareaActual.descripcion}
-                  </p>
+                  {/* MODIFICADO: Solo mostrar descripción si existe */}
+                  {tareaActual.descripcion &&
+                    tareaActual.descripcion.trim().length > 0 && (
+                      <p className="text-sm text-gray-500 mb-2">
+                        {tareaActual.descripcion}
+                      </p>
+                    )}
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span>{tareaActual.actividadTitulo}</span>
                     <span>•</span>
@@ -536,7 +623,7 @@ export function ReporteActividadesModal({
               </div>
               <h3 className="text-xl font-bold">¡Reporte Completado!</h3>
               <p className="text-sm text-gray-500">
-                Has reportado todas las tareas del día correctamente.
+                Has reportado todas las tareas correctamente.
               </p>
               <div className="flex gap-3 justify-center pt-4">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
