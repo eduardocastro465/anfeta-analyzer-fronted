@@ -12,12 +12,10 @@ export interface MessageListProps {
   messages: Message[];
   isTyping: boolean;
   theme: "light" | "dark";
-  // AÑADE ESTA LÍNEA
   userEmail?: string;
   onVoiceMessageClick?: (voiceText: string) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
-  assistantAnalysis?: AssistantAnalysis | null; // NUEVO
-  onOpenReport: () => void;
+  assistantAnalysis?: AssistantAnalysis | null;
   onStartVoiceMode?: () => void;
   onStartVoiceModeWithTasks?: (taskIds: string[]) => void;
   onReportCompleted?: () => Promise<void>;
@@ -270,6 +268,7 @@ export interface AssistantAnalysis {
         confirmada: boolean;
         descripcion?: string;
         duracionMin: number;
+        queHizo: string;
         fechaCreacion: string;
         fechaFinTerminada: string | null;
         diasPendiente: number;

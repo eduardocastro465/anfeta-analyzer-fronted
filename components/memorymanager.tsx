@@ -16,7 +16,6 @@ import {
   Plus,
   Trash2,
   Edit2,
-  Save,
   X,
   TrendingUp,
   Calendar,
@@ -41,7 +40,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 
 // ==================== TIPOS ====================

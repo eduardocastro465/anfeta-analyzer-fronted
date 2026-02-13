@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { SpeedControlHeader } from "./voice-controls";
 import { HeaderProps } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 export const ChatHeader: React.FC<HeaderProps> = ({
   isInPiPWindow,
@@ -28,6 +29,7 @@ export const ChatHeader: React.FC<HeaderProps> = ({
 }) => {
   // 🔹 Verificar si es el administrador John S
   const isAdminJohn = colaborador.email === "jjohn@pprin.com";
+  const router = useRouter();
 
   // RENDERIZADO PARA MODO VENTANA FLOTANTE (PiP)
   if (isInPiPWindow) {
@@ -131,11 +133,13 @@ export const ChatHeader: React.FC<HeaderProps> = ({
                     console.log("📧 Email del colaborador:", colaborador.email);
                     console.log("👤 Display Name:", displayName);
                     console.log("🔄 onViewReports existe?:", !!onViewReports);
+
                     if (onViewReports) {
                       onViewReports();
                     } else {
                       console.error("❌ onViewReports no está definida");
                     }
+                    window.location.href = "/reporte-del-dia";
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${theme === "dark" ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                 >

@@ -2,7 +2,7 @@
 
 import { MessageItem } from "./MessageItem";
 import { MessageListProps } from "@/lib/types";
-import { TypingIndicator } from "./Taskspanelcontent";
+import { TypingIndicator } from "./PanelReporteTareasTarde";
 
 interface ExtendedMessageListProps extends MessageListProps {
   onVoiceMessageClick?: (voiceText: string) => void;

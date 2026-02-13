@@ -5,9 +5,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   validateSession,
-  obtenerHistorialSidebar,
-  actualizarEstadoPendientes,
-  validarReportePendiente,
   obtenerActividadesConRevisiones,
   guardarReporteTarde,
   sendPendienteValidarYGuardar,
@@ -16,10 +13,7 @@ import {
   obtenerCambiosTareas,
 } from "@/lib/api";
 import type {
-  ActividadDiaria,
-  PendienteEstadoLocal,
   Message,
-  ConversacionSidebar,
   AssistantAnalysis,
   TaskExplanation,
   ChatBotProps,
@@ -61,13 +55,12 @@ import {
 import { MessageList } from "./chat/MessageList";
 import { messageTemplates } from "./chat/messageTemplates";
 import { ChatInputBar } from "./chat/ChatInputBar";
-import { ReporteActividadesModal } from "./ReporteActividadesModal";
 import { useMessageRestoration } from "@/components/hooks/useMessageRestoration";
 import { useAudioRecorder } from "./hooks/useAudioRecorder";
 import { transcribirAudioCliente } from "@/lib/transcription";
 import { useAutoSendVoice } from "@/components/Audio/UseAutoSendVoiceOptions";
 import { useToast } from "@/hooks/use-toast";
-import { TasksPanelContent } from "@/components/chat/Taskspanelcontent";
+import { PanelReporteTareasTarde } from "@/components/chat/PanelReporteTareasTarde";
 import { isReportTime } from "@/util/Timeutils";
 import { TasksPanelWithDescriptions } from "./chat/TasksPanelWithDescriptions";
 
@@ -91,63 +84,18 @@ export function ChatBot({
   const initializationRef = useRef(false);
   const fetchingAnalysisRef = useRef(false);
   const welcomeSentRef = useRef(false);
+  const ultimoEstadoRef = useRef<{
+    totalTareasSinDescripcion: number;
+    totalTareasConDescripcion: number;
+    totalTareas: number;
+    totalActividadesConTareas: number;
+    ultimaModificacion: string;
+    checksum: string;
+  } | null>(null);
 
-  // ==================== CONSTANTES ====================
-  const displayName = getDisplayName(colaborador);
+  // ==================== HOOKS ====================
   const router = useRouter();
   const { toast } = useToast();
-
-  // ==================== ESTADOS PRINCIPALES ====================
-  const [step, setStep] = useState<ChatStep>("welcome");
-  const [userInput, setUserInput] = useState<string>("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [assistantAnalysis, setAssistantAnalysis] =
-    useState<AssistantAnalysis | null>(null);
-  const [isLoadingIA, setIsLoadingIA] = useState(false);
-
-  // ==================== DIÁLOGOS Y MODALS ====================
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-  const [mostrarModalReporte, setMostrarModalReporte] = useState(false);
-
-  // ==================== SIDEBAR ====================
-  const [sidebarCargado, setSidebarCargado] = useState(false);
-  const [sidebarCargando, setSidebarCargando] = useState(true);
-  const [data, setData] = useState<ConversacionSidebar[]>([]);
-
-  // ==================== ESTADOS: REPORTE DE ACTIVIDADES ====================
-  const [actividadesDiarias, setActividadesDiarias] = useState<
-    ActividadDiaria[]
-  >([]);
-  const [pendientesReporte, setPendientesReporte] = useState<
-    PendienteEstadoLocal[]
-  >([]);
-  const [guardandoReporte, setGuardandoReporte] = useState(false);
-
-  // ==================== MODAL VOZ REPORTE ====================
-  const [indicePendienteActual, setIndicePendienteActual] = useState(0);
-  const [pasoModalVoz, setPasoModalVoz] = useState<
-    "esperando" | "escuchando" | "procesando"
-  >("esperando");
-
-  // ==================== ESTADOS: HORARIOS REPORTE ====================
-  // Turno de MAÑANA
-  const [horaInicioReporteMañana] = useState("2:00 AM");
-  const [horaFinReporteMañana] = useState("2:29 PM");
-
-  // Turno de TARDE (los que ya tienes)
-  const [horaInicioReporte] = useState("2:30 PM");
-  const [horaFinReporte] = useState("2:59 PM");
-
-  // ==================== ESTADOS: TEMA ====================
-  const [internalTheme, setInternalTheme] = useState<"light" | "dark">("dark");
-  const theme = externalTheme ?? internalTheme;
-
-  // ==================== ESTADOS: MODO CHAT ====================
-  const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
-
-  // ==================== HOOKS PERSONALIZADOS ====================
   const voiceRecognition = useVoiceRecognition();
   const voiceMode = useVoiceMode();
   const conversationHistory = useConversationHistory();
@@ -158,39 +106,55 @@ export function ChatBot({
     rate,
     changeRate,
   } = useVoiceSynthesis();
-
-  // ==================== AUDIO RECORDER ====================
   const audioRecorder = useAudioRecorder();
 
-  // ==================== PiP ====================
+  // ==================== CONSTANTS ====================
+  const displayName = getDisplayName(colaborador);
+
+  // ==================== STATE: MAIN ====================
+  const [step, setStep] = useState<ChatStep>("welcome");
+  const [userInput, setUserInput] = useState<string>("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [assistantAnalysis, setAssistantAnalysis] =
+    useState<AssistantAnalysis | null>(null);
+  const [isLoadingIA, setIsLoadingIA] = useState(false);
+
+  // ==================== STATE: DIALOGS ====================
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+
+  // ==================== STATE: SCHEDULE ====================
+  const [horaInicioReporteMañana] = useState("2:00 AM");
+  const [horaFinReporteMañana] = useState("2:29 PM");
+  const [horaInicioReporte] = useState("2:30 PM");
+  const [horaFinReporte] = useState("2:59 PM");
+
+  // ==================== STATE: THEME ====================
+  const [internalTheme, setInternalTheme] = useState<"light" | "dark">("dark");
+  const theme = externalTheme ?? internalTheme;
+
+  // ==================== STATE: CHAT MODE ====================
+  const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
+
+  // ==================== STATE: PIP ====================
   const [isPiPMode, setIsPiPMode] = useState(false);
   const [isInPiPWindow, setIsInPiPWindow] = useState(false);
 
-  // ==================== ✅ ESTADOS PARA TAREAS SELECCIONADAS ====================
+  // ==================== STATE: TASKS ====================
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [filteredActivitiesForVoice, setFilteredActivitiesForVoice] = useState<
     any[]
   >([]);
 
-  // ==================== VALORES COMPUTADOS ====================
   const canUserType =
     step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
+  const panelMessageIdRef = useRef<string | null>(null);
 
-  const ultimoEstadoRef = useRef<{
-    totalTareasSinDescripcion: number;
-    totalTareasConDescripcion: number;
-    totalTareas: number;
-    totalActividadesConTareas: number;
-    ultimaModificacion: string;
-  } | null>(null);
-
-  const [ultimaVerificacion, setUltimaVerificacion] = useState<Date | null>(
-    null,
-  );
-  const [hayCambiosDetectados, setHayCambiosDetectados] = useState(false);
-
+  // ==================== FUNCTIONS ====================
   const getTurnoActual = (): "mañana" | "tarde" => {
-    // Verificar si estamos en horario de MAÑANA
+    // return "mañana";
+    //  return "tarde";
     const esTurnoMañana = isReportTime(
       horaInicioReporteMañana,
       horaFinReporteMañana,
@@ -200,18 +164,15 @@ export function ChatBot({
       return "mañana";
     }
 
-    // Verificar si estamos en horario de TARDE
     const esTurnoTarde = isReportTime(horaInicioReporte, horaFinReporte);
 
     if (esTurnoTarde) {
       return "tarde";
     }
 
-    // Fallback: si no está en ningún rango, mostrar tarde por defecto
     return "tarde";
   };
 
-  // ==================== ACTIVIDADES CON TAREAS ====================
   const activitiesWithTasks = useMemo(() => {
     if (!assistantAnalysis?.data?.revisionesPorActividad) {
       return [];
@@ -232,7 +193,6 @@ export function ChatBot({
       }));
   }, [assistantAnalysis]);
 
-  // ==================== FUNCIONES AUXILIARES ====================
   const addMessage = (
     type: Message["type"],
     content: string | React.ReactNode,
@@ -436,8 +396,6 @@ export function ChatBot({
     speechThreshold: 10,
     enableRealtimeTranscription: true,
     onTranscriptionComplete: async (transcript) => {
-      console.log("✅ Explicación completada automáticamente:", transcript);
-
       const trimmedTranscript = cleanExplanationTranscript(transcript);
       const validation = validateExplanationLength(trimmedTranscript);
 
@@ -588,7 +546,6 @@ export function ChatBot({
 
     const analysis = assistantAnalysisRef.current;
     if (!analysis) {
-      console.log("❌ No hay analysis");
       speakText("No hay actividades para explicar.");
       return;
     }
@@ -615,8 +572,6 @@ export function ChatBot({
         };
       })
       .filter((act): act is any => act !== null);
-
-    console.log("✅ Actividades filtradas:", filteredActivities);
 
     if (filteredActivities.length === 0) {
       console.warn(
@@ -698,17 +653,10 @@ export function ChatBot({
 
       const nuevoEstado = data.cambios;
 
-      console.log("🔍 Verificando cambios:", {
-        anterior: ultimoEstadoRef.current,
-        nuevo: nuevoEstado,
-        timestamp: data.timestamp,
-      });
-
       // ✅ Primera vez - guardar estado inicial
       if (!ultimoEstadoRef.current) {
         ultimoEstadoRef.current = nuevoEstado;
-        setUltimaVerificacion(new Date());
-        console.log("📋 Estado inicial guardado");
+
         return false;
       }
 
@@ -722,50 +670,15 @@ export function ChatBot({
         ultimoEstadoRef.current.totalActividadesConTareas !==
           nuevoEstado.totalActividadesConTareas ||
         new Date(ultimoEstadoRef.current.ultimaModificacion).getTime() !==
-          new Date(nuevoEstado.ultimaModificacion).getTime();
+          new Date(nuevoEstado.ultimaModificacion).getTime() ||
+        ultimoEstadoRef.current.checksum !== nuevoEstado.checksum;
 
       if (huboCambios) {
-        console.log("✅ ¡CAMBIOS DETECTADOS EN ACTIVIDADES!", {
-          tareasSinDescripcion: {
-            antes: ultimoEstadoRef.current.totalTareasSinDescripcion,
-            ahora: nuevoEstado.totalTareasSinDescripcion,
-            cambio:
-              nuevoEstado.totalTareasSinDescripcion -
-              ultimoEstadoRef.current.totalTareasSinDescripcion,
-          },
-          tareasConDescripcion: {
-            antes: ultimoEstadoRef.current.totalTareasConDescripcion,
-            ahora: nuevoEstado.totalTareasConDescripcion,
-            cambio:
-              nuevoEstado.totalTareasConDescripcion -
-              ultimoEstadoRef.current.totalTareasConDescripcion,
-          },
-          totalTareas: {
-            antes: ultimoEstadoRef.current.totalTareas,
-            ahora: nuevoEstado.totalTareas,
-            cambio:
-              nuevoEstado.totalTareas - ultimoEstadoRef.current.totalTareas,
-          },
-          actividades: {
-            antes: ultimoEstadoRef.current.totalActividadesConTareas,
-            ahora: nuevoEstado.totalActividadesConTareas,
-          },
-        });
-
         // ✅ Actualizar estado
         ultimoEstadoRef.current = nuevoEstado;
-        setUltimaVerificacion(new Date());
-        setHayCambiosDetectados(true);
-
-        // ✅ Resetear flag después de 3 segundos
-        setTimeout(() => setHayCambiosDetectados(false), 3000);
 
         return true;
       }
-
-      console.log("⏭️ No hay cambios en ActividadesSchema");
-      setUltimaVerificacion(new Date());
-      setHayCambiosDetectados(false);
       return false;
     } catch (error) {
       console.error("❌ Error al verificar cambios:", error);
@@ -834,36 +747,20 @@ export function ChatBot({
 
   useEffect(() => {
     if (!assistantAnalysis) {
-      console.log("⏸️ Auto-verificación pausada: esperando análisis inicial");
       return;
     }
 
-    console.log("🎬 Iniciando auto-verificación de cambios (cada 10s)");
-
     const intervalo = setInterval(async () => {
-      const timestamp = new Date().toLocaleTimeString();
-      console.log(
-        `⏰ [${timestamp}] Verificando cambios en ActividadesSchema...`,
-      );
-
       const huboCambios = await verificarCambios();
 
       if (huboCambios) {
-        console.log("🚀 Cambios detectados → Actualizando datos completos...");
-
         try {
-          console.log("📡 Llamando a obtenerActividadesConRevisiones...");
-
           const requestBody = {
             email: colaborador.email,
             showAll: true,
           };
 
           const data = await obtenerActividadesConRevisiones(requestBody);
-          console.log("📥 Datos recibidos del backend:", {
-            totalRevisiones: data.data?.revisionesPorActividad?.length || 0,
-            timestamp: new Date().toISOString(),
-          });
 
           // Mapear datos igual que en fetchAssistantAnalysis
           const adaptedData: AssistantAnalysis & {
@@ -934,13 +831,10 @@ export function ChatBot({
             multiActividad: data.multiActividad || false,
           };
 
-          console.log("🔄 Actualizando assistantAnalysis con nuevos datos...");
-
           // ✅ Actualizar ref y estado
           assistantAnalysisRef.current = adaptedData;
           setAssistantAnalysis(adaptedData);
 
-          // ✅ CRÍTICO: Actualizar el mensaje del chat que contiene el panel
           const turnoActual = getTurnoActual();
 
           setMessages((prevMessages) => {
@@ -985,19 +879,12 @@ export function ChatBot({
             });
 
             if (reversedIndex === -1) {
-              console.log(
-                "⚠️ No se encontró el mensaje del panel para actualizar",
-              );
               return prevMessages;
             }
 
             // Convertir el índice invertido al índice real
             const lastPanelMessageIndex =
               prevMessages.length - 1 - reversedIndex;
-
-            console.log(
-              `📍 Encontrado mensaje del panel en índice: ${lastPanelMessageIndex}`,
-            );
 
             // Crear el nuevo contenido del mensaje
             const nuevoContenido =
@@ -1038,7 +925,6 @@ export function ChatBot({
                     turno={turnoActual}
                     onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
                     onReportCompleted={async () => {
-                      console.log("✅ Explicación de tareas completada");
                       await fetchAssistantAnalysis(true, false, true);
                     }}
                     stopVoice={stopVoice}
@@ -1076,7 +962,7 @@ export function ChatBot({
                     </p>
                   </div>
 
-                  <TasksPanelContent
+                  <PanelReporteTareasTarde
                     key={`panel-update-${Date.now()}`}
                     assistantAnalysis={adaptedData}
                     theme={theme}
@@ -1085,9 +971,6 @@ export function ChatBot({
                     onStartVoiceMode={handleStartVoiceMode}
                     onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
                     onReportCompleted={async () => {
-                      console.log(
-                        "✅ Reporte completado, recargando análisis...",
-                      );
                       await fetchAssistantAnalysis(false, false);
                     }}
                   />
@@ -1102,10 +985,8 @@ export function ChatBot({
               timestamp: new Date(),
             };
 
-            console.log("✅ Mensaje del panel actualizado");
             return newMessages;
           });
-          console.log("✅ Datos actualizados correctamente");
 
           toast({
             title: "Datos actualizados",
@@ -1115,13 +996,10 @@ export function ChatBot({
         } catch (error) {
           console.error("❌ Error al actualizar datos:", error);
         }
-      } else {
-        console.log("⏭️ Sin cambios → No se requiere actualización");
       }
     }, 10000);
 
     return () => {
-      console.log("🛑 Auto-verificación detenida");
       clearInterval(intervalo);
     };
   }, [
@@ -1144,7 +1022,6 @@ export function ChatBot({
     theme,
     displayName,
     email: colaborador.email,
-    onOpenReport: () => setMostrarModalReporte(true),
     onStartVoiceMode: handleStartVoiceMode,
     setMessages,
     setStep,
@@ -1154,25 +1031,7 @@ export function ChatBot({
     scrollRef,
   });
 
-  // ==================== EFECTO: SIDEBAR ====================
-  useEffect(() => {
-    if (!assistantAnalysis) return;
-    if (sidebarCargado) return;
-
-    setSidebarCargando(true);
-    obtenerHistorialSidebar()
-      .then((res) => {
-        setData(res.data);
-        setSidebarCargado(true);
-      })
-      .catch((error) => {
-        console.error("Error al cargar sidebar:", error);
-        setData([]);
-      })
-      .finally(() => setSidebarCargando(false));
-  }, [assistantAnalysis, sidebarCargado]);
-
-  // ==================== EFECTO: AUTO-SCROLL ====================email: colaborador.email,
+  // ==================== EFECTO: AUTO-SCROLL ====================
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -1346,7 +1205,6 @@ export function ChatBot({
     voiceMode.setExpectedInputType("explanation");
 
     setTimeout(() => {
-      // ✅ USAR autoSendVoiceGuided en lugar de voiceRecognition
       autoSendVoiceGuided.startVoiceRecording();
     }, 100);
   };
@@ -1642,47 +1500,6 @@ export function ChatBot({
     }
   };
 
-  const calculateTaskStats = (analysis: AssistantAnalysis) => {
-    const actividadesConTareas = analysis.data.revisionesPorActividad
-      .map((revision: any) => {
-        const tareasReportadas = revision.tareasConTiempo.filter(
-          (t: any) => t.reportada || t.terminada || t.confirmada,
-        );
-        const tareasNoReportadas = revision.tareasConTiempo.filter(
-          (t: any) => !t.reportada && !t.terminada && !t.confirmada,
-        );
-
-        return {
-          tareasReportadas,
-          tareasNoReportadas,
-        };
-      })
-      .filter(
-        (r: any) =>
-          r.tareasReportadas.length > 0 || r.tareasNoReportadas.length > 0,
-      );
-
-    const todasReportadas = actividadesConTareas.flatMap(
-      (a: any) => a.tareasReportadas,
-    );
-    const todasNoReportadas = actividadesConTareas.flatMap(
-      (a: any) => a.tareasNoReportadas,
-    );
-
-    // Si tienes información de quién reportó (esMiReporte, reportadoPor, etc.)
-    // puedes agregar esta lógica. Si no, simplemente usa:
-    const miasReportadas = todasReportadas.length; // O filtra por usuario si tienes esa info
-    const otrosReportadas = 0; // O filtra por otros usuarios si tienes esa info
-
-    return {
-      total: todasReportadas.length + todasNoReportadas.length,
-      reportadas: todasReportadas.length,
-      pendientes: todasNoReportadas.length,
-      miasReportadas,
-      otrosReportadas,
-    };
-  };
-
   const showAssistantAnalysis = async (
     analysis: AssistantAnalysis,
     isRestoration = false,
@@ -1718,8 +1535,6 @@ export function ChatBot({
           );
 
           if (hayTareas) {
-            const stats = calculateTaskStats(analysis);
-
             // 🆕 DETECTAR TURNO ACTUAL
             const turnoActual = getTurnoActual();
             // const turnoActual = "tarde";
@@ -1728,11 +1543,6 @@ export function ChatBot({
               // 🎯 MOSTRAR PANEL SEGÚN EL TURNO
               if (turnoActual === "mañana") {
                 // 🌅 TURNO MAÑANA: Mostrar tareas con descripción para explicar
-
-                console.log(
-                  "Asistente: Turno mañana",
-                  analysis.data.revisionesPorActividad,
-                );
 
                 addMessage(
                   "bot",
@@ -1752,7 +1562,7 @@ export function ChatBot({
                             theme === "dark" ? "text-blue-300" : "text-blue-700"
                           }`}
                         >
-                          🌅 Turno Mañana (12:00 AM - 2:29 PM)
+                          Turno Mañana (12:00 AM - 2:29 PM)
                         </span>
                       </div>
                       <p
@@ -1773,7 +1583,6 @@ export function ChatBot({
                       turno={turnoActual}
                       onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
                       onReportCompleted={async () => {
-                        console.log("✅ Explicación de tareas completada");
                         await fetchAssistantAnalysis(true, false, true);
                       }}
                       // ✅ AGREGAR ESTAS PROPS
@@ -1790,39 +1599,8 @@ export function ChatBot({
                 addMessage(
                   "bot",
                   <div className="space-y-3">
-                    {/* Mensaje explicativo del turno */}
-                    <div
-                      className={`p-3 rounded-lg border ${
-                        theme === "dark"
-                          ? "bg-purple-900/20 border-purple-700/30"
-                          : "bg-purple-50 border-purple-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Clock className="w-4 h-4 text-purple-500" />
-                        <span
-                          className={`text-sm font-medium ${
-                            theme === "dark"
-                              ? "text-purple-300"
-                              : "text-purple-700"
-                          }`}
-                        >
-                          🌆 Turno Tarde (2:30 PM - 11:59 PM)
-                        </span>
-                      </div>
-                      <p
-                        className={`text-xs ${
-                          theme === "dark"
-                            ? "text-purple-200"
-                            : "text-purple-600"
-                        }`}
-                      >
-                        Es hora de reportar tus tareas pendientes del día.
-                      </p>
-                    </div>
-
                     {/* Panel normal de tareas */}
-                    <TasksPanelContent
+                    <PanelReporteTareasTarde
                       assistantAnalysis={analysis}
                       theme={theme}
                       userEmail={colaborador.email}
@@ -1830,9 +1608,6 @@ export function ChatBot({
                       onStartVoiceMode={handleStartVoiceMode}
                       onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
                       onReportCompleted={async () => {
-                        console.log(
-                          "✅ Reporte completado, recargando análisis...",
-                        );
                         await fetchAssistantAnalysis(false, false);
                       }}
                     />
@@ -1914,6 +1689,7 @@ export function ChatBot({
                   confirmada: t.confirmada || false,
                   duracionMin: t.duracionMin || 0,
                   descripcion: t.descripcion || "",
+                  queHizo: t.queHizo || "",
                   reportada: t.reportada || false,
                   fechaCreacion: t.fechaCreacion,
                   fechaFinTerminada: t.fechaFinTerminada || null,
@@ -1950,9 +1726,6 @@ export function ChatBot({
       if (!silentUpdate) {
         showAssistantAnalysis(adaptedData, isRestoration);
       } else {
-        console.log(
-          "🔄 Actualización silenciosa completada (sin agregar mensajes)",
-        );
       }
     } catch (error) {
       if (!silentUpdate) {
@@ -2113,96 +1886,6 @@ export function ChatBot({
     }
   };
 
-  // ==================== FUNCIONES: REPORTE ====================
-  const guardarReporteDiario = async () => {
-    try {
-      setGuardandoReporte(true);
-
-      const pendientesSinMotivo = pendientesReporte.filter(
-        (p) =>
-          !p.completadoLocal &&
-          (!p.motivoLocal || p.motivoLocal.trim().length < 5),
-      );
-
-      if (pendientesSinMotivo.length > 0) {
-        speakText(
-          "Por favor, explica por qué no completaste todas las tareas marcadas como incompletas.",
-        );
-        setGuardandoReporte(false);
-        return;
-      }
-
-      const pendientesParaEnviar = pendientesReporte.map((p) => ({
-        pendienteId: p.pendienteId,
-        actividadId: p.actividadId,
-        completado: p.completadoLocal,
-        motivoNoCompletado:
-          !p.completadoLocal && p.motivoLocal ? p.motivoLocal : undefined,
-      }));
-
-      const response = await actualizarEstadoPendientes(pendientesParaEnviar);
-
-      if (response.success) {
-        setMostrarModalReporte(false);
-        setIndicePendienteActual(0);
-        setPasoModalVoz("esperando");
-
-        addMessage(
-          "bot",
-          <div
-            className={`p-4 rounded-lg border ${
-              theme === "dark"
-                ? "bg-green-900/20 border-green-500/20"
-                : "bg-green-50 border-green-200"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              <div>
-                <span className="font-medium">Reporte guardado</span>
-                <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                  Se actualizaron {response.actualizados} tareas correctamente.
-                  ¡Buen trabajo hoy!
-                </p>
-              </div>
-            </div>
-          </div>,
-        );
-
-        speakText(
-          `Reporte guardado. Se actualizaron ${response.actualizados} tareas. Buen trabajo hoy.`,
-        );
-        toast({
-          title: "Reporte finalizado",
-          description: `Se actualizaron ${response.actualizados} tareas correctamente.`,
-        });
-      }
-    } catch (error) {
-      addMessage(
-        "bot",
-        <div
-          className={`p-4 rounded-lg border ${
-            theme === "dark"
-              ? "bg-red-900/20 border-red-500/20"
-              : "bg-red-50 border-red-200"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <span>Error al guardar el reporte. Intenta nuevamente.</span>
-          </div>
-        </div>,
-      );
-      toast({
-        variant: "destructive",
-        title: "Error al guardar",
-        description: "No se pudo actualizar el estado de tus tareas.",
-      });
-    } finally {
-      setGuardandoReporte(false);
-    }
-  };
-
   // ==================== RENDER ====================
   return (
     <div
@@ -2279,11 +1962,9 @@ export function ChatBot({
             onVoiceMessageClick={handleVoiceMessageClick}
             scrollRef={scrollRef}
             assistantAnalysis={assistantAnalysis}
-            onOpenReport={() => setMostrarModalReporte(true)}
             onStartVoiceMode={handleStartVoiceMode}
             onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
             onReportCompleted={async () => {
-              console.log("Reporte completado, recargando análisis...");
               await fetchAssistantAnalysis(false, false);
             }}
             userEmail={colaborador.email}
@@ -2311,19 +1992,6 @@ export function ChatBot({
           onToggleChatMode={toggleChatMode}
         />
       )}
-
-      {/* <ReporteActividadesModal
-        isOpen={mostrarModalReporte}
-        onOpenChange={setMostrarModalReporte}
-        theme={theme}
-         turno={getTurnoActual()} 
-        actividadesDiarias={actividadesDiarias}
-        stopVoice={stopVoice}
-        speakText={speakText}
-        isSpeaking={isSpeaking}
-        onGuardarReporte={guardarReporteDiario}
-        guardandoReporte={guardandoReporte}
-      /> */}
 
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent

@@ -1,9 +1,10 @@
-import React from "react";
 import type { Message, AssistantAnalysis } from "@/lib/types";
 import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { messageTemplates } from "@/components/chat/messageTemplates";
-import { useMessageRestoration } from "@/components/hooks/useMessageRestoration";
-import { TasksPanel, NoTasksMessage } from "@/components/chat/Taskspanelcontent";
+import {
+  TasksPanel,
+  NoTasksMessage,
+} from "@/components/chat/PanelReporteTareasTarde";
 
 /**
  * Convierte mensajes del historial a mensajes con componentes React
@@ -16,7 +17,7 @@ export function restaurarMensajesConComponentes(
   displayName: string,
   email: string,
   onOpenReport?: () => void,
-  onStartVoiceMode?: () => void
+  onStartVoiceMode?: () => void,
 ): Message[] {
   if (!mensajesHistorial || mensajesHistorial.length === 0) {
     return [];
@@ -75,17 +76,17 @@ export function restaurarMensajesConComponentes(
 
       // 3. Panel de tareas o mensaje de "sin tareas"
       const hayTareas = analisisRestaurado.data.revisionesPorActividad.some(
-        (r) => r.tareasConTiempo.length > 0
+        (r) => r.tareasConTiempo.length > 0,
       );
 
       if (hayTareas) {
         const actividadesConTareas =
           analisisRestaurado.data.revisionesPorActividad.filter(
-            (r) => r.tareasConTiempo.length > 0
+            (r) => r.tareasConTiempo.length > 0,
           );
         const totalTareas = actividadesConTareas.reduce(
           (sum, r) => sum + r.tareasConTiempo.length,
-          0
+          0,
         );
 
         mensajesRestaurados.push({
@@ -131,7 +132,7 @@ export function restaurarMensajesConComponentes(
  */
 export function esMensajeConComponente(
   msg: MensajeHistorial,
-  analisisRestaurado: AssistantAnalysis | null
+  analisisRestaurado: AssistantAnalysis | null,
 ): boolean {
   return (
     msg.tipoMensaje === "analisis_inicial" &&
@@ -144,13 +145,13 @@ export function esMensajeConComponente(
  * Obtiene el análisis desde el historial si está disponible
  */
 export function extraerAnalisisDeHistorial(
-  mensajes: MensajeHistorial[]
+  mensajes: MensajeHistorial[],
 ): AssistantAnalysis | null {
   const mensajeConAnalisis = mensajes.find(
     (m) =>
       m.tipoMensaje === "analisis_inicial" &&
       m.analisis &&
-      m.analisis.success === true
+      m.analisis.success === true,
   );
 
   if (!mensajeConAnalisis?.analisis) {

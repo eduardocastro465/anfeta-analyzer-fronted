@@ -64,8 +64,6 @@ export function TasksPanelWithDescriptions({
   const [mostrarAlerta, setMostrarAlerta] = useState(false);
   const [mensajeAlerta, setMensajeAlerta] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [tareaEditando, setTareaEditando] = useState<string | null>(null);
-  const [guardandoDescripcion, setGuardandoDescripcion] = useState(false);
   const [datosListos, setDatosListos] = useState(false);
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(
     null,
@@ -81,7 +79,6 @@ export function TasksPanelWithDescriptions({
     ) {
       setDatosListos(true);
       setUltimaActualizacion(new Date());
-      console.log("✅ Datos iniciales cargados en TasksPanelWithDescriptions");
     }
   }, [assistantAnalysis]);
 
@@ -92,18 +89,7 @@ export function TasksPanelWithDescriptions({
     );
     const hasChanged = currentHash !== lastDataHashRef.current;
 
-    console.log(
-      "🔍 TasksPanelWithDescriptions render #" + renderCountRef.current,
-      {
-        timestamp: new Date().toISOString(),
-        dataChanged: hasChanged,
-        totalRevisiones:
-          assistantAnalysis?.data?.revisionesPorActividad?.length || 0,
-      },
-    );
-
     if (hasChanged) {
-      console.log("✨ Datos cambiaron - actualizando lastDataHashRef");
       lastDataHashRef.current = currentHash;
     }
   });
@@ -115,135 +101,34 @@ export function TasksPanelWithDescriptions({
     setTimeout(() => setMostrarAlerta(false), 5000);
   }, []);
 
-  // ✅ CRÍTICO: Agregar hash de datos para detectar cambios profundos
   const dataHash = useMemo(() => {
     if (!assistantAnalysis?.data?.revisionesPorActividad) return "";
 
-    // Crear un hash único basado en el estado de todas las tareas
     const hash = assistantAnalysis.data.revisionesPorActividad
       .flatMap((rev) => rev.tareasConTiempo || [])
       .map(
         (t) =>
           `${t.id}:${t.descripcion || "sin-desc"}:${t.duracionMin}:${t.terminada}:${t.confirmada}`,
       )
-      .sort() // Ordenar para consistencia
+      .sort()
       .join("|");
-
-    const hashPreview = hash.substring(0, 100);
-    console.log("🔑 Hash de datos calculado:", {
-      preview: hashPreview + "...",
-      length: hash.length,
-      timestamp: new Date().toISOString(),
-    });
 
     return hash;
   }, [assistantAnalysis]);
 
-  // ✅ Guardar descripción editada
-  const handleGuardarDescripcion = useCallback(
-    async (pendienteId: string, nuevaDescripcion: string) => {
-      if (!nuevaDescripcion.trim()) {
-        mostrarAlertaMensaje("La descripción no puede estar vacía");
-        return;
-      }
-
-      setGuardandoDescripcion(true);
-      console.log("💾 Guardando descripción para tarea:", {
-        pendienteId,
-        longitudDescripcion: nuevaDescripcion.trim().length,
-        timestamp: new Date().toISOString(),
-      });
-
-      try {
-        const response = await fetch(
-          "/api/v1/assistant/guardarDescripcionTarde",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              pendienteId,
-              descripcion: nuevaDescripcion.trim(),
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error(
-            "❌ Error HTTP al guardar:",
-            response.status,
-            errorData,
-          );
-          throw new Error(errorData.error || "Error al guardar la descripción");
-        }
-
-        const data = await response.json();
-        console.log("📥 Respuesta del servidor:", data);
-
-        if (data.success) {
-          mostrarAlertaMensaje("✅ Descripción actualizada exitosamente");
-          setTareaEditando(null);
-
-          // ✅ Esperar 1 segundo antes de recargar para asegurar que el backend procesó todo
-          console.log("⏳ Esperando 1 segundo antes de recargar datos...");
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
-          console.log("🔄 Llamando onReportCompleted para recargar datos...");
-          if (onReportCompleted) {
-            await onReportCompleted();
-          }
-
-          console.log("✅ Recarga completada");
-        } else {
-          console.error("❌ Respuesta sin éxito:", data);
-          throw new Error(data.error || "Error al guardar");
-        }
-      } catch (error) {
-        console.error("❌ Error al guardar descripción:", error);
-        mostrarAlertaMensaje("❌ Error al guardar la descripción");
-      } finally {
-        setGuardandoDescripcion(false);
-      }
-    },
-    [mostrarAlertaMensaje, onReportCompleted],
-  );
-
-  const handleCancelarEdicion = useCallback(() => {
-    setTareaEditando(null);
-  }, []);
-
   // ✅ CRÍTICO: Agregar dataHash como dependencia para forzar recálculo
   const actividadesConDescripcion = useMemo(() => {
-    console.log("🔄 Recalculando actividadesConDescripcion...", {
-      timestamp: new Date().toISOString(),
-      dataHashPreview: dataHash.substring(0, 50) + "...",
-      hasData: !!assistantAnalysis?.data?.revisionesPorActividad,
-    });
-
     if (!assistantAnalysis?.data?.revisionesPorActividad) {
-      console.log("⚠️ No hay revisionesPorActividad");
       return [];
     }
 
-    console.log("📊 Analizando revisiones:", {
-      totalRevisiones: assistantAnalysis.data.revisionesPorActividad.length,
-    });
-
     const resultado = assistantAnalysis.data.revisionesPorActividad
       .map((revision, idx) => {
-        console.log(`  📋 Revisión ${idx + 1}:`, {
-          actividadId: revision.actividadId,
-          totalTareas: revision.tareasConTiempo.length,
-        });
-
         const colaboradoresReales =
           revision.colaboradores ||
           assistantAnalysis.colaboradoresInvolucrados ||
           [];
 
-        // ✅ NUEVO: Mostrar TODAS las tareas, marcando cuáles tienen descripción
         const todasLasTareas = revision.tareasConTiempo.map((tarea) => {
           const tieneDescripcion =
             tarea.descripcion && tarea.descripcion.trim().length > 0;
@@ -254,8 +139,8 @@ export function TasksPanelWithDescriptions({
             actividadId: revision.actividadId,
             actividadTitulo: revision.actividadTitulo,
             actividadHorario: revision.actividadHorario,
-            tieneDescripcion, // ✅ Marcar si tiene descripción
-            bloqueada: tieneDescripcion, // ✅ Bloquear si tiene descripción
+            tieneDescripcion,
+            bloqueada: tieneDescripcion,
           };
         });
 
@@ -266,45 +151,20 @@ export function TasksPanelWithDescriptions({
           (t) => t.tieneDescripcion,
         );
 
-        console.log(
-          `  → Tareas: ${todasLasTareas.length} total (${tareasSinDescripcion.length} sin descripción, ${tareasConDescripcionCount.length} con descripción)`,
-        );
-
         return {
           ...revision,
           colaboradoresReales,
           esActividadIndividual: colaboradoresReales.length <= 1,
-          tareasConDescripcion: todasLasTareas, // ✅ Todas las tareas
+          tareasConDescripcion: todasLasTareas,
           tareasNoReportadas: todasLasTareas,
           tareasSinDescripcion: tareasSinDescripcion.length,
           tareasConDescripcionCount: tareasConDescripcionCount.length,
         } as RevisionConDescripcion;
       })
-      .filter((revision) => {
-        const cumple = revision.tareasConDescripcion.length > 0;
-        if (cumple) {
-          console.log(
-            `✅ Actividad ${revision.actividadTitulo} incluida (${revision.tareasConDescripcion.length} tareas totales)`,
-          );
-        }
-        return cumple;
-      });
-
-    console.log("📊 Resultado final actividadesConDescripcion:", {
-      totalActividades: resultado.length,
-      totalTareas: resultado.reduce(
-        (sum, r) => sum + r.tareasConDescripcion.length,
-        0,
-      ),
-      tareasBloqueadas: resultado.reduce(
-        (sum, r) => sum + (r.tareasConDescripcionCount || 0),
-        0,
-      ),
-      timestamp: new Date().toISOString(),
-    });
+      .filter((revision) => revision.tareasConDescripcion.length > 0);
 
     return resultado;
-  }, [assistantAnalysis, dataHash]); // ✅ CRÍTICO: Incluir dataHash como dependencia
+  }, [assistantAnalysis, dataHash]);
 
   // Calcular estadísticas
   const estadisticas = useMemo(() => {
@@ -322,12 +182,6 @@ export function TasksPanelWithDescriptions({
       (sum, actividad) => sum + (actividad.tareasConDescripcionCount || 0),
       0,
     );
-
-    console.log("📈 Estadísticas recalculadas:", {
-      totalTareas,
-      tareasSinDescripcion,
-      tareasBloqueadas,
-    });
 
     return {
       totalTareas,
@@ -356,7 +210,7 @@ export function TasksPanelWithDescriptions({
   const seleccionarTodasTareas = useCallback(() => {
     const todasTareasIds = actividadesConDescripcion.flatMap((actividad) =>
       actividad.tareasConDescripcion
-        .filter((t: any) => !t.tieneDescripcion) // ✅ Solo tareas sin descripción
+        .filter((t: any) => !t.tieneDescripcion)
         .map((t: any) => t.id),
     );
 
@@ -375,7 +229,7 @@ export function TasksPanelWithDescriptions({
     mostrarAlertaMensaje("Todas las tareas deseleccionadas");
   }, [mostrarAlertaMensaje]);
 
-  // ✅ CORREGIDO: Iniciar modo voz en lugar de abrir modal
+  // ✅ Iniciar modo voz con tareas seleccionadas
   const handleIniciarModoVoz = useCallback(() => {
     if (tareasSeleccionadas.size === 0) {
       mostrarAlertaMensaje(
@@ -385,15 +239,7 @@ export function TasksPanelWithDescriptions({
       return;
     }
 
-    console.log("✅ Iniciando modo voz con tareas seleccionadas:", {
-      total: tareasSeleccionadas.size,
-      tareas: Array.from(tareasSeleccionadas),
-    });
-
-    // ✅ Llamar a la función que inicia el modo voz
     onStartVoiceModeWithTasks(Array.from(tareasSeleccionadas));
-
-    // Limpiar selección después de iniciar
     setTareasSeleccionadas(new Set());
   }, [
     tareasSeleccionadas,
@@ -401,6 +247,14 @@ export function TasksPanelWithDescriptions({
     onStartVoiceModeWithTasks,
     speakText,
   ]);
+
+  // ✅ NUEVO: Editar una tarea via modo voz (re-dictar la descripción)
+  const handleEditarConVoz = useCallback(
+    (tareaId: string) => {
+      onStartVoiceModeWithTasks([tareaId]);
+    },
+    [onStartVoiceModeWithTasks],
+  );
 
   // ========== RENDER ==========
   return (
@@ -528,7 +382,7 @@ export function TasksPanelWithDescriptions({
 
                   return (
                     <ActivityWithDescriptionItem
-                      key={`${revision.actividadId}-${dataHash.substring(0, 20)}`} // ✅ Key único que cambia con los datos
+                      key={`${revision.actividadId}-${dataHash.substring(0, 20)}`}
                       revision={revision}
                       actividad={actividad}
                       index={idx}
@@ -536,11 +390,7 @@ export function TasksPanelWithDescriptions({
                       tareasSeleccionadas={tareasSeleccionadas}
                       onToggleTarea={toggleSeleccionTarea}
                       currentUserEmail={currentUserEmail}
-                      tareaEditando={tareaEditando}
-                      onEditarTarea={setTareaEditando}
-                      onGuardarDescripcion={handleGuardarDescripcion}
-                      onCancelarEdicion={handleCancelarEdicion}
-                      guardandoDescripcion={guardandoDescripcion}
+                      onEditarConVoz={handleEditarConVoz}
                     />
                   );
                 },
@@ -571,7 +421,7 @@ export function TasksPanelWithDescriptions({
   );
 }
 
-// ========== COMPONENTES AUXILIARES (sin cambios en la lógica) ==========
+// ========== COMPONENTES AUXILIARES ==========
 
 interface ActivityWithDescriptionItemProps {
   revision: RevisionConDescripcion;
@@ -581,14 +431,8 @@ interface ActivityWithDescriptionItemProps {
   tareasSeleccionadas: Set<string>;
   onToggleTarea: (tareaId: string) => void;
   currentUserEmail: string;
-  tareaEditando: string | null;
-  onEditarTarea: (tareaId: string | null) => void;
-  onGuardarDescripcion: (
-    pendienteId: string,
-    descripcion: string,
-  ) => Promise<void>;
-  onCancelarEdicion: () => void;
-  guardandoDescripcion: boolean;
+  // ✅ NUEVO: callback para editar via voz
+  onEditarConVoz: (tareaId: string) => void;
 }
 
 function ActivityWithDescriptionItem({
@@ -599,11 +443,7 @@ function ActivityWithDescriptionItem({
   tareasSeleccionadas,
   onToggleTarea,
   currentUserEmail,
-  tareaEditando,
-  onEditarTarea,
-  onGuardarDescripcion,
-  onCancelarEdicion,
-  guardandoDescripcion,
+  onEditarConVoz,
 }: ActivityWithDescriptionItemProps) {
   const badgeColor = useMemo(() => {
     const colors = [
@@ -725,11 +565,7 @@ function ActivityWithDescriptionItem({
                     onToggleSeleccion={() => onToggleTarea(tarea.id)}
                     esActividadIndividual={esActividadIndividual}
                     colaboradoresReales={colaboradoresReales}
-                    estaEditando={tareaEditando === tarea.id}
-                    onIniciarEdicion={() => onEditarTarea(tarea.id)}
-                    onGuardarDescripcion={onGuardarDescripcion}
-                    onCancelarEdicion={onCancelarEdicion}
-                    guardandoDescripcion={guardandoDescripcion}
+                    onEditarConVoz={onEditarConVoz}
                   />
                 ))}
             </div>
@@ -768,15 +604,11 @@ function ActivityWithDescriptionItem({
                     key={tarea.id}
                     tarea={tarea}
                     theme={theme}
-                    estaSeleccionada={false} // Siempre false para bloqueadas
-                    onToggleSeleccion={() => {}} // No hacer nada al intentar seleccionar
+                    estaSeleccionada={false}
+                    onToggleSeleccion={() => {}}
                     esActividadIndividual={esActividadIndividual}
                     colaboradoresReales={colaboradoresReales}
-                    estaEditando={tareaEditando === tarea.id}
-                    onIniciarEdicion={() => onEditarTarea(tarea.id)}
-                    onGuardarDescripcion={onGuardarDescripcion}
-                    onCancelarEdicion={onCancelarEdicion}
-                    guardandoDescripcion={guardandoDescripcion}
+                    onEditarConVoz={onEditarConVoz}
                   />
                 ))}
             </div>
@@ -794,14 +626,8 @@ interface TaskWithDescriptionItemProps {
   onToggleSeleccion: () => void;
   esActividadIndividual: boolean;
   colaboradoresReales: string[];
-  estaEditando: boolean;
-  onIniciarEdicion: () => void;
-  onGuardarDescripcion: (
-    pendienteId: string,
-    descripcion: string,
-  ) => Promise<void>;
-  onCancelarEdicion: () => void;
-  guardandoDescripcion: boolean;
+  // ✅ NUEVO: reemplaza la edición inline — abre el modal de voz
+  onEditarConVoz: (tareaId: string) => void;
 }
 
 function TaskWithDescriptionItem({
@@ -811,28 +637,9 @@ function TaskWithDescriptionItem({
   onToggleSeleccion,
   esActividadIndividual,
   colaboradoresReales,
-  estaEditando,
-  onIniciarEdicion,
-  onGuardarDescripcion,
-  onCancelarEdicion,
-  guardandoDescripcion,
+  onEditarConVoz,
 }: TaskWithDescriptionItemProps) {
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
-  const [descripcionEditada, setDescripcionEditada] = useState(
-    tarea.descripcion || "",
-  );
-
-  // ✅ Resetear descripción editada cuando se cancela
-  useEffect(() => {
-    if (!estaEditando) {
-      setDescripcionEditada(tarea.descripcion || "");
-    }
-  }, [estaEditando, tarea.descripcion]);
-
-  // ✅ Handler para guardar
-  const handleGuardar = async () => {
-    await onGuardarDescripcion(tarea.id, descripcionEditada);
-  };
 
   return (
     <div
@@ -978,115 +785,55 @@ function TaskWithDescriptionItem({
               )}
             </div>
 
-            {/* Descripción (solo si existe) */}
+            {/* Descripción (solo si existe) — con botón Editar que abre modo voz */}
             {tarea.descripcion && (
               <div className="mt-2">
-                {!estaEditando ? (
-                  <>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMostrarDescripcion(!mostrarDescripcion);
-                        }}
-                        className={`text-xs h-6 px-2 py-1 ${
-                          theme === "dark"
-                            ? "text-gray-400 hover:text-gray-300 hover:bg-[#2a2a2a]"
-                            : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
-                        }`}
-                      >
-                        <FileText className="w-3 h-3 mr-1" />
-                        {mostrarDescripcion ? "Ocultar" : "Ver"} descripción
-                      </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMostrarDescripcion(!mostrarDescripcion);
+                    }}
+                    className={`text-xs h-6 px-2 py-1 ${
+                      theme === "dark"
+                        ? "text-gray-400 hover:text-gray-300 hover:bg-[#2a2a2a]"
+                        : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
+                    }`}
+                  >
+                    <FileText className="w-3 h-3 mr-1" />
+                    {mostrarDescripcion ? "Ocultar" : "Ver"} descripción
+                  </Button>
 
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onIniciarEdicion();
-                          setMostrarDescripcion(true);
-                        }}
-                        className={`text-xs h-6 px-2 py-1 ${
-                          theme === "dark"
-                            ? "text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                            : "text-blue-600 hover:text-blue-800 hover:bg-blue-100"
-                        }`}
-                      >
-                        <Edit2 className="w-3 h-3 mr-1" />
-                        Editar
-                      </Button>
-                    </div>
+                  {/* ✅ CAMBIADO: Editar ahora abre el modal de voz */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditarConVoz(tarea.id);
+                    }}
+                    className={`text-xs h-6 px-2 py-1 ${
+                      theme === "dark"
+                        ? "text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                        : "text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+                    }`}
+                  >
+                    <Mic className="w-3 h-3 mr-1" />
+                    Re-dictar
+                  </Button>
+                </div>
 
-                    {mostrarDescripcion && (
-                      <div
-                        className={`mt-2 p-2 rounded text-xs ${
-                          theme === "dark"
-                            ? "bg-[#2a2a2a] text-gray-300 border border-[#3a3a3a]"
-                            : "bg-gray-100 text-gray-700 border border-gray-200"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">
-                          {tarea.descripcion}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    <Textarea
-                      value={descripcionEditada}
-                      onChange={(e) => setDescripcionEditada(e.target.value)}
-                      className={`text-xs min-h-[100px] ${
-                        theme === "dark"
-                          ? "bg-[#2a2a2a] text-gray-300 border-[#3a3a3a]"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
-                      placeholder="Escribe la descripción de la tarea..."
-                      disabled={guardandoDescripcion}
-                    />
-
-                    <div className="flex gap-2 justify-end">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCancelarEdicion();
-                        }}
-                        disabled={guardandoDescripcion}
-                        className="text-xs h-7 px-3"
-                      >
-                        <X className="w-3 h-3 mr-1" />
-                        Cancelar
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGuardar();
-                        }}
-                        disabled={
-                          guardandoDescripcion || !descripcionEditada.trim()
-                        }
-                        className="text-xs h-7 px-3 bg-[#6841ea] hover:bg-[#5a36d4] text-white"
-                      >
-                        {guardandoDescripcion ? (
-                          <>
-                            <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-3 h-3 mr-1" />
-                            Guardar
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                {mostrarDescripcion && (
+                  <div
+                    className={`mt-2 p-2 rounded text-xs ${
+                      theme === "dark"
+                        ? "bg-[#2a2a2a] text-gray-300 border border-[#3a3a3a]"
+                        : "bg-gray-100 text-gray-700 border border-gray-200"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{tarea.descripcion}</p>
                   </div>
                 )}
               </div>

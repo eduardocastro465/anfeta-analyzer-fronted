@@ -43,6 +43,9 @@ export function ChatInputBar({
   const isInteractionDisabled =
     !canUserType || isSpeaking || isLoadingIA || isTranscribing;
 
+  const hasTopStatus =
+    isRecording || isTranscribing || isSpeaking || chatMode === "ia";
+
   const getPlaceholder = () => {
     if (isTranscribing) return "Transcribiendo...";
     if (isSpeaking) return "Asistente hablando...";
@@ -75,7 +78,13 @@ export function ChatInputBar({
     >
       <div className="max-w-5xl mx-auto px-2 sm:px-3 py-2">
         {/* ✅ CONTENEDOR CON ALTURA ABSOLUTA FIJA */}
-        <div className="h-16 sm:h-[72px] mb-2 relative overflow-hidden">
+        <div
+          className={`
+    ${hasTopStatus ? "h-12 sm:h-14 mb-1.5" : "h-0 mb-0"}
+    relative overflow-hidden
+    transition-all duration-200 ease-in-out
+  `}
+        >
           {/* Estado: Grabando */}
           <div
             className={`

@@ -108,7 +108,6 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
   // Filtrar actividades para mostrar solo las que tienen tareas seleccionadas
   const filteredActivitiesWithTasks = useMemo(() => {
     if (!activitiesWithTasks || activitiesWithTasks.length === 0) {
-      console.log("No hay actividades con tareas disponibles");
       return [];
     }
 
@@ -148,10 +147,6 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
       );
       return filteredActivities;
     } else {
-      // Si no hay tareas seleccionadas, usar todas (compatibilidad hacia atrás)
-      console.log(
-        "No hay tareas seleccionadas, mostrando todas las actividades",
-      );
       return activitiesWithTasks;
     }
   }, [activitiesWithTasks, stableSelectedTaskIds]);
