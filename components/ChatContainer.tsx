@@ -6,8 +6,7 @@ import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
 import type {
   AssistantAnalysis,
   ChatContainerProps,
-  ConversacionSidebar,
-  Colaborador
+  ConversacionSidebar
 } from "@/lib/types";
 import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { obtenerLabelDia } from "@/util/labelDia";
@@ -44,12 +43,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, BarChart3, X, AlertCircle } from "lucide-react";
 import { ChatBot } from "./chat-bot";
 import { obtenerMensajesConversacion } from "@/lib/historial.service";
 import { useReporteData } from "@/app/reporte-del-dia/hooks/useReporteData";
-import DashboardView from "@/app/reporte-del-dia/components/DashboardView";
-import type { ApiResponse, Usuario, Actividad, DetalleView } from "@/app/reporte-del-dia/types/reporteTypes";
+import type {  Usuario, Actividad, DetalleView } from "@/app/reporte-del-dia/types/reporteTypes";
 
 
 type ViewMode = 'chat' | 'reportes';
@@ -423,7 +420,6 @@ export function ChatContainer({
 
 
   const manejarTransicionConversacion = async () => {
-    // Primero limpiar el estado actual para forzar re-render
     setConversacionActiva(null);
     setMensajesRestaurados([]);
     setAnalisisRestaurado(null);

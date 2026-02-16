@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  Target,
-  Clock,
   Check,
   Users,
   User,
@@ -13,14 +11,9 @@ import {
   Mic,
   UsersIcon,
   UserIcon,
-  Badge,
-  Edit2,
-  Save,
-  X,
 } from "lucide-react";
 import { Badge as UIBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { AssistantAnalysis, TareaConTiempo } from "@/lib/types";
 

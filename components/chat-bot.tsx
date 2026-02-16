@@ -153,7 +153,7 @@ export function ChatBot({
 
   // ==================== FUNCTIONS ====================
   const getTurnoActual = (): "mañana" | "tarde" => {
-    // return "mañana";
+    return "mañana";
     //  return "tarde";
     const esTurnoMañana = isReportTime(
       horaInicioReporteMañana,
@@ -761,7 +761,8 @@ export function ChatBot({
           };
 
           const data = await obtenerActividadesConRevisiones(requestBody);
-
+          
+          console.log("🚀 ~ intervalo ~ data:", data)
           // Mapear datos igual que en fetchAssistantAnalysis
           const adaptedData: AssistantAnalysis & {
             colaboradoresInvolucrados?: any[];
@@ -1648,6 +1649,7 @@ export function ChatBot({
       };
 
       const data = await obtenerActividadesConRevisiones(requestBody);
+      console.log("🚀 ~ fetchAssistantAnalysis ~ data:", data)
 
       const adaptedData: AssistantAnalysis & {
         colaboradoresInvolucrados?: any[];

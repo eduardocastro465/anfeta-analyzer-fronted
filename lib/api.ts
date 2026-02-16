@@ -343,7 +343,7 @@ export async function obtenerActividadesConRevisiones(requestBody: any) {
         body: JSON.stringify(requestBody),
       },
     );
-
+    console.log(response);
     if (!response.ok) throw new Error(`Error: ${response.status}`);
     const data = await response.json();
     return data;

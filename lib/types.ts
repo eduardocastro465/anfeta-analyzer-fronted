@@ -514,3 +514,31 @@ export interface TasksPanelFooterProps {
 export interface TypingIndicatorProps {
   theme: "light" | "dark";
 }
+
+
+export interface RevisionProcesada {
+    actividadId: string;
+    actividadTitulo: string;
+    actividadHorario: string;
+    tareasConTiempo: TareaConTiempo[];
+    colaboradoresReales: string[];
+    esActividadIndividual: boolean;
+    tareasReportadas: TareaConTiempo[];
+    tareasNoReportadas: TareaConTiempo[];
+    [key: string]: any;
+    onDescripcionActualizada?: () => void;
+  }
+
+export interface PanelReporteTareasTardeProps {
+    assistantAnalysis: AssistantAnalysis;
+    theme: "light" | "dark";
+    userEmail: string;
+    turno: "mañana" | "tarde";
+    onStartVoiceMode: () => void;
+    onStartVoiceModeWithTasks: (selectedTaskIds: string[]) => void;
+    onReportCompleted?: () => void;
+    actividadesDiarias?: any[];
+    stopVoice?: () => void;
+    isSpeaking?: boolean;
+    speakText?: (text: string) => void;
+  }

@@ -24,35 +24,9 @@
   import { Badge } from "@/components/ui/badge";
   import { Button } from "@/components/ui/button";
   import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-  import { AssistantAnalysis, TareaConTiempo } from "@/lib/types";
+  import { PanelReporteTareasTardeProps, RevisionProcesada } from "@/lib/types";
   import { ReporteActividadesModal } from "../ReporteActividadesModal";
 
-  interface RevisionProcesada {
-    actividadId: string;
-    actividadTitulo: string;
-    actividadHorario: string;
-    tareasConTiempo: TareaConTiempo[];
-    colaboradoresReales: string[];
-    esActividadIndividual: boolean;
-    tareasReportadas: TareaConTiempo[];
-    tareasNoReportadas: TareaConTiempo[];
-    [key: string]: any;
-    onDescripcionActualizada?: () => void;
-  }
-
-  interface PanelReporteTareasTardeProps {
-    assistantAnalysis: AssistantAnalysis;
-    theme: "light" | "dark";
-    userEmail: string;
-    turno: "mañana" | "tarde";
-    onStartVoiceMode: () => void;
-    onStartVoiceModeWithTasks: (selectedTaskIds: string[]) => void;
-    onReportCompleted?: () => void;
-    actividadesDiarias?: any[];
-    stopVoice?: () => void;
-    isSpeaking?: boolean;
-    speakText?: (text: string) => void;
-  }
 
   export function PanelReporteTareasTarde({
     assistantAnalysis,
@@ -63,9 +37,6 @@
     onStartVoiceModeWithTasks,
     onReportCompleted,
     actividadesDiarias = [],
-    stopVoice = () => {},
-    isSpeaking = false,
-    speakText = () => {},
   }: PanelReporteTareasTardeProps) {
     // ========== ESTADOS ==========
     const [tareasConDescripcion] = useState<Set<string>>(new Set());
@@ -277,11 +248,6 @@
           }
 
           const data = await response.json();
-
-          console.log("=== TAREAS REPORTADAS DEL BACKEND ===");
-          console.log("Total:", data.count);
-          console.log("Metadata:", data.metadata);
-          console.log("Data completa:", data.data);
 
           const tareasData = data.data || data.tareas || data.resultados || [];
           const metadata = data.metadata || data.info || {};
