@@ -6,11 +6,10 @@ import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
 import type {
   AssistantAnalysis,
   ChatContainerProps,
-  ConversacionSidebar
+  ConversacionSidebar,
 } from "@/lib/types";
 import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { obtenerLabelDia } from "@/util/labelDia";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   History,
   MessageSquare,
@@ -46,10 +45,13 @@ import {
 import { ChatBot } from "./chat-bot";
 import { obtenerMensajesConversacion } from "@/lib/historial.service";
 import { useReporteData } from "@/app/reporte-del-dia/hooks/useReporteData";
-import type {  Usuario, Actividad, DetalleView } from "@/app/reporte-del-dia/types/reporteTypes";
+import type {
+  Usuario,
+  Actividad,
+  DetalleView,
+} from "@/app/reporte-del-dia/types/reporteTypes";
 
-
-type ViewMode = 'chat' | 'reportes';
+type ViewMode = "chat" | "reportes";
 
 export function ChatContainer({
   colaborador,
@@ -58,23 +60,42 @@ export function ChatContainer({
   onViewReports,
 }: ChatContainerProps) {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [conversaciones, setConversaciones] = useState<ConversacionSidebar[]>([]);
-  const [conversacionActiva, setConversacionActiva] = useState<string | null>(null);
+
+  // Inicializar sidebar cerrado en móvil
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth >= 768;
+  });
+
+  const [conversaciones, setConversaciones] = useState<ConversacionSidebar[]>(
+    [],
+  );
+  const [conversacionActiva, setConversacionActiva] = useState<string | null>(
+    null,
+  );
   const [sidebarCargando, setSidebarCargando] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-  
+  const [viewMode, setViewMode] = useState<ViewMode>("chat");
 
-  const [viewMode, setViewMode] = useState<ViewMode>('chat');
+  // Detectar si es móvil para el overlay
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768;
+  });
 
   // ESTADOS NUEVOS PARA DASHBOARD
-  const [currentDashboardView, setCurrentDashboardView] = useState<DetalleView>('dashboard');
-  const [selectedDashboardUser, setSelectedDashboardUser] = useState<Usuario | null>(null);
-  const [selectedDashboardActivity, setSelectedDashboardActivity] = useState<Actividad | null>(null);
+  const [currentDashboardView, setCurrentDashboardView] =
+    useState<DetalleView>("dashboard");
+  const [selectedDashboardUser, setSelectedDashboardUser] =
+    useState<Usuario | null>(null);
+  const [selectedDashboardActivity, setSelectedDashboardActivity] =
+    useState<Actividad | null>(null);
 
-  const [mensajesRestaurados, setMensajesRestaurados] = useState<MensajeHistorial[]>([]);
-  const [analisisRestaurado, setAnalisisRestaurado] = useState<AssistantAnalysis | null>(null);
+  const [mensajesRestaurados, setMensajesRestaurados] = useState<
+    MensajeHistorial[]
+  >([]);
+  const [analisisRestaurado, setAnalisisRestaurado] =
+    useState<AssistantAnalysis | null>(null);
   const [cargandoConversacion, setCargandoConversacion] = useState(false);
 
   // Estados para eliminar
@@ -83,6 +104,7 @@ export function ChatContainer({
   const [eliminando, setEliminando] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [verificandoConversacion, setVerificandoConversacion] = useState(false);
+
   const {
     datos: reporteData,
     loading: loadingReportes,
@@ -95,6 +117,32 @@ export function ChatContainer({
   const router = useRouter();
   const { toast } = useToast();
 
+  // Escuchar cambios de tamaño de ventana
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Auto-cerrar sidebar al reducir a móvil
+      if (mobile) {
+        setSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Cerrar sidebar al presionar Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && sidebarOpen && isMobile) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen, isMobile]);
+
   const conversacionesAgrupadas = conversaciones.reduce(
     (acc, conv) => {
       const dia = obtenerLabelDia(conv.createdAt);
@@ -106,28 +154,31 @@ export function ChatContainer({
   );
 
   // HANDLER DE NAVEGACIÓN PARA DASHBOARD
-  const handleDashboardNavigate = useCallback((view: DetalleView, user?: Usuario, activity?: Actividad) => {
-    console.log("🚀 Dashboard Navigate - Vista:", view,
-      "Usuario:", user?.nombre,
-      "Actividad:", activity?.titulo);
-    setCurrentDashboardView(view);
-    setSelectedDashboardUser(user || null);
-    setSelectedDashboardActivity(activity || null);
-  }, []);
+  const handleDashboardNavigate = useCallback(
+    (view: DetalleView, user?: Usuario, activity?: Actividad) => {
+      setCurrentDashboardView(view);
+      setSelectedDashboardUser(user || null);
+      setSelectedDashboardActivity(activity || null);
+    },
+    [],
+  );
 
-  const handleViewUser = useCallback((usuario: Usuario) => {
-    console.log("Ver usuario:", usuario.nombre);
-    handleDashboardNavigate('usuario', usuario);
-  }, [handleDashboardNavigate]);
+  const handleViewUser = useCallback(
+    (usuario: Usuario) => {
+      handleDashboardNavigate("usuario", usuario);
+    },
+    [handleDashboardNavigate],
+  );
 
-  const handleViewActivity = useCallback((actividad: Actividad, usuario: Usuario) => {
-    console.log("Ver actividad:", actividad.titulo);
-    handleDashboardNavigate('actividad', usuario, actividad);
-  }, [handleDashboardNavigate]);
+  const handleViewActivity = useCallback(
+    (actividad: Actividad, usuario: Usuario) => {
+      handleDashboardNavigate("actividad", usuario, actividad);
+    },
+    [handleDashboardNavigate],
+  );
 
   const handleBackToDashboard = useCallback(() => {
-    console.log("Volviendo al dashboard");
-    handleDashboardNavigate('dashboard');
+    handleDashboardNavigate("dashboard");
   }, [handleDashboardNavigate]);
 
   const toggleTheme = () => {
@@ -140,9 +191,8 @@ export function ChatContainer({
 
   const handleViewReports = () => {
     if (colaborador.email === "jjohn@pprin.com") {
-      setViewMode('reportes');
-      // Resetear el dashboard a vista general
-      handleDashboardNavigate('dashboard');
+      setViewMode("reportes");
+      handleDashboardNavigate("dashboard");
       cargarDatosReales(true);
     } else {
       alert("Solo el administrador puede acceder a los reportes");
@@ -150,7 +200,7 @@ export function ChatContainer({
   };
 
   const handleBackToChat = () => {
-    setViewMode('chat');
+    setViewMode("chat");
   };
 
   useEffect(() => {
@@ -294,9 +344,15 @@ export function ChatContainer({
   };
 
   const seleccionarConversacion = async (conv: ConversacionSidebar) => {
-    if (conversacionActiva === conv.sessionId) return;
+    if (conversacionActiva === conv.sessionId) {
+      // ✅ En móvil, cerrar sidebar al seleccionar
+      if (isMobile) setSidebarOpen(false);
+      return;
+    }
     await restaurarConversacion(conv.sessionId);
-    setViewMode('chat');
+    setViewMode("chat");
+    // ✅ En móvil, cerrar sidebar al seleccionar conversación
+    if (isMobile) setSidebarOpen(false);
   };
 
   const agregarNuevaConversacion = (nuevaConv: ConversacionSidebar) => {
@@ -311,7 +367,7 @@ export function ChatContainer({
 
     setConversaciones((prev) => [nuevaConv, ...prev]);
     setConversacionActiva(nuevaConv.sessionId);
-    setViewMode('chat');
+    setViewMode("chat");
   };
 
   const actualizarNombreConversacion = (
@@ -322,33 +378,24 @@ export function ChatContainer({
       prev.map((conv) =>
         conv.sessionId === sessionId
           ? {
-            ...conv,
-            nombreConversacion: nuevoNombre,
-            updatedAt: new Date().toISOString(),
-          }
+              ...conv,
+              nombreConversacion: nuevoNombre,
+              updatedAt: new Date().toISOString(),
+            }
           : conv,
       ),
     );
   };
 
-  // ==================== FUNCIONES DE ELIMINACIÓN MEJORADAS ====================
-
-  /**
-   * Verifica si una conversación tiene mensajes reales (no solo análisis)
-   */
   const verificarConversacionTieneMensajes = async (
     sessionId: string,
   ): Promise<boolean> => {
     try {
       const response = await obtenerMensajesConversacion(sessionId);
-
       if (response.success && response.data) {
         const { mensajes } = response.data;
-
-        // Verificar si hay mensajes reales (más de 1, ya que el primero es solo el análisis)
         return mensajes && mensajes.length > 1;
       }
-
       return false;
     } catch (error) {
       console.error("Error al verificar conversación:", error);
@@ -361,8 +408,6 @@ export function ChatContainer({
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
-
-    // Verificar si la conversación tiene mensajes antes de mostrar el diálogo
     setVerificandoConversacion(true);
 
     try {
@@ -371,19 +416,15 @@ export function ChatContainer({
       );
 
       if (!tieneMensajes) {
-        // Si solo tiene el análisis, eliminar directamente sin confirmación
         toast({
           variant: "info",
           title: "Conversación vacía",
           description: "Esta conversación no tiene mensajes para eliminar",
         });
-
-        // Eliminar silenciosamente
         await handleDeleteEmptyConversation(conv.sessionId);
         return;
       }
 
-      // Si tiene mensajes, mostrar el diálogo de confirmación
       setConversacionAEliminar(conv);
       setShowDeleteDialog(true);
     } catch (error) {
@@ -400,15 +441,11 @@ export function ChatContainer({
   const handleDeleteEmptyConversation = async (sessionId: string) => {
     try {
       const response = await eliminarConversacion(sessionId);
-
       if (response.success) {
         const conversacionesRestantes = conversaciones.filter(
           (c) => c.sessionId !== sessionId,
         );
-
         setConversaciones(conversacionesRestantes);
-
-        // Si era la activa, crear una nueva
         if (conversacionActiva === sessionId) {
           await manejarTransicionConversacion();
         }
@@ -418,22 +455,18 @@ export function ChatContainer({
     }
   };
 
-
   const manejarTransicionConversacion = async () => {
     setConversacionActiva(null);
     setMensajesRestaurados([]);
     setAnalisisRestaurado(null);
 
-    // Pequeño delay para asegurar que el componente se desmonta
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Siempre crear una nueva sesión vacía
     try {
       const sessionRes = await obtenerSessionActual();
       if (sessionRes.success) {
         const { sessionId, userId } = sessionRes;
 
-        // Crear objeto de nueva conversación para el sidebar
         const nuevaConversacion: ConversacionSidebar = {
           sessionId: sessionId,
           userId: userId,
@@ -443,10 +476,7 @@ export function ChatContainer({
           updatedAt: new Date().toISOString(),
         };
 
-        // Agregar al inicio de la lista de conversaciones
         setConversaciones((prev) => [nuevaConversacion, ...prev]);
-
-        // Establecer como activa
         setConversacionActiva(sessionId);
 
         toast({
@@ -476,25 +506,18 @@ export function ChatContainer({
       );
 
       if (response.success) {
-        // Obtener conversaciones restantes (excluyendo la eliminada)
         const conversacionesRestantes = conversaciones.filter(
           (c) => c.sessionId !== conversacionAEliminar.sessionId,
         );
 
-        // Actualizar la lista
         setConversaciones(conversacionesRestantes);
 
-        // Si era la conversación activa, crear una nueva
         if (conversacionActiva === conversacionAEliminar.sessionId) {
-          // Cerrar el diálogo inmediatamente
           setShowDeleteDialog(false);
           setConversacionAEliminar(null);
           setEliminando(false);
-
-          // Crear nueva conversación vacía
           await manejarTransicionConversacion();
         } else {
-          // No era la activa, solo mostrar toast
           toast({
             variant: "success",
             title: "Conversación eliminada",
@@ -525,276 +548,283 @@ export function ChatContainer({
     setConversacionAEliminar(null);
   };
 
+ // ==================== RENDER ChatContainer ====================
+  // Solo se muestran los cambios — el resto del componente no cambia.
+
   return (
     <div
-      className={`min-h-screen font-['Arial'] flex ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"
-        }`}
+      className={`min-h-screen font-['Arial'] flex overflow-hidden ${
+        theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"
+      }`}
     >
-      {/* ========== SIDEBAR DE HISTORIAL - RESPONSIVO ========== */}
+      {/* Overlay móvil */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/60 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar ──────────────────────────────────────────────── */}
       <aside
         className={`
-          fixed left-0 top-0 h-screen z-30 flex flex-col 
-          transition-all duration-300
-          ${sidebarOpen ? "w-64 sm:w-72 md:w-80" : "w-0"}
+          fixed left-0 top-0 h-screen z-30 flex flex-col
+          transition-all duration-300 ease-in-out
+          ${
+            isMobile
+              ? sidebarOpen
+                ? "w-72 translate-x-0"
+                : "w-72 -translate-x-full"
+              : sidebarOpen
+                ? "w-64 sm:w-72 md:w-80"
+                : "w-0"
+          }
           ${
             theme === "dark"
               ? "bg-[#0a0a0a] border-r border-[#1a1a1a]"
               : "bg-gray-50 border-r border-gray-200"
           }
+          overflow-hidden
         `}
       >
-        {sidebarOpen && (
-          <>
-            {/* Header del Sidebar - Responsivo */}
-            <div
-              className={`
-                p-3 sm:p-4 border-b
-                ${theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"}
-              `}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <History className="w-4 h-4 sm:w-5 sm:h-5 text-[#6841ea]" />
-                  <h2 className="font-semibold text-xs sm:text-sm">
-                    Historial
-                  </h2>
-                </div>
-              </div>
+        {/* Header sidebar */}
+        <div
+          className={`p-3 sm:p-4 border-b flex-shrink-0 ${
+            theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 sm:w-5 sm:h-5 text-[#6841ea]" />
+              <h2 className="font-semibold text-xs sm:text-sm">Historial</h2>
             </div>
+            {isMobile && (
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  theme === "dark"
+                    ? "hover:bg-[#2a2a2a] text-gray-400"
+                    : "hover:bg-gray-200 text-gray-500"
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
 
-            {/* Lista de Conversaciones - Responsivo */}
-            <ScrollArea className="flex-1 px-2 py-2">
-              <div className="space-y-3 sm:space-y-4">
-                {Object.entries(conversacionesAgrupadas).map(([dia, convs]) => (
-                  <div key={dia}>
-                    {/* Label del día */}
+        {/* Lista conversaciones */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="space-y-3 sm:space-y-4">
+            {Object.entries(conversacionesAgrupadas).map(([dia, convs]) => (
+              <div key={dia}>
+                <div
+                  className={`px-2 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider ${
+                    theme === "dark" ? "text-gray-500" : "text-gray-400"
+                  }`}
+                >
+                  {dia}
+                </div>
+                <div className="space-y-1">
+                  {convs.map((conv) => (
                     <div
+                      key={conv.sessionId}
                       className={`
-                        px-2 py-1 sm:py-1.5 
-                        text-[10px] sm:text-xs 
-                        font-medium uppercase tracking-wider
-                        ${theme === "dark" ? "text-gray-500" : "text-gray-400"}
+                        relative group rounded-lg transition-all
+                        ${
+                          conversacionActiva === conv.sessionId
+                            ? theme === "dark"
+                              ? "bg-[#6841ea]/20 border border-[#6841ea]/30"
+                              : "bg-[#6841ea]/10 border border-[#6841ea]/20"
+                            : theme === "dark"
+                              ? "hover:bg-[#1a1a1a]"
+                              : "hover:bg-gray-100"
+                        }
                       `}
                     >
-                      {dia}
-                    </div>
-                    {/* Conversaciones del día */}
-                    <div className="space-y-1">
-                      {convs.map((conv) => (
-                        <div
-                          key={conv.sessionId}
-                          className={`
-                            relative group
-                            rounded-lg transition-all
-                            ${
+                      <button
+                        onClick={() => seleccionarConversacion(conv)}
+                        disabled={cargandoConversacion}
+                        className={`w-full text-left p-2 sm:p-2.5 rounded-lg transition-all ${
+                          cargandoConversacion ? "opacity-50" : ""
+                        }`}
+                      >
+                        <div className="flex items-start gap-2 pr-8">
+                          <MessageSquare
+                            className={`w-3 h-3 sm:w-4 sm:h-4 mt-0.5 shrink-0 ${
                               conversacionActiva === conv.sessionId
-                                ? theme === "dark"
-                                  ? "bg-[#6841ea]/20 border border-[#6841ea]/30"
-                                  : "bg-[#6841ea]/10 border border-[#6841ea]/20"
+                                ? "text-[#6841ea]"
                                 : theme === "dark"
-                                  ? "hover:bg-[#1a1a1a]"
-                                  : "hover:bg-gray-100"
-                            }
-                          `}
-                        >
-                          <button
-                            onClick={() => seleccionarConversacion(conv)}
-                            disabled={cargandoConversacion}
-                            className={`
-                              w-full text-left 
-                              p-2 sm:p-2.5 
-                              rounded-lg transition-all
-                              ${cargandoConversacion ? "opacity-50" : ""}
-                            `}
-                          >
-                            <div className="flex items-start gap-2 pr-8">
-                              <MessageSquare
-                                className={`
-                                  w-3 h-3 sm:w-4 sm:h-4 
-                                  mt-0.5 shrink-0
-                                  ${
-                                    conversacionActiva === conv.sessionId
-                                      ? "text-[#6841ea]"
-                                      : theme === "dark"
-                                        ? "text-gray-500"
-                                        : "text-gray-400"
-                                  }
-                                `}
-                              />
-
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs sm:text-sm font-medium truncate">
-                                  {conv.nombreConversacion ||
-                                    `Chat ${new Date(conv.createdAt).toLocaleDateString("es-MX")}`}
-                                </p>
-
-                                <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
-                                  {conv.updatedAt
-                                    ? new Date(
-                                        conv.updatedAt,
-                                      ).toLocaleTimeString("es-MX", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })
-                                    : new Date(
-                                        conv.createdAt,
-                                      ).toLocaleTimeString("es-MX", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Indicador de conversación activa */}
-                            {conversacionActiva === conv.sessionId && (
-                              <div className="absolute left-0 top-0 bottom-0 w-0.5 sm:w-1 bg-[#6841ea] rounded-r-full" />
-                            )}
-                          </button>
-
-                          {/* Botón de opciones (eliminar) */}
-                          <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  onClick={(e) => e.stopPropagation()}
-                                  disabled={verificandoConversacion}
-                                  className={`
-                                    p-1 rounded-md transition-colors
-                                    ${
-                                      theme === "dark"
-                                        ? "hover:bg-[#2a2a2a] text-gray-400 hover:text-white"
-                                        : "hover:bg-gray-200 text-gray-600 hover:text-gray-900"
-                                    }
-                                    ${verificandoConversacion ? "opacity-50 cursor-not-allowed" : ""}
-                                  `}
-                                >
-                                  {verificandoConversacion ? (
-                                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                                  ) : (
-                                    <MoreVertical className="w-3 h-3 sm:w-4 sm:h-4" />
-                                  )}
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className={`
-                                  ${
-                                    theme === "dark"
-                                      ? "bg-[#1a1a1a] border-[#2a2a2a]"
-                                      : "bg-white border-gray-200"
-                                  }
-                                `}
-                              >
-                                <DropdownMenuItem
-                                  onClick={(e) =>
-                                    handleOpenDeleteDialog(conv, e)
-                                  }
-                                  className={`
-                                    text-red-500 focus:text-red-600 focus:bg-red-500/10 cursor-pointer
-                                  `}
-                                >
-                                  <Trash2 className="w-3 h-3 mr-2" />
-                                  <span className="text-xs">Eliminar</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                  ? "text-gray-500"
+                                  : "text-gray-400"
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs sm:text-sm font-medium truncate">
+                              {conv.nombreConversacion ||
+                                `Chat ${new Date(conv.createdAt).toLocaleDateString("es-MX")}`}
+                            </p>
+                            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                              {conv.updatedAt
+                                ? new Date(conv.updatedAt).toLocaleTimeString("es-MX", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : new Date(conv.createdAt).toLocaleTimeString("es-MX", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                            </p>
                           </div>
-
-                          {/* Indicador de carga o typing */}
-                          {cargandoConversacion && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                              <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
-                            </div>
-                          )}
-
-                          {conversacionActiva === conv.sessionId &&
-                            isTyping &&
-                            !cargandoConversacion && (
-                              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
-                              </div>
-                            )}
                         </div>
-                      ))}
+
+                        {conversacionActiva === conv.sessionId && (
+                          <div className="absolute left-0 top-0 bottom-0 w-0.5 sm:w-1 bg-[#6841ea] rounded-r-full" />
+                        )}
+                      </button>
+
+                      {/* Opciones */}
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              disabled={verificandoConversacion}
+                              className={`p-1 rounded-md transition-colors ${
+                                theme === "dark"
+                                  ? "hover:bg-[#2a2a2a] text-gray-400 hover:text-white"
+                                  : "hover:bg-gray-200 text-gray-600 hover:text-gray-900"
+                              } ${verificandoConversacion ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                              {verificandoConversacion ? (
+                                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                              ) : (
+                                <MoreVertical className="w-3 h-3 sm:w-4 sm:h-4" />
+                              )}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className={
+                              theme === "dark"
+                                ? "bg-[#1a1a1a] border-[#2a2a2a]"
+                                : "bg-white border-gray-200"
+                            }
+                          >
+                            <DropdownMenuItem
+                              onClick={(e) => handleOpenDeleteDialog(conv, e)}
+                              className="text-red-500 focus:text-red-600 focus:bg-red-500/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3 mr-2" />
+                              <span className="text-xs">Eliminar</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {cargandoConversacion && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
+                        </div>
+                      )}
+
+                      {conversacionActiva === conv.sessionId &&
+                        isTyping &&
+                        !cargandoConversacion && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                            <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
+                          </div>
+                        )}
                     </div>
-                  </div>
-                ))}
-
-                {sidebarCargando && (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
-                    <span className="text-[10px] sm:text-xs text-gray-500 ml-2">
-                      Cargando historial...
-                    </span>
-                  </div>
-                )}
-
-                {!sidebarCargando && conversaciones.length === 0 && (
-                  <div className="p-3 sm:p-4 text-center">
-                    <p className="text-[10px] sm:text-xs text-gray-500">
-                      No hay conversaciones anteriores
-                    </p>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            </ScrollArea>
+            ))}
 
-            {/* Footer del Sidebar - Responsivo */}
-            <div
-              className={`
-                p-2 sm:p-3 border-t
-                ${theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"}
-              `}
-            >
-              <p
-                className={`
-                  text-[10px] sm:text-xs text-center
-                  ${theme === "dark" ? "text-gray-600" : "text-gray-400"}
-                `}
-              >
-                {new Date().toLocaleDateString("es-MX", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })}
-              </p>
-            </div>
-          </>
-        )}
+            {sidebarCargando && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
+                <span className="text-[10px] sm:text-xs text-gray-500 ml-2">
+                  Cargando historial...
+                </span>
+              </div>
+            )}
+
+            {!sidebarCargando && conversaciones.length === 0 && (
+              <div className="p-3 sm:p-4 text-center">
+                <p className="text-[10px] sm:text-xs text-gray-500">
+                  No hay conversaciones anteriores
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer sidebar */}
+        <div
+          className={`p-2 sm:p-3 border-t flex-shrink-0 ${
+            theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
+          }`}
+        >
+          <p
+            className={`text-[10px] sm:text-xs text-center ${
+              theme === "dark" ? "text-gray-600" : "text-gray-400"
+            }`}
+          >
+            {new Date().toLocaleDateString("es-MX", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+            })}
+          </p>
+        </div>
       </aside>
 
-      {/* Botón para toggle del sidebar - Responsivo */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className={`
-          fixed z-40 
-          top-1/2 -translate-y-1/2 
-          transition-all duration-300 
-          p-1 sm:p-1.5 
-          rounded-r-lg
-          ${sidebarOpen ? "left-64 sm:left-72 md:left-80" : "left-0"}
-          ${
-            theme === "dark"
-              ? "bg-[#1a1a1a] hover:bg-[#252525] text-gray-400 hover:text-white border-y border-r border-[#2a2a2a]"
-              : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 border-y border-r border-gray-200"
-          }
-          touch-manipulation
-        `}
-        title={sidebarOpen ? "Cerrar sidebar" : "Abrir sidebar"}
-      >
-        {sidebarOpen ? (
-          <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-        ) : (
-          <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
-        )}
-      </button>
+      {/* Botón toggle desktop */}
+      {!isMobile && (
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className={`
+            fixed z-40 top-1/2 -translate-y-1/2
+            transition-all duration-300 p-1.5 rounded-r-lg
+            hidden md:flex items-center justify-center
+            ${sidebarOpen ? "left-64 sm:left-72 md:left-80" : "left-0"}
+            ${
+              theme === "dark"
+                ? "bg-[#1a1a1a] hover:bg-[#252525] text-gray-400 hover:text-white border-y border-r border-[#2a2a2a]"
+                : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 border-y border-r border-gray-200"
+            }
+          `}
+          title={sidebarOpen ? "Cerrar sidebar" : "Abrir sidebar"}
+        >
+          {sidebarOpen ? (
+            <ChevronLeft className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </button>
+      )}
 
-      {/* ========== COMPONENTE CHAT - RESPONSIVO ========== */}
+      {/* ── ÁREA PRINCIPAL ───────────────────────────────────────── */}
+      {/*
+        CLAVES DEL FIX:
+        - `min-w-0` evita que un hijo con contenido ancho expanda este div
+          más allá del espacio disponible (problema clásico en flexbox).
+        - `overflow-hidden` contiene el desbordamiento horizontal.
+        - `max-w-full` como seguro adicional.
+      */}
       <div
         className={`
-          flex-1 transition-all duration-300
-          ${sidebarOpen ? "ml-64 sm:ml-72 md:ml-80" : "ml-0"}
+          flex-1 min-w-0 max-w-full overflow-hidden
+          transition-all duration-300
+          ${
+            isMobile
+              ? "ml-0"
+              : sidebarOpen
+                ? "ml-64 sm:ml-72 md:ml-80"
+                : "ml-0"
+          }
         `}
       >
         <ChatBot
@@ -811,14 +841,17 @@ export function ChatContainer({
           onNuevaConversacion={agregarNuevaConversacion}
           onActualizarNombre={actualizarNombreConversacion}
           onActualizarTyping={setIsTyping}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          isMobile={isMobile}
+          sidebarOpen={sidebarOpen}
         />
       </div>
 
-      {/* ========== DIALOG DE CONFIRMACIÓN DE ELIMINACIÓN ========== */}
+      {/* ── Dialog eliminar ──────────────────────────────────────── */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent
           className={`
-            font-['Arial'] max-w-md
+            font-['Arial'] max-w-sm mx-4 sm:max-w-md sm:mx-auto
             ${
               theme === "dark"
                 ? "bg-[#1a1a1a] text-white border-[#2a2a2a]"
@@ -826,25 +859,23 @@ export function ChatContainer({
             }
           `}
         >
-          <AlertDialogHeader className="pt-6">
-            <div className="mx-auto mb-4">
+          <AlertDialogHeader className="pt-4 sm:pt-6">
+            <div className="mx-auto mb-3 sm:mb-4">
               <div
-                className={`
-                  w-16 h-16 rounded-full flex items-center justify-center
-                  ${theme === "dark" ? "bg-red-900/20" : "bg-red-100"}
-                `}
+                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center ${
+                  theme === "dark" ? "bg-red-900/20" : "bg-red-100"
+                }`}
               >
-                <AlertTriangle className="w-8 h-8 text-red-500" />
+                <AlertTriangle className="w-7 h-7 sm:w-8 sm:h-8 text-red-500" />
               </div>
             </div>
-            <AlertDialogTitle className="text-center text-xl font-bold">
+            <AlertDialogTitle className="text-center text-lg sm:text-xl font-bold">
               ¿Eliminar conversación?
             </AlertDialogTitle>
             <AlertDialogDescription
-              className={`
-                text-center pt-4 pb-2
-                ${theme === "dark" ? "text-gray-300" : "text-gray-600"}
-              `}
+              className={`text-center pt-3 pb-2 text-sm ${
+                theme === "dark" ? "text-gray-300" : "text-gray-600"
+              }`}
             >
               <p className="mb-2">
                 Esta acción eliminará permanentemente la conversación:
@@ -854,13 +885,11 @@ export function ChatContainer({
               </p>
               <p className="mt-2 text-sm">Esta acción no se puede deshacer.</p>
 
-              {/* Info: siempre se crea nueva conversación */}
               {conversacionActiva === conversacionAEliminar?.sessionId && (
                 <div
-                  className={`
-                  mt-4 p-3 rounded-lg flex items-start gap-2 text-left
-                  ${theme === "dark" ? "bg-blue-900/20" : "bg-blue-50"}
-                `}
+                  className={`mt-3 p-2.5 rounded-lg flex items-start gap-2 text-left ${
+                    theme === "dark" ? "bg-blue-900/20" : "bg-blue-50"
+                  }`}
                 >
                   <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-blue-600 dark:text-blue-400">
@@ -870,25 +899,22 @@ export function ChatContainer({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-3 pt-6">
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3 pt-4 sm:pt-6">
             <AlertDialogCancel
               onClick={handleCancelDelete}
               disabled={eliminando}
-              className={`
-                w-full sm:w-auto rounded-lg h-11
-                ${
-                  theme === "dark"
-                    ? "bg-[#2a2a2a] hover:bg-[#353535] text-white border-[#353535]"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200"
-                }
-              `}
+              className={`w-full sm:w-auto rounded-lg h-10 sm:h-11 ${
+                theme === "dark"
+                  ? "bg-[#2a2a2a] hover:bg-[#353535] text-white border-[#353535]"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200"
+              } border`}
             >
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               disabled={eliminando}
-              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white rounded-lg h-11 font-semibold"
+              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white rounded-lg h-10 sm:h-11 font-semibold"
             >
               {eliminando ? (
                 <>

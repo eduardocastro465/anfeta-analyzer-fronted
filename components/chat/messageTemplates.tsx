@@ -29,7 +29,7 @@ export const systemTemplates = {
       }`}
     >
       <div className="flex items-center gap-2">
-        <Bot className="w-4 h-4 text-[#6841ea]" />
+        <Bot className="w-4 h-4 text-[#6841ea] flex-shrink-0" />
         <span className="text-sm font-medium text-[#6841ea]">
           Modo Asistente IA activado
         </span>
@@ -52,10 +52,12 @@ export const systemTemplates = {
     showAll,
   }: MessageTemplateProps & { showAll?: boolean }) => (
     <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-      <Brain className="w-4 h-4 text-[#6841ea]" />
-      {showAll
-        ? "Obteniendo todas tus actividades..."
-        : "Obteniendo análisis de tus actividades..."}
+      <Brain className="w-4 h-4 text-[#6841ea] flex-shrink-0" />
+      <span className="text-sm">
+        {showAll
+          ? "Obteniendo todas tus actividades..."
+          : "Obteniendo análisis de tus actividades..."}
+      </span>
     </div>
   ),
 };
@@ -68,26 +70,32 @@ export const welcomeTemplates = {
     displayName,
     email,
   }: MessageTemplateProps & { displayName: string; email: string }) => (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10">
-        <div className="p-2 rounded-full bg-[#6841ea]/10">
+    <div className="space-y-4 w-full max-w-full">
+      {/* Card Usuario */}
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10 w-full max-w-full">
+        <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
           <User className="w-5 h-5 text-[#6841ea]" />
         </div>
-        <div>
-          <p className="font-medium text-sm">Hola, {displayName}!</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-            <Mail className="w-3 h-3" />
-            {email}
-          </p>
+
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-sm truncate">Hola, {displayName}!</p>
+
+          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+            <Mail className="w-3 h-3 shrink-0" />
+            <span className="truncate break-all">{email}</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mt-3">
-        <div className="p-2 rounded-full bg-[#6841ea]/10">
+      {/* Resumen */}
+      <div className="flex items-start gap-3 w-full max-w-full">
+        <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
           <Brain className="w-5 h-5 text-[#6841ea]" />
         </div>
-        <div>
-          <h3 className="font-bold text-md">Resumen de tu día</h3>
+
+        <div className="min-w-0 flex-1">
+          <h3 className="font-bold text-sm sm:text-base">Resumen de tu día</h3>
+
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {new Date().toLocaleDateString("es-MX", {
               weekday: "short",
@@ -109,42 +117,43 @@ export const analysisTemplates = {
     analysis,
   }: MessageTemplateProps & { analysis: AssistantAnalysis }) => (
     <div className="space-y-4">
+      {/* Grid de métricas — 3 cols en sm+, 1 col en xs si el valor es muy largo */}
       <div className="grid grid-cols-3 gap-2 mt-3">
-        {/* ========== TARJETA ALTA PRIORIDAD ========== */}
+        {/* ── Alta prioridad ── */}
         <div
-          className={`p-3 rounded-lg border ${
+          className={`p-2 sm:p-3 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-red-950/20 to-red-900/10 border-red-500/20"
               : "bg-gradient-to-br from-red-50 to-red-100/50 border-red-200"
           }`}
         >
-          <div className="flex items-center gap-2 mb-1">
-            <Target className="w-3 h-3 text-red-500" />
+          <div className="flex items-center gap-1 sm:gap-2 mb-1">
+            <Target className="w-3 h-3 text-red-500 flex-shrink-0" />
             <span
-              className={`text-xs font-medium ${
+              className={`text-[10px] sm:text-xs font-medium truncate ${
                 theme === "dark" ? "text-red-300" : "text-red-700"
               }`}
             >
               Alta
             </span>
           </div>
-          <div className="text-xl font-bold text-red-500">
+          <div className="text-lg sm:text-xl font-bold text-red-500 truncate">
             {analysis.metrics.tareasAltaPrioridad || 0}
           </div>
         </div>
 
-        {/* ========== TARJETA TOTAL ========== */}
+        {/* ── Total ── */}
         <div
-          className={`p-3 rounded-lg border ${
+          className={`p-2 sm:p-3 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-green-950/20 to-green-900/10 border-green-500/20"
               : "bg-gradient-to-br from-green-50 to-green-100/50 border-green-200"
           }`}
         >
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="w-3 h-3 text-green-500" />
+          <div className="flex items-center gap-1 sm:gap-2 mb-1">
+            <FileText className="w-3 h-3 text-green-500 flex-shrink-0" />
             <span
-              className={`text-xs font-medium ${
+              className={`text-[10px] sm:text-xs font-medium truncate ${
                 theme === "dark" ? "text-green-300" : "text-green-700"
               }`}
             >
@@ -152,7 +161,7 @@ export const analysisTemplates = {
             </span>
           </div>
           <div
-            className={`text-xl font-bold ${
+            className={`text-lg sm:text-xl font-bold truncate ${
               theme === "dark" ? "text-green-400" : "text-green-600"
             }`}
           >
@@ -160,31 +169,32 @@ export const analysisTemplates = {
           </div>
         </div>
 
-        {/* ========== TARJETA TIEMPO ========== */}
+        {/* ── Tiempo ── */}
         <div
-          className={`p-3 rounded-lg border ${
+          className={`p-2 sm:p-3 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-yellow-950/20 to-yellow-900/10 border-yellow-500/20"
               : "bg-gradient-to-br from-yellow-50 to-yellow-100/50 border-yellow-200"
           }`}
         >
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-3 h-3 text-yellow-500" />
+          <div className="flex items-center gap-1 sm:gap-2 mb-1">
+            <Clock className="w-3 h-3 text-yellow-500 flex-shrink-0" />
             <span
-              className={`text-xs font-medium ${
+              className={`text-[10px] sm:text-xs font-medium truncate ${
                 theme === "dark" ? "text-yellow-300" : "text-yellow-700"
               }`}
             >
               Tiempo
             </span>
           </div>
-          <div className="text-xl font-bold text-yellow-500">
+          {/* Tiempo puede ser "2h 30m" — usamos text-sm en xs para que quepa */}
+          <div className="text-sm sm:text-xl font-bold text-yellow-500 truncate">
             {analysis.metrics.tiempoEstimadoTotal || "0h 0m"}
           </div>
         </div>
       </div>
 
-      {/* ========== TEXTO DESCRIPTIVO ========== */}
+      {/* ── Texto descriptivo ── */}
       {analysis.answer && (
         <div
           className={`p-3 rounded-lg border ${
@@ -195,7 +205,7 @@ export const analysisTemplates = {
         >
           <div className="flex items-start gap-2">
             <Bot className="w-4 h-4 text-[#6841ea] mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p
                 className={`text-sm leading-relaxed ${
                   theme === "dark" ? "text-gray-200" : "text-gray-700"
@@ -232,12 +242,12 @@ export const tasksTemplates = {
       }`}
     >
       <div className="flex items-start gap-3">
-        <Target className="w-5 h-5 text-[#6841ea] mt-0.5" />
-        <div className="flex-1">
+        <Target className="w-5 h-5 text-[#6841ea] mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
           <p className="font-medium text-sm mb-2">Tareas encontradas</p>
           <div className="flex gap-2 text-xs flex-wrap">
             <span
-              className={`px-2 py-1 rounded ${
+              className={`px-2 py-1 rounded whitespace-nowrap ${
                 theme === "dark"
                   ? "bg-gray-700 text-gray-300"
                   : "bg-gray-100 text-gray-700"
@@ -246,7 +256,7 @@ export const tasksTemplates = {
               Total: {total}
             </span>
             <span
-              className={`px-2 py-1 rounded ${
+              className={`px-2 py-1 rounded whitespace-nowrap ${
                 theme === "dark"
                   ? "bg-green-500/20 text-green-300"
                   : "bg-green-100 text-green-700"
@@ -255,7 +265,7 @@ export const tasksTemplates = {
               Reportadas: {reportadas}
             </span>
             <span
-              className={`px-2 py-1 rounded ${
+              className={`px-2 py-1 rounded whitespace-nowrap ${
                 theme === "dark"
                   ? "bg-amber-500/20 text-amber-300"
                   : "bg-amber-100 text-amber-700"
@@ -298,14 +308,14 @@ export const tasksTemplates = {
       }`}
     >
       <div className="flex items-start gap-3">
-        <Users className="w-5 h-5 text-purple-500 mt-0.5" />
-        <div className="flex-1">
+        <Users className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
           <p className="font-medium text-sm mb-2 flex items-center gap-2">
             Trabajo colaborativo detectado
           </p>
           <div className="flex flex-wrap gap-2 text-xs mb-2">
             <span
-              className={`px-2 py-1 rounded ${
+              className={`px-2 py-1 rounded whitespace-nowrap ${
                 theme === "dark"
                   ? "bg-gray-700 text-gray-300"
                   : "bg-gray-100 text-gray-700"
@@ -315,7 +325,7 @@ export const tasksTemplates = {
             </span>
             {miasReportadas > 0 && (
               <span
-                className={`px-2 py-1 rounded ${
+                className={`px-2 py-1 rounded whitespace-nowrap ${
                   theme === "dark"
                     ? "bg-green-500/20 text-green-300"
                     : "bg-green-100 text-green-700"
@@ -326,7 +336,7 @@ export const tasksTemplates = {
             )}
             {otrosReportadas > 0 && (
               <span
-                className={`px-2 py-1 rounded ${
+                className={`px-2 py-1 rounded whitespace-nowrap ${
                   theme === "dark"
                     ? "bg-purple-500/20 text-purple-300"
                     : "bg-purple-100 text-purple-700"
@@ -337,7 +347,7 @@ export const tasksTemplates = {
             )}
             {pendientes > 0 && (
               <span
-                className={`px-2 py-1 rounded ${
+                className={`px-2 py-1 rounded whitespace-nowrap ${
                   theme === "dark"
                     ? "bg-amber-500/20 text-amber-300"
                     : "bg-amber-100 text-amber-700"
@@ -372,8 +382,8 @@ export const tasksTemplates = {
       }`}
     >
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
-        <div>
+        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+        <div className="min-w-0">
           <p className="font-medium text-sm">No hay tareas pendientes</p>
           <p
             className={`text-xs mt-1 ${
@@ -401,11 +411,13 @@ export const successTemplates = {
       }`}
     >
       <div className="flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-500" />
-        <div>
-          <span className="font-medium">Reporte guardado</span>
+        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+        <div className="min-w-0">
+          <span className="font-medium text-sm">Reporte guardado</span>
           <p
-            className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"} mt-1`}
+            className={`text-sm mt-1 ${
+              theme === "dark" ? "text-gray-300" : "text-gray-700"
+            }`}
           >
             Se actualizaron {count} tareas correctamente. ¡Buen trabajo hoy!
           </p>
@@ -420,9 +432,9 @@ export const successTemplates = {
   }: MessageTemplateProps & { tasksCount: number }) => (
     <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
       <div className="flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-500" />
-        <div>
-          <span className="font-medium">¡Jornada iniciada!</span>
+        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+        <div className="min-w-0">
+          <span className="font-medium text-sm">¡Jornada iniciada!</span>
           <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
             Has explicado {tasksCount} tareas correctamente. ¡Mucho éxito!
           </p>
@@ -437,9 +449,9 @@ export const successTemplates = {
   }: MessageTemplateProps & { tasksCount: number }) => (
     <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
       <div className="flex items-center gap-3">
-        <Check className="w-5 h-5 text-green-500" />
-        <div>
-          <span className="font-medium">Actividades guardadas</span>
+        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+        <div className="min-w-0">
+          <span className="font-medium text-sm">Actividades guardadas</span>
           <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
             Has explicado {tasksCount} tareas.
           </p>
@@ -461,8 +473,8 @@ export const errorTemplates = {
       }`}
     >
       <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500" />
-        <span>Error al guardar el reporte. Intenta nuevamente.</span>
+        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+        <span className="text-sm">Error al guardar el reporte. Intenta nuevamente.</span>
       </div>
     </div>
   ),
@@ -470,9 +482,9 @@ export const errorTemplates = {
   activitiesError: ({ theme }: MessageTemplateProps) => (
     <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
       <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500" />
-        <div>
-          <span className="font-medium">Error al obtener actividades</span>
+        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+        <div className="min-w-0">
+          <span className="font-medium text-sm">Error al obtener actividades</span>
           <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
             Hubo un problema al obtener tus actividades. Por favor, intenta
             nuevamente más tarde.
@@ -491,8 +503,8 @@ export const errorTemplates = {
       }`}
     >
       <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500" />
-        <span>{message}</span>
+        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+        <span className="text-sm min-w-0 break-words">{message}</span>
       </div>
     </div>
   ),

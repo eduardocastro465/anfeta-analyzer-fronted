@@ -43,6 +43,9 @@ export interface HeaderProps {
   setShowLogoutDialog: (show: boolean) => void;
   // Nueva prop opcional para reportes
   onViewReports?: () => void;
+  onOpenSidebar?: () => void;
+  isMobile?: boolean;
+  isSidebarOpen?: boolean;
 }
 
 export interface Actividad {

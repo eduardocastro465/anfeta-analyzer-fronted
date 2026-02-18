@@ -38,6 +38,7 @@ import {
   Brain,
   Check,
   Clock,
+  Menu,
 } from "lucide-react";
 import { getDisplayName } from "@/util/utils-chat";
 import { useVoiceSynthesis } from "@/components/hooks/use-voice-synthesis";
@@ -64,6 +65,13 @@ import { PanelReporteTareasTarde } from "@/components/chat/PanelReporteTareasTar
 import { isReportTime } from "@/util/Timeutils";
 import { TasksPanelWithDescriptions } from "./chat/TasksPanelWithDescriptions";
 
+// ✅ Props extendidas con nuevas props de responsividad
+interface ExtendedChatBotProps extends ChatBotProps {
+  onOpenSidebar?: () => void;
+  isMobile?: boolean;
+  sidebarOpen?: boolean;
+}
+
 export function ChatBot({
   colaborador,
   onLogout,
@@ -75,7 +83,10 @@ export function ChatBot({
   onNuevaConversacion,
   onActualizarNombre,
   onActualizarTyping,
-}: ChatBotProps) {
+  onOpenSidebar,
+  isMobile = false,
+  sidebarOpen = true,
+}: ExtendedChatBotProps) {
   // ==================== REFS ====================
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -126,8 +137,8 @@ export function ChatBot({
 
   // ==================== STATE: SCHEDULE ====================
   const [horaInicioReporteMañana] = useState("2:00 AM");
-  const [horaFinReporteMañana] = useState("2:29 PM");
-  const [horaInicioReporte] = useState("2:30 PM");
+  const [horaFinReporteMañana] = useState("1:32 PM");
+  const [horaInicioReporte] = useState("1:33 PM");
   const [horaFinReporte] = useState("2:59 PM");
 
   // ==================== STATE: THEME ====================
@@ -147,14 +158,16 @@ export function ChatBot({
     any[]
   >([]);
 
+  // ==================== STATE: TURNO ACTUAL ====================
+  const [turnoActual, setTurnoActual] = useState<"mañana" | "tarde">(() =>
+    getTurnoActual(),
+  );
+
   const canUserType =
     step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
-  const panelMessageIdRef = useRef<string | null>(null);
 
   // ==================== FUNCTIONS ====================
-  const getTurnoActual = (): "mañana" | "tarde" => {
-    // return "mañana";
-    //  return "tarde";
+  function getTurnoActual(): "mañana" | "tarde" {
     const esTurnoMañana = isReportTime(
       horaInicioReporteMañana,
       horaFinReporteMañana,
@@ -171,7 +184,7 @@ export function ChatBot({
     }
 
     return "tarde";
-  };
+  }
 
   const activitiesWithTasks = useMemo(() => {
     if (!assistantAnalysis?.data?.revisionesPorActividad) {
@@ -233,6 +246,180 @@ export function ChatBot({
     setIsTyping(false);
     addMessage(type, content, undefined, isWide);
   };
+
+  // ==================== ✅ FUNCIÓN: ACTUALIZAR PANEL DE TURNO ====================
+  const actualizarPanelTurno = (nuevoTurno: "mañana" | "tarde") => {
+    if (!assistantAnalysis) return;
+
+    setMessages((prevMessages) => {
+      const reversedMessages = [...prevMessages].reverse();
+      const reversedIndex = reversedMessages.findIndex((msg) => {
+        if (msg.type !== "bot" || msg.isWide !== true) {
+          return false;
+        }
+
+        if (!React.isValidElement(msg.content)) {
+          return false;
+        }
+
+        const content = msg.content as any;
+        if (!content.props?.children) {
+          return false;
+        }
+
+        const hasPanel = content.props.children.some?.((child: any) => {
+          if (!React.isValidElement(child)) {
+            return false;
+          }
+
+          if (
+            typeof child.type === "function" ||
+            typeof child.type === "object"
+          ) {
+            const componentType = child.type as any;
+            return (
+              componentType.name === "TasksPanelWithDescriptions" ||
+              componentType.displayName === "TasksPanelWithDescriptions" ||
+              componentType.name === "PanelReporteTareasTarde" ||
+              componentType.displayName === "PanelReporteTareasTarde"
+            );
+          }
+
+          return false;
+        });
+
+        return hasPanel;
+      });
+
+      if (reversedIndex === -1) {
+        return prevMessages;
+      }
+
+      const lastPanelMessageIndex = prevMessages.length - 1 - reversedIndex;
+
+      const nuevoContenido =
+        nuevoTurno === "mañana" ? (
+          <div className="space-y-3">
+            <div
+              className={`p-3 rounded-lg border ${
+                theme === "dark"
+                  ? "bg-blue-900/20 border-blue-700/30"
+                  : "bg-blue-50 border-blue-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4 text-blue-500" />
+                <span
+                  className={`text-sm font-medium ${
+                    theme === "dark" ? "text-blue-300" : "text-blue-700"
+                  }`}
+                >
+                  🌅 Turno Mañana (12:00 AM - 2:29 PM)
+                </span>
+              </div>
+              <p
+                className={`text-xs ${
+                  theme === "dark" ? "text-blue-200" : "text-blue-600"
+                }`}
+              >
+                Es hora de explicar cómo resolverás las tareas que ya tienen
+                descripción.
+              </p>
+            </div>
+
+            <TasksPanelWithDescriptions
+              key={`panel-turno-${nuevoTurno}-${Date.now()}`}
+              assistantAnalysis={assistantAnalysis}
+              theme={theme}
+              userEmail={colaborador.email}
+              turno={nuevoTurno}
+              onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
+              onReportCompleted={async () => {
+                await fetchAssistantAnalysis(true, false, true);
+              }}
+              stopVoice={stopVoice}
+              isSpeaking={isSpeaking}
+              speakText={speakText}
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div
+              className={`p-3 rounded-lg border ${
+                theme === "dark"
+                  ? "bg-purple-900/20 border-purple-700/30"
+                  : "bg-purple-50 border-purple-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4 text-purple-500" />
+                <span
+                  className={`text-sm font-medium ${
+                    theme === "dark" ? "text-purple-300" : "text-purple-700"
+                  }`}
+                >
+                  🌆 Turno Tarde (2:30 PM - 11:59 PM)
+                </span>
+              </div>
+              <p
+                className={`text-xs ${
+                  theme === "dark" ? "text-purple-200" : "text-purple-600"
+                }`}
+              >
+                Es hora de reportar tus tareas pendientes del día.
+              </p>
+            </div>
+
+            <PanelReporteTareasTarde
+              key={`panel-turno-${nuevoTurno}-${Date.now()}`}
+              assistantAnalysis={assistantAnalysis}
+              theme={theme}
+              userEmail={colaborador.email}
+              turno={nuevoTurno}
+              onStartVoiceMode={handleStartVoiceMode}
+              onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
+              onReportCompleted={async () => {
+                await fetchAssistantAnalysis(false, false);
+              }}
+            />
+          </div>
+        );
+
+      const newMessages = [...prevMessages];
+      newMessages[lastPanelMessageIndex] = {
+        ...newMessages[lastPanelMessageIndex],
+        content: nuevoContenido,
+        timestamp: new Date(),
+      };
+
+      return newMessages;
+    });
+  };
+
+  // ==================== ✅ EFECTO: VERIFICAR CAMBIO DE TURNO CADA MINUTO ====================
+  useEffect(() => {
+    const intervaloTurno = setInterval(() => {
+      const nuevoTurno = getTurnoActual();
+
+      if (nuevoTurno !== turnoActual) {
+        setTurnoActual(nuevoTurno);
+        actualizarPanelTurno(nuevoTurno);
+
+        const mensaje =
+          nuevoTurno === "mañana"
+            ? "☀️ Turno de mañana iniciado. Ahora puedes explicar las tareas con descripción."
+            : "🌙 Turno de tarde iniciado. Es hora de reportar las tareas pendientes.";
+
+        toast({
+          title: "Cambio de turno",
+          description: mensaje,
+          duration: 5000,
+        });
+      }
+    }, 60000);
+
+    return () => clearInterval(intervaloTurno);
+  }, [turnoActual, assistantAnalysis, theme, toast]);
 
   // ==================== FUNCIONES: MODO VOZ - NAVEGACIÓN ====================
   const speakActivityByIndex = (activityIndex: number) => {
@@ -499,8 +686,7 @@ export function ChatBot({
             voiceMode.setExpectedInputType("explanation");
           }, 3000);
         }
-      } catch (error) {
-        console.error("❌ Error en validación:", error);
+      } catch (error: any) {
         speakText("Hubo un error. Por favor, intenta de nuevo.");
 
         setTimeout(() => {
@@ -510,7 +696,6 @@ export function ChatBot({
       }
     },
     onError: (error) => {
-      console.error("❌ Error en grabación de voz:", error);
       speakText(
         "Hubo un problema con la grabación. Por favor, intenta de nuevo.",
       );
@@ -536,10 +721,9 @@ export function ChatBot({
     cancelVoiceRecording,
   } = autoSendVoiceChat;
 
-  // ==================== ✅ FUNCIÓN PARA INICIAR MODO VOZ CON TAREAS SELECCIONADAS ====================
+  // ==================== FUNCIÓN PARA INICIAR MODO VOZ CON TAREAS SELECCIONADAS ====================
   const handleStartVoiceModeWithTasks = (taskIds: string[]) => {
     if (!taskIds || taskIds.length === 0) {
-      console.warn("❌ No hay tareas seleccionadas");
       speakText("No hay tareas seleccionadas para explicar.");
       return;
     }
@@ -550,7 +734,6 @@ export function ChatBot({
       return;
     }
 
-    // Filtrar actividades que contengan las tareas seleccionadas
     const filteredActivities = analysis.data.revisionesPorActividad
       .map((actividad) => {
         const tareasFiltradas = actividad.tareasConTiempo
@@ -574,21 +757,16 @@ export function ChatBot({
       .filter((act): act is any => act !== null);
 
     if (filteredActivities.length === 0) {
-      console.warn(
-        "⚠️ No se encontraron actividades con las tareas seleccionadas",
-      );
       speakText("No se encontraron actividades con las tareas seleccionadas.");
       return;
     }
 
-    // Guardar en estado
     setSelectedTaskIds(taskIds);
     setFilteredActivitiesForVoice(filteredActivities);
 
-    // Configurar modo voz
     voiceMode.setVoiceMode(true);
-    voiceMode.setVoiceStep("activity-presentation");
-    voiceMode.setExpectedInputType("none");
+    voiceMode.setVoiceStep("confirm-start");
+    voiceMode.setExpectedInputType("confirmation");
     voiceMode.setCurrentActivityIndex(0);
     voiceMode.setCurrentTaskIndex(0);
     voiceMode.setTaskExplanations([]);
@@ -627,13 +805,12 @@ export function ChatBot({
       return;
     }
 
-    // Limpiar filtros previos
     setSelectedTaskIds([]);
     setFilteredActivitiesForVoice([]);
 
     voiceMode.setVoiceMode(true);
-    voiceMode.setVoiceStep("activity-presentation");
-    voiceMode.setExpectedInputType("none");
+    voiceMode.setVoiceStep("confirm-start");
+    voiceMode.setExpectedInputType("confirmation");
     voiceMode.setCurrentActivityIndex(0);
     voiceMode.setCurrentTaskIndex(0);
     voiceMode.setTaskExplanations([]);
@@ -647,20 +824,16 @@ export function ChatBot({
       const data = await obtenerCambiosTareas();
 
       if (!data.success || !data.cambios) {
-        console.error("❌ Respuesta sin éxito:", data?.error);
         return false;
       }
 
       const nuevoEstado = data.cambios;
 
-      // ✅ Primera vez - guardar estado inicial
       if (!ultimoEstadoRef.current) {
         ultimoEstadoRef.current = nuevoEstado;
-
         return false;
       }
 
-      // ✅ Comparar si hubo cambios
       const huboCambios =
         ultimoEstadoRef.current.totalTareasSinDescripcion !==
           nuevoEstado.totalTareasSinDescripcion ||
@@ -674,14 +847,11 @@ export function ChatBot({
         ultimoEstadoRef.current.checksum !== nuevoEstado.checksum;
 
       if (huboCambios) {
-        // ✅ Actualizar estado
         ultimoEstadoRef.current = nuevoEstado;
-
         return true;
       }
       return false;
     } catch (error) {
-      console.error("❌ Error al verificar cambios:", error);
       return false;
     }
   };
@@ -762,8 +932,6 @@ export function ChatBot({
 
           const data = await obtenerActividadesConRevisiones(requestBody);
 
-          console.log("🚀 ~ intervalo ~ data:", data);
-          // Mapear datos igual que en fetchAssistantAnalysis
           const adaptedData: AssistantAnalysis & {
             colaboradoresInvolucrados?: any[];
           } = {
@@ -832,162 +1000,9 @@ export function ChatBot({
             multiActividad: data.multiActividad || false,
           };
 
-          // ✅ Actualizar ref y estado
           assistantAnalysisRef.current = adaptedData;
           setAssistantAnalysis(adaptedData);
-
-          const turnoActual = getTurnoActual();
-
-          setMessages((prevMessages) => {
-            // ✅ Buscar el ÚLTIMO mensaje (más reciente) con el panel
-            const reversedMessages = [...prevMessages].reverse();
-            const reversedIndex = reversedMessages.findIndex((msg) => {
-              if (msg.type !== "bot" || msg.isWide !== true) {
-                return false;
-              }
-
-              if (!React.isValidElement(msg.content)) {
-                return false;
-              }
-
-              const content = msg.content as any;
-              if (!content.props?.children) {
-                return false;
-              }
-
-              // Buscar TasksPanelWithDescriptions en los children
-              const hasPanel = content.props.children.some?.((child: any) => {
-                if (!React.isValidElement(child)) {
-                  return false;
-                }
-
-                // ✅ Verificar que child.type es un objeto/función antes de acceder a name
-                if (
-                  typeof child.type === "function" ||
-                  typeof child.type === "object"
-                ) {
-                  const componentType = child.type as any;
-                  return (
-                    componentType.name === "TasksPanelWithDescriptions" ||
-                    componentType.displayName === "TasksPanelWithDescriptions"
-                  );
-                }
-
-                return false;
-              });
-
-              return hasPanel;
-            });
-
-            if (reversedIndex === -1) {
-              return prevMessages;
-            }
-
-            // Convertir el índice invertido al índice real
-            const lastPanelMessageIndex =
-              prevMessages.length - 1 - reversedIndex;
-
-            // Crear el nuevo contenido del mensaje
-            const nuevoContenido =
-              turnoActual === "mañana" ? (
-                <div className="space-y-3">
-                  <div
-                    className={`p-3 rounded-lg border ${
-                      theme === "dark"
-                        ? "bg-blue-900/20 border-blue-700/30"
-                        : "bg-blue-50 border-blue-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Clock className="w-4 h-4 text-blue-500" />
-                      <span
-                        className={`text-sm font-medium ${
-                          theme === "dark" ? "text-blue-300" : "text-blue-700"
-                        }`}
-                      >
-                        🌅 Turno Mañana (12:00 AM - 2:29 PM)
-                      </span>
-                    </div>
-                    <p
-                      className={`text-xs ${
-                        theme === "dark" ? "text-blue-200" : "text-blue-600"
-                      }`}
-                    >
-                      Es hora de explicar cómo resolverás las tareas que ya
-                      tienen descripción.
-                    </p>
-                  </div>
-
-                  <TasksPanelWithDescriptions
-                    key={`panel-update-${Date.now()}`}
-                    assistantAnalysis={adaptedData}
-                    theme={theme}
-                    userEmail={colaborador.email}
-                    turno={turnoActual}
-                    onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
-                    onReportCompleted={async () => {
-                      await fetchAssistantAnalysis(true, false, true);
-                    }}
-                    stopVoice={stopVoice}
-                    isSpeaking={isSpeaking}
-                    speakText={speakText}
-                  />
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div
-                    className={`p-3 rounded-lg border ${
-                      theme === "dark"
-                        ? "bg-purple-900/20 border-purple-700/30"
-                        : "bg-purple-50 border-purple-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Clock className="w-4 h-4 text-purple-500" />
-                      <span
-                        className={`text-sm font-medium ${
-                          theme === "dark"
-                            ? "text-purple-300"
-                            : "text-purple-700"
-                        }`}
-                      >
-                        🌆 Turno Tarde (2:30 PM - 11:59 PM)
-                      </span>
-                    </div>
-                    <p
-                      className={`text-xs ${
-                        theme === "dark" ? "text-purple-200" : "text-purple-600"
-                      }`}
-                    >
-                      Es hora de reportar tus tareas pendientes del día.
-                    </p>
-                  </div>
-
-                  <PanelReporteTareasTarde
-                    key={`panel-update-${Date.now()}`}
-                    assistantAnalysis={adaptedData}
-                    theme={theme}
-                    userEmail={colaborador.email}
-                    turno={turnoActual}
-                    onStartVoiceMode={handleStartVoiceMode}
-                    onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
-                    onReportCompleted={async () => {
-                      await fetchAssistantAnalysis(false, false);
-                    }}
-                  />
-                </div>
-              );
-
-            // Reemplazar el mensaje
-            const newMessages = [...prevMessages];
-            newMessages[lastPanelMessageIndex] = {
-              ...newMessages[lastPanelMessageIndex],
-              content: nuevoContenido,
-              timestamp: new Date(),
-            };
-
-            return newMessages;
-          });
+          actualizarPanelTurno(turnoActual);
 
           toast({
             title: "Datos actualizados",
@@ -1008,6 +1023,7 @@ export function ChatBot({
     colaborador.email,
     toast,
     theme,
+    turnoActual,
     handleStartVoiceModeWithTasks,
     stopVoice,
     isSpeaking,
@@ -1111,7 +1127,6 @@ export function ChatBot({
     voiceMode.setCurrentActivityIndex(0);
     voiceMode.setCurrentTaskIndex(0);
 
-    // Limpiar filtros
     setSelectedTaskIds([]);
     setFilteredActivitiesForVoice([]);
 
@@ -1147,7 +1162,6 @@ export function ChatBot({
     cancelVoiceRecording();
     voiceMode.cancelVoiceMode();
 
-    // Limpiar filtros
     setSelectedTaskIds([]);
     setFilteredActivitiesForVoice([]);
   };
@@ -1316,7 +1330,6 @@ export function ChatBot({
         }, 3000);
       }
     } catch (error) {
-      console.error("❌ Error en validación:", error);
       speakText("Hubo un error. Por favor, intenta de nuevo.");
 
       setTimeout(() => {
@@ -1457,21 +1470,10 @@ export function ChatBot({
           description: "Tus actividades han sido registradas con éxito.",
         });
 
-        // ✅ ACTUALIZACIÓN SILENCIOSA: Solo actualiza datos, sin mensajes en el chat
         try {
-          console.log("🔄 Actualizando datos en segundo plano...");
-
-          // El parámetro silentUpdate: true evita:
-          // - Agregar mensajes al chat
-          // - Mostrar indicadores de carga
-          // - Cambiar el step
-          // Solo actualiza: assistantAnalysisRef.current y setAssistantAnalysis
           await fetchAssistantAnalysis(false, false, true);
-
-          console.log("✅ Datos actualizados silenciosamente");
         } catch (updateError) {
           console.error("❌ Error al actualizar datos:", updateError);
-          // No mostramos error al usuario, el reporte ya fue guardado
         }
       } else {
         speakText("Hubo un error al enviar tu reporte.");
@@ -1487,7 +1489,6 @@ export function ChatBot({
         voiceMode.setVoiceMode(false);
         voiceMode.setExpectedInputType("none");
 
-        // Limpiar filtros
         setSelectedTaskIds([]);
         setFilteredActivitiesForVoice([]);
 
@@ -1513,7 +1514,6 @@ export function ChatBot({
         );
       }, 1000);
     } catch (error) {
-      console.error("❌ Error general en sendExplanationsToBackend:", error);
       speakText("Hubo un error al enviar tu reporte.");
       voiceMode.setVoiceStep("summary");
       voiceMode.setExpectedInputType("confirmation");
@@ -1525,7 +1525,6 @@ export function ChatBot({
     isRestoration = false,
   ) => {
     if (!isRestoration) {
-      // 1. Mensaje de bienvenida
       addMessageWithTyping(
         "bot",
         messageTemplates.welcome.userInfo({
@@ -1538,7 +1537,6 @@ export function ChatBot({
       );
 
       setTimeout(async () => {
-        // 2. Métricas del análisis
         addMessageWithTyping(
           "bot",
           messageTemplates.analysis.metrics({
@@ -1555,19 +1553,11 @@ export function ChatBot({
           );
 
           if (hayTareas) {
-            // 🆕 DETECTAR TURNO ACTUAL
-            const turnoActual = getTurnoActual();
-            // const turnoActual = "tarde";
-
             setTimeout(() => {
-              // 🎯 MOSTRAR PANEL SEGÚN EL TURNO
               if (turnoActual === "mañana") {
-                // 🌅 TURNO MAÑANA: Mostrar tareas con descripción para explicar
-
                 addMessage(
                   "bot",
                   <div className="space-y-3">
-                    {/* Mensaje explicativo del turno */}
                     <div
                       className={`p-3 rounded-lg border ${
                         theme === "dark"
@@ -1582,7 +1572,7 @@ export function ChatBot({
                             theme === "dark" ? "text-blue-300" : "text-blue-700"
                           }`}
                         >
-                          Turno Mañana (12:00 AM - 2:29 PM)
+                          🌅 Turno Mañana (12:00 AM - 2:29 PM)
                         </span>
                       </div>
                       <p
@@ -1595,7 +1585,6 @@ export function ChatBot({
                       </p>
                     </div>
 
-                    {/* Panel de tareas con descripción */}
                     <TasksPanelWithDescriptions
                       assistantAnalysis={analysis}
                       theme={theme}
@@ -1605,7 +1594,6 @@ export function ChatBot({
                       onReportCompleted={async () => {
                         await fetchAssistantAnalysis(true, false, true);
                       }}
-                      // ✅ AGREGAR ESTAS PROPS
                       stopVoice={stopVoice}
                       isSpeaking={isSpeaking}
                       speakText={speakText}
@@ -1615,11 +1603,39 @@ export function ChatBot({
                   true,
                 );
               } else {
-                // 🌆 TURNO TARDE: Mostrar panel normal de tareas pendientes
                 addMessage(
                   "bot",
                   <div className="space-y-3">
-                    {/* Panel normal de tareas */}
+                    <div
+                      className={`p-3 rounded-lg border ${
+                        theme === "dark"
+                          ? "bg-purple-900/20 border-purple-700/30"
+                          : "bg-purple-50 border-purple-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-purple-500" />
+                        <span
+                          className={`text-sm font-medium ${
+                            theme === "dark"
+                              ? "text-purple-300"
+                              : "text-purple-700"
+                          }`}
+                        >
+                          🌆 Turno Tarde (2:30 PM - 11:59 PM)
+                        </span>
+                      </div>
+                      <p
+                        className={`text-xs ${
+                          theme === "dark"
+                            ? "text-purple-200"
+                            : "text-purple-600"
+                        }`}
+                      >
+                        Es hora de reportar tus tareas pendientes del día.
+                      </p>
+                    </div>
+
                     <PanelReporteTareasTarde
                       assistantAnalysis={analysis}
                       theme={theme}
@@ -1668,7 +1684,6 @@ export function ChatBot({
       };
 
       const data = await obtenerActividadesConRevisiones(requestBody);
-      console.log("🚀 ~ fetchAssistantAnalysis ~ data:", data);
 
       const adaptedData: AssistantAnalysis & {
         colaboradoresInvolucrados?: any[];
@@ -1743,10 +1758,8 @@ export function ChatBot({
 
       setStep("ready");
 
-      // ✅ CLAVE: Solo agregar mensajes al chat si NO es actualización silenciosa
       if (!silentUpdate) {
         showAssistantAnalysis(adaptedData, isRestoration);
-      } else {
       }
     } catch (error) {
       if (!silentUpdate) {
@@ -1775,7 +1788,6 @@ export function ChatBot({
           description: "No se pudieron obtener tus actividades del día.",
         });
       } else {
-        // ✅ En actualización silenciosa, solo loggear el error
         console.error("❌ Error en actualización silenciosa:", error);
       }
     } finally {
@@ -1908,9 +1920,12 @@ export function ChatBot({
   };
 
   // ==================== RENDER ====================
+  // Solo se muestran los cambios del return — el resto del componente no cambia.
   return (
     <div
-      className={`flex flex-col h-screen ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
+      className={`flex flex-col h-screen min-w-0 overflow-hidden ${
+        theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"
+      }`}
     >
       <ChatHeader
         isInPiPWindow={isInPiPWindow}
@@ -1927,6 +1942,9 @@ export function ChatBot({
         openPiPWindow={() => {}}
         closePiPWindow={() => {}}
         setShowLogoutDialog={setShowLogoutDialog}
+        onOpenSidebar={onOpenSidebar}
+        isMobile={isMobile}
+        isSidebarOpen={sidebarOpen}
       />
 
       <VoiceGuidanceFlow
@@ -1966,16 +1984,25 @@ export function ChatBot({
         selectedTaskIds={selectedTaskIds}
       />
 
+      {/* ── Área de mensajes ─────────────────────────────────────── */}
+      {/*
+        CLAVES DEL FIX:
+        - `min-h-0` en el contenedor flex-1: sin esto, un hijo con contenido
+          grande empuja hacia afuera y el layout se rompe.
+        - `overflow-y-auto` aquí (no en MessageList) para que el scroll
+          quede dentro de este contenedor y no desborde.
+        - El wrapper interior usa `max-w` fijo en lugar de porcentajes para
+          que los paneles isWide tengan un límite predecible.
+      */}
       <div
-        className={`flex-1 overflow-y-auto
-          [scrollbar-width:none]
-          [-ms-overflow-style:none]
-          [&::-webkit-scrollbar]:hidden
-          ${isInPiPWindow ? "pt-2" : "pt-4"}
-          pb-6
+        className={`
+          flex-1 min-h-0 overflow-y-auto
+          [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden
+          ${isInPiPWindow ? "pt-2" : "pt-3 sm:pt-4"}
+          pb-4 sm:pb-6
         `}
       >
-        <div className="max-w-[75%] mx-auto w-full">
+        <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto px-2 sm:px-4">
           <MessageList
             messages={messages}
             isTyping={isTyping}
@@ -2014,17 +2041,24 @@ export function ChatBot({
         />
       )}
 
+      {/* Dialog éxito */}
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent
-          className={`${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border`}
+          className={`max-w-sm mx-4 sm:max-w-md sm:mx-auto ${
+            theme === "dark"
+              ? "bg-[#1a1a1a] text-white border-[#2a2a2a]"
+              : "bg-white text-gray-900 border-gray-200"
+          } border`}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-[#6841ea] text-xl">
-              <PartyPopper className="w-6 h-6" />
+            <AlertDialogTitle className="flex items-center gap-2 text-[#6841ea] text-lg sm:text-xl">
+              <PartyPopper className="w-5 h-5 sm:w-6 sm:h-6" />
               ¡Análisis completado!
             </AlertDialogTitle>
             <AlertDialogDescription
-              className={`${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+              className={`${
+                theme === "dark" ? "text-gray-300" : "text-gray-600"
+              }`}
             >
               El análisis de tus actividades ha sido generado exitosamente.
             </AlertDialogDescription>
@@ -2032,7 +2066,7 @@ export function ChatBot({
           <AlertDialogFooter>
             <AlertDialogAction
               onClick={onLogout}
-              className="bg-[#6841ea] hover:bg-[#5a36d4] text-white"
+              className="bg-[#6841ea] hover:bg-[#5a36d4] text-white w-full sm:w-auto"
             >
               Cerrar sesión
             </AlertDialogAction>
@@ -2040,36 +2074,49 @@ export function ChatBot({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Dialog logout */}
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
         <AlertDialogContent
-          className={`font-['Arial'] ${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border max-w-md`}
+          className={`font-['Arial'] max-w-sm mx-4 sm:max-w-md sm:mx-auto ${
+            theme === "dark"
+              ? "bg-[#1a1a1a] text-white border-[#2a2a2a]"
+              : "bg-white text-gray-900 border-gray-200"
+          } border`}
         >
-          <AlertDialogHeader className="pt-6">
-            <div className="mx-auto mb-4">
+          <AlertDialogHeader className="pt-4 sm:pt-6">
+            <div className="mx-auto mb-3 sm:mb-4">
               <div
-                className={`w-16 h-16 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
+                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center ${
+                  theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"
+                }`}
               >
-                <LogOut className="w-8 h-8 text-[#6841ea]" />
+                <LogOut className="w-7 h-7 sm:w-8 sm:h-8 text-[#6841ea]" />
               </div>
             </div>
-            <AlertDialogTitle className="text-center text-xl font-bold font-['Arial']">
+            <AlertDialogTitle className="text-center text-lg sm:text-xl font-bold font-['Arial']">
               ¿Cerrar sesión?
             </AlertDialogTitle>
             <AlertDialogDescription
-              className={`text-center pt-4 pb-2 font-['Arial'] ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+              className={`text-center pt-3 pb-2 font-['Arial'] text-sm ${
+                theme === "dark" ? "text-gray-300" : "text-gray-600"
+              }`}
             >
               <p>¿Estás seguro que deseas salir del asistente?</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-3 pt-6 font-['Arial']">
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3 pt-4 sm:pt-6 font-['Arial']">
             <AlertDialogCancel
-              className={`w-full sm:w-auto rounded-lg h-11 font-['Arial'] ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535] text-white border-[#353535]" : "bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200"} border`}
+              className={`w-full sm:w-auto rounded-lg h-10 sm:h-11 font-['Arial'] ${
+                theme === "dark"
+                  ? "bg-[#2a2a2a] hover:bg-[#353535] text-white border-[#353535]"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200"
+              } border`}
             >
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={onLogout}
-              className="w-full sm:w-auto bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg h-11 font-semibold font-['Arial']"
+              className="w-full sm:w-auto bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg h-10 sm:h-11 font-semibold font-['Arial']"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Confirmar salida

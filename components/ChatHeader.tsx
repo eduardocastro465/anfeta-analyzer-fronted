@@ -1,12 +1,13 @@
 import React from "react";
 import Image from "next/image";
 import {
+  Menu,
   PictureInPicture,
   Minimize2,
   Moon,
   Sun,
   LogOut,
-  BarChart3, // Icono para reportes
+  BarChart3,
 } from "lucide-react";
 import { SpeedControlHeader } from "./voice-controls";
 import { HeaderProps } from "@/lib/types";
@@ -25,23 +26,30 @@ export const ChatHeader: React.FC<HeaderProps> = ({
   openPiPWindow,
   closePiPWindow,
   setShowLogoutDialog,
-  onViewReports, // 🔹 Nueva prop
+  onOpenSidebar,
+  isMobile,
+  isSidebarOpen,
+  onViewReports,
 }) => {
-  // 🔹 Verificar si es el administrador John S
   const isAdminJohn = colaborador.email === "jjohn@pprin.com";
   const router = useRouter();
 
-  // RENDERIZADO PARA MODO VENTANA FLOTANTE (PiP)
+  // ── PiP MODE ──────────────────────────────────────────────────────────────
   if (isInPiPWindow) {
     return (
       <div
-        className={`fixed top-0 left-0 right-0 z-20 ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}
+        className={`fixed top-0 left-0 right-0 z-20 ${
+          theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
+        } border-b ${theme === "dark" ? "border-white/5" : "border-black/5"}`}
       >
-        <div className="max-w-full mx-auto p-3">
+        <div className="px-3 py-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            {/* Logo + name */}
+            <div className="flex items-center gap-2 min-w-0">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#252527]" : "bg-gray-100"}`}
+                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  theme === "dark" ? "bg-[#252527]" : "bg-gray-100"
+                }`}
               >
                 <Image
                   src="/icono.webp"
@@ -53,10 +61,17 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               </div>
               <h2 className="text-sm font-bold truncate">Anfeta Asistente</h2>
             </div>
-            <div className="flex items-center gap-1">
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={toggleTheme}
-                className={`w-7 h-7 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535]" : "bg-gray-100 hover:bg-gray-200"}`}
+                aria-label="Toggle theme"
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                  theme === "dark"
+                    ? "bg-[#2a2a2a] hover:bg-[#353535]"
+                    : "bg-gray-100 hover:bg-gray-200"
+                }`}
               >
                 {theme === "light" ? (
                   <Moon className="w-3 h-3" />
@@ -66,9 +81,12 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => window.close()}
-                className="w-7 h-7 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-700"
+                aria-label="Close"
+                className="w-7 h-7 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-700 transition-colors"
               >
-                <span className="text-white text-xs font-bold">✕</span>
+                <span className="text-white text-xs font-bold leading-none">
+                  ✕
+                </span>
               </button>
             </div>
           </div>
@@ -77,115 +95,165 @@ export const ChatHeader: React.FC<HeaderProps> = ({
     );
   }
 
-  // RENDERIZADO PARA MODO NORMAL
+  // ── NORMAL MODE ───────────────────────────────────────────────────────────
   return (
-    <>
-      {/* Header Principal */}
-      <div className=" top-0 left0 right-0 z-20">
-        <div
-          className={`absolute top-0 left-0 right-0 h-25 bg-gradient-to-b ${
-            theme === "dark"
-              ? "from-[#101010]/90 via-[#101010]/90 to-transparent"
-              : "from-white/70 via-white/40 to-transparent"
-          }`}
-        />
-        <div className="relative max-w-4xl mx-auto">
-          <div className="flex items-center justify-between px-4 ">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full flex items-center justify-center animate-tilt">
-                <Image
-                  src="/icono.webp"
-                  alt="Chat"
-                  width={80}
-                  height={80}
-                  className="rounded-full drop-shadow-[0_0_16px_rgba(168,139,255,0.9)]"
-                />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold">Asistente</h1>
-                <p
-                  className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
-                >
-                  {displayName} • {colaborador.email}
-                  {isAdminJohn && (
-                    <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">
-                      Admin
-                    </span>
-                  )}
-                </p>
-              </div>
+    <div className="relative top-0 left-0 right-0 z-20">
+      {/* Gradient backdrop */}
+      <div
+        className={`absolute top-0 left-0 right-0 h-24 pointer-events-none bg-gradient-to-b ${
+          theme === "dark"
+            ? "from-[#101010]/90 via-[#101010]/60 to-transparent"
+            : "from-white/80 via-white/40 to-transparent"
+        }`}
+      />
+
+      <div className="relative max-w-4xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+        <div className="flex items-center justify-between gap-2">
+          {/* ── LEFT: Hamburger + Logo/Identity ─────────────────────────── */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Hamburger — mobile only, when sidebar is closed */}
+            {isMobile && !isSidebarOpen && onOpenSidebar && (
+              <button
+                onClick={onOpenSidebar}
+                aria-label="Open sidebar"
+                className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                  theme === "dark"
+                    ? "bg-[#2a2a2a] hover:bg-[#353535]"
+                    : "bg-gray-100 hover:bg-gray-200"
+                }`}
+              >
+                <Menu className="w-4 h-4 text-[#6841ea]" />
+              </button>
+            )}
+
+            {/* Avatar */}
+            <div className="flex-shrink-0 animate-tilt">
+              <Image
+                src="/icono.webp"
+                alt="Chat"
+                width={isMobile ? 48 : 64}
+                height={isMobile ? 48 : 64}
+                className="rounded-full drop-shadow-[0_0_12px_rgba(168,139,255,0.85)]"
+              />
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Title + user info */}
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold leading-tight">
+                Asistente
+              </h1>
+              <p
+                className={`text-xs sm:text-sm truncate ${
+                  theme === "dark" ? "text-gray-400" : "text-gray-600"
+                }`}
+              >
+                {/* On very small screens only show displayName; show email on sm+ */}
+                <span>{displayName}</span>
+                <span className="hidden sm:inline"> • {colaborador.email}</span>
+                {isAdminJohn && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 rounded-full">
+                    Admin
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* ── RIGHT: Actions ───────────────────────────────────────────── */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {/* Speed control — hidden on xs, visible sm+ */}
+            <div className="hidden sm:flex">
               <SpeedControlHeader
                 rate={rate}
                 changeRate={changeRate}
                 isSpeaking={isSpeaking}
                 theme={theme}
               />
+            </div>
 
-              {/* 🔹 BOTÓN DE REPORTES - SOLO PARA ADMIN JOHN */}
-              {isAdminJohn && (
-                // En el botón de reportes, justo antes del return
-                <button
-                  onClick={() => {
-                    console.log("🔍 Botón Reportes clickeado");
-                    console.log("📧 Email del colaborador:", colaborador.email);
-                    console.log("👤 Display Name:", displayName);
-                    console.log("🔄 onViewReports existe?:", !!onViewReports);
-
-                    if (onViewReports) {
-                      onViewReports();
-                    } else {
-                      console.error("❌ onViewReports no está definida");
-                    }
-                    window.location.href = "/reporte-del-dia";
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${theme === "dark" ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  Reportes
-                </button>
-              )}
-
+            {/* Reports button — admin only */}
+            {isAdminJohn && (
               <button
-                onClick={isPiPMode ? closePiPWindow : openPiPWindow}
-                className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                  isPiPMode
-                    ? "bg-red-600"
-                    : theme === "dark"
-                      ? "bg-[#2a2a2a]"
-                      : "bg-gray-100"
+                onClick={() => {
+                  if (onViewReports) onViewReports();
+                  window.location.href = "/reporte-del-dia";
+                }}
+                className={`h-9 rounded-lg text-sm font-medium flex items-center gap-1.5 px-2 sm:px-3 transition-colors ${
+                  theme === "dark"
+                    ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                {isPiPMode ? (
-                  <Minimize2 className="w-4 h-4 text-white" />
-                ) : (
-                  <PictureInPicture className="w-4 h-4 text-[#6841ea]" />
-                )}
+                <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                {/* Label hidden on mobile */}
+                <span className="hidden sm:inline">Reportes</span>
               </button>
+            )}
 
-              <button
-                onClick={toggleTheme}
-                className={`w-9 h-9 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
-              >
-                {theme === "light" ? (
-                  <Moon className="w-4 h-4 text-gray-700" />
-                ) : (
-                  <Sun className="w-4 h-4 text-gray-300" />
-                )}
-              </button>
+            {/* PiP toggle */}
+            <button
+              onClick={isPiPMode ? closePiPWindow : openPiPWindow}
+              aria-label={isPiPMode ? "Exit PiP" : "Enter PiP"}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                isPiPMode
+                  ? "bg-red-600 hover:bg-red-700"
+                  : theme === "dark"
+                    ? "bg-[#2a2a2a] hover:bg-[#353535]"
+                    : "bg-gray-100 hover:bg-gray-200"
+              }`}
+            >
+              {isPiPMode ? (
+                <Minimize2 className="w-4 h-4 text-white" />
+              ) : (
+                <PictureInPicture className="w-4 h-4 text-[#6841ea]" />
+              )}
+            </button>
 
-              <button
-                onClick={() => setShowLogoutDialog(true)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${theme === "dark" ? "bg-[#2a2a2a] text-gray-300" : "bg-gray-100 text-gray-700"}`}
-              >
-                <LogOut className="w-4 h-4 mr-2 inline" /> Salir
-              </button>
-            </div>
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                theme === "dark"
+                  ? "bg-[#2a2a2a] hover:bg-[#353535]"
+                  : "bg-gray-100 hover:bg-gray-200"
+              }`}
+            >
+              {theme === "light" ? (
+                <Moon className="w-4 h-4 text-gray-700" />
+              ) : (
+                <Sun className="w-4 h-4 text-gray-300" />
+              )}
+            </button>
+
+            {/* Logout */}
+            <button
+              onClick={() => setShowLogoutDialog(true)}
+              aria-label="Logout"
+              className={`h-9 rounded-lg text-sm font-medium flex items-center gap-1.5 px-2 sm:px-3 transition-colors ${
+                theme === "dark"
+                  ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <LogOut className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
           </div>
         </div>
+
+        {/* Speed control row — mobile only, below main bar */}
+        {isMobile && (
+          <div className="flex sm:hidden mt-1.5 justify-end">
+            <SpeedControlHeader
+              rate={rate}
+              changeRate={changeRate}
+              isSpeaking={isSpeaking}
+              theme={theme}
+            />
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 };

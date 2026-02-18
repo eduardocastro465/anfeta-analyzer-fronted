@@ -1,1059 +1,900 @@
-  "use client";
+"use client";
 
-  import {
-    Sunset,
-    CheckCircle2,
-    ClipboardList,
-    Mic,
-    Users,
-    User,
-    CheckSquare,
-    Check,
-    UsersIcon,
-    UserIcon,
-    FileText,
-    Clock,
-    MessageSquare,
-    RefreshCw,
-    Calendar,
-    ChevronDown,
-    X,
-    Zap,
-    TrendingUp,
-  } from "lucide-react";
-  import { Badge } from "@/components/ui/badge";
-  import { Button } from "@/components/ui/button";
-  import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-  import { PanelReporteTareasTardeProps, RevisionProcesada } from "@/lib/types";
-  import { ReporteActividadesModal } from "../ReporteActividadesModal";
+import {
+  Sunset,
+  CheckCircle2,
+  ClipboardList,
+  Mic,
+  Users,
+  User,
+  CheckSquare,
+  Check,
+  UsersIcon,
+  UserIcon,
+  FileText,
+  Clock,
+  MessageSquare,
+  RefreshCw,
+  Calendar,
+  ChevronDown,
+  X,
+  Zap,
+  TrendingUp,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { PanelReporteTareasTardeProps, RevisionProcesada } from "@/lib/types";
+import { ReporteActividadesModal } from "../ReporteActividadesModal";
 
+export function PanelReporteTareasTarde({
+  assistantAnalysis,
+  theme,
+  turno,
+  userEmail,
+  onStartVoiceMode,
+  onStartVoiceModeWithTasks,
+  onReportCompleted,
+  actividadesDiarias = [],
+}: PanelReporteTareasTardeProps) {
+  // ========== ESTADOS ==========
+  const [tareasConDescripcion] = useState<Set<string>>(new Set());
+  const [tareasSeleccionadas, setTareasSeleccionadas] = useState<Set<string>>(
+    new Set(),
+  );
+  const [mostrarAlerta, setMostrarAlerta] = useState(false);
+  const [mensajeAlerta, setMensajeAlerta] = useState("");
+  const [tareasReportadasMap, setTareasReportadasMap] = useState<
+    Map<string, any>
+  >(new Map());
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [ultimoReporteEnviado, setUltimoReporteEnviado] = useState<number>(0);
+  const [mostrandoReportesDeOtros, setMostrandoReportesDeOtros] =
+    useState(false);
+  const [estadisticasServidor, setEstadisticasServidor] = useState<any>(null);
+  const [mostrarModalReporte, setMostrarModalReporte] = useState(false);
+  const [guardandoReporte, setGuardandoReporte] = useState(false);
+  const actualizandoRef = useRef(false);
+  const currentUserEmail = userEmail || "";
 
-  export function PanelReporteTareasTarde({
-    assistantAnalysis,
-    theme,
-    turno,
-    userEmail,
-    onStartVoiceMode,
-    onStartVoiceModeWithTasks,
-    onReportCompleted,
-    actividadesDiarias = [],
-  }: PanelReporteTareasTardeProps) {
-    // ========== ESTADOS ==========
-    const [tareasConDescripcion] = useState<Set<string>>(new Set());
-    const [tareasSeleccionadas, setTareasSeleccionadas] = useState<Set<string>>(
-      new Set(),
-    );
-    const [mostrarAlerta, setMostrarAlerta] = useState(false);
-    const [mensajeAlerta, setMensajeAlerta] = useState("");
-    const [tareasReportadasMap, setTareasReportadasMap] = useState<
-      Map<string, any>
-    >(new Map());
-    const [isLoading, setIsLoading] = useState(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
-    const [ultimoReporteEnviado, setUltimoReporteEnviado] = useState<number>(0);
-    const [mostrandoReportesDeOtros, setMostrandoReportesDeOtros] =
-      useState(false);
-    const [estadisticasServidor, setEstadisticasServidor] = useState<any>(null);
-    const [mostrarModalReporte, setMostrarModalReporte] = useState(false);
-    const [guardandoReporte, setGuardandoReporte] = useState(false);
-    const actualizandoRef = useRef(false);
-    const currentUserEmail = userEmail || "";
-
-    const INTERVALO_ACTUALIZACION_TAREAS = 3000; // 5 segundos en milisegundos
-
-    // Actualizar la hora cada minuto
-    useEffect(() => {
-      const interval = setInterval(() => {
-        setCurrentTime(new Date());
-      }, 60000);
-      return () => clearInterval(interval);
-    }, []);
-
-    // Función para mostrar alerta
-    const mostrarAlertaMensaje = useCallback((mensaje: string) => {
-      setMensajeAlerta(mensaje);
-      setMostrarAlerta(true);
-      setTimeout(() => setMostrarAlerta(false), 5000);
-    }, []);
-
-    // Función para procesar tareas reportadas (VERSIÓN MEJORADA)
-    const procesarTareasReportadas = useCallback(
-      (nuevasTareasReportadas: any[], metadata: any = null) => {
-        nuevasTareasReportadas.forEach((item, i) => {});
-        if (metadata) {
-          setEstadisticasServidor(metadata);
-
-          const tieneReportesPropios = metadata.tieneReportesPropios || false;
-          const tieneReportesColaborativos =
-            metadata.tieneReportesColaborativos || false;
-
-          if (!tieneReportesPropios && tieneReportesColaborativos) {
-            setMostrandoReportesDeOtros(true);
-          } else {
-            setMostrandoReportesDeOtros(false);
-          }
-        }
-
-        if (nuevasTareasReportadas.length === 0) {
-          return;
-        }
-
-        if (nuevasTareasReportadas.length > 0) {
-        }
-
-        setTareasReportadasMap((mapActual) => {
-          const nuevoMap = new Map(mapActual);
-          let nuevasAgregadas = 0;
-          let actualizadas = 0;
-
-          nuevasTareasReportadas.forEach((item: any, index: number) => {
-            const tareaId = item.pendienteId || item.id || `tarea-${index}`;
-
-            if (!tareaId) {
-              console.warn("Item sin ID:", item);
-              return;
-            }
-
-            let reportadoPor =
-              item.reportadoPor?.nombre || item.reportadoPor || "Usuario";
-            let emailReportado =
-              item.reportadoPor?.email ||
-              item.emailEncontrado ||
-              item.userEmail ||
-              "";
-            let esMiReporte = item.esMiReporte || false;
-
-            if (!emailReportado && currentUserEmail) {
-              const emailEncontrado =
-                item.emailEncontrado ||
-                item.emailUsuario ||
-                item.emailReportado ||
-                item.userEmail ||
-                item.actualizadoPor;
-
-              if (emailEncontrado) {
-                emailReportado = emailEncontrado;
-                esMiReporte =
-                  currentUserEmail.toLowerCase() ===
-                  emailEncontrado.toLowerCase();
-                reportadoPor = emailReportado.split("@")[0];
-              } else {
-                emailReportado = currentUserEmail;
-                esMiReporte = true;
-                reportadoPor = currentUserEmail.split("@")[0];
-              }
-            }
-
-            const tareaExistente = mapActual.get(tareaId);
-
-            if (tareaExistente) {
-              const fechaExistente = new Date(
-                tareaExistente.fechaReporte,
-              ).getTime();
-              const fechaNueva = new Date(
-                item.fecha || item.fechaReporte || new Date(),
-              ).getTime();
-
-              if (fechaNueva > fechaExistente) {
-                nuevoMap.set(tareaId, {
-                  ...tareaExistente,
-                  texto:
-                    item.texto ||
-                    item.explicacion ||
-                    item.descripcion ||
-                    tareaExistente.texto,
-                  fechaReporte:
-                    item.fecha ||
-                    item.fechaReporte ||
-                    tareaExistente.fechaReporte,
-                  estado: item.estado || tareaExistente.estado,
-                  reportadoPor: reportadoPor,
-                  emailReportado: emailReportado,
-                  esMiReporte: esMiReporte,
-                  esReporteColaborativo:
-                    item.esReporteColaborativo || !esMiReporte,
-                  _raw: item,
-                });
-                actualizadas++;
-              }
-            } else {
-              nuevoMap.set(tareaId, {
-                id: tareaId,
-                pendienteId: tareaId,
-                nombreTarea:
-                  item.tarea ||
-                  item.nombreTarea ||
-                  item.nombre ||
-                  "Tarea sin nombre",
-                explicacion:
-                  item.texto || item.explicacion || item.descripcion || "",
-                reportadoPor: reportadoPor,
-                emailReportado: emailReportado,
-                esMiReporte: esMiReporte,
-                esReporteColaborativo: item.esReporteColaborativo || !esMiReporte,
-                fechaReporte:
-                  item.fecha || item.fechaReporte || item.updatedAt || new Date(),
-                actividadTitulo:
-                  item.actividad || item.actividadTitulo || "Actividad",
-                duracionMin: item.duracionMin || 0,
-                estado: item.estado || "reportado",
-                texto: item.texto || item.explicacion || item.descripcion || "",
-                _raw: item,
-              });
-              nuevasAgregadas++;
-            }
-          });
-
-          return nuevoMap;
-        });
-      },
-      [currentUserEmail, mostrandoReportesDeOtros],
-    );
-
-    const handleAbrirModalReporte = useCallback(() => {
-      if (tareasSeleccionadas.size === 0) {
-        mostrarAlertaMensaje(
-          "Por favor selecciona al menos una tarea para reportar",
-        );
-        return;
-      }
-      setMostrarModalReporte(true);
-    }, [tareasSeleccionadas, mostrarAlertaMensaje]);
-
-    // Función para cargar tareas reportadas (VERSIÓN CON METADATA)
-    const cargarTareasReportadas = useCallback(
-      async (esForzado: boolean = false) => {
-        if (!currentUserEmail) {
-          console.warn("No hay email para cargar tareas reportadas");
-          return;
-        }
-
-        if (actualizandoRef.current && !esForzado) {
-          return;
-        }
-
-        setIsLoading(true);
-        actualizandoRef.current = true;
-
-        try {
-          const url = `http://localhost:4000/api/v1/reportes/tareas-reportadas?email=${encodeURIComponent(currentUserEmail)}&limit=100`;
-
-          const response = await fetch(url, {
-            method: "GET",
-            credentials: "include",
-          });
-
-          if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-          }
-
-          const data = await response.json();
-
-          const tareasData = data.data || data.tareas || data.resultados || [];
-          const metadata = data.metadata || data.info || {};
-
-          if (Array.isArray(tareasData) && tareasData.length > 0) {
-            procesarTareasReportadas(tareasData, metadata);
-
-            if (esForzado) {
-              const mensaje =
-                metadata.mensaje || `${tareasData.length} tarea(s) cargada(s)`;
-              setTimeout(() => {
-                mostrarAlertaMensaje(mensaje);
-              }, 500);
-            }
-          } else {
-            procesarTareasReportadas([], metadata);
-
-            if (esForzado) {
-              const totalActual = tareasReportadasMap.size;
-              const mensaje =
-                metadata.mensaje ||
-                (totalActual > 0
-                  ? `No hay nuevas tareas. Tienes ${totalActual} en historial`
-                  : "No tienes tareas reportadas aún");
-              mostrarAlertaMensaje(mensaje);
-            }
-          }
-        } catch (error) {
-          console.error("Error cargando tareas reportadas:", error);
-          if (esForzado) {
-            mostrarAlertaMensaje("No se pudieron cargar las tareas reportadas");
-          }
-        } finally {
-          setIsLoading(false);
-          actualizandoRef.current = false;
-        }
-      },
-      [
-        currentUserEmail,
-        procesarTareasReportadas,
-        mostrarAlertaMensaje,
-        tareasReportadasMap,
-      ],
-    );
-
-    // NUEVO: Función para guardar reporte completado
-    const handleGuardarReporte = useCallback(async () => {
-      setGuardandoReporte(true);
-      try {
-        // Recargar tareas reportadas
-        await cargarTareasReportadas(true);
-
-        // Limpiar selección
-        setTareasSeleccionadas(new Set());
-
-        // Cerrar modal
-        setMostrarModalReporte(false);
-
-        // Notificar completado
-        if (onReportCompleted) {
-          onReportCompleted();
-        }
-
-        mostrarAlertaMensaje("Reporte completado exitosamente");
-      } catch (error) {
-        console.error("Error al completar reporte:", error);
-        mostrarAlertaMensaje("Error al completar el reporte");
-      } finally {
-        setGuardandoReporte(false);
-      }
-    }, [cargarTareasReportadas, onReportCompleted, mostrarAlertaMensaje]);
+  const INTERVALO_ACTUALIZACION_TAREAS = 3000;
 
   useEffect(() => {
-    // ✅ NO hacer polling si el modal está abierto
-    if (mostrarModalReporte) {
-      return; // ← Sale temprano, no inicia el intervalo
+    const interval = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const mostrarAlertaMensaje = useCallback((mensaje: string) => {
+    setMensajeAlerta(mensaje);
+    setMostrarAlerta(true);
+    setTimeout(() => setMostrarAlerta(false), 5000);
+  }, []);
+
+  const procesarTareasReportadas = useCallback(
+    (nuevasTareasReportadas: any[], metadata: any = null) => {
+      if (metadata) {
+        setEstadisticasServidor(metadata);
+        const tieneReportesPropios = metadata.tieneReportesPropios || false;
+        const tieneReportesColaborativos =
+          metadata.tieneReportesColaborativos || false;
+        setMostrandoReportesDeOtros(
+          !tieneReportesPropios && tieneReportesColaborativos,
+        );
+      }
+
+      if (nuevasTareasReportadas.length === 0) return;
+
+      setTareasReportadasMap((mapActual) => {
+        const nuevoMap = new Map(mapActual);
+
+        nuevasTareasReportadas.forEach((item: any, index: number) => {
+          const tareaId = item.pendienteId || item.id || `tarea-${index}`;
+          if (!tareaId) return;
+
+          let reportadoPor =
+            item.reportadoPor?.nombre || item.reportadoPor || "Usuario";
+          let emailReportado =
+            item.reportadoPor?.email ||
+            item.emailEncontrado ||
+            item.userEmail ||
+            "";
+          let esMiReporte = item.esMiReporte || false;
+
+          if (!emailReportado && currentUserEmail) {
+            const emailEncontrado =
+              item.emailEncontrado ||
+              item.emailUsuario ||
+              item.emailReportado ||
+              item.userEmail ||
+              item.actualizadoPor;
+            if (emailEncontrado) {
+              emailReportado = emailEncontrado;
+              esMiReporte =
+                currentUserEmail.toLowerCase() ===
+                emailEncontrado.toLowerCase();
+              reportadoPor = emailReportado.split("@")[0];
+            } else {
+              emailReportado = currentUserEmail;
+              esMiReporte = true;
+              reportadoPor = currentUserEmail.split("@")[0];
+            }
+          }
+
+          const tareaExistente = mapActual.get(tareaId);
+          if (tareaExistente) {
+            const fechaExistente = new Date(
+              tareaExistente.fechaReporte,
+            ).getTime();
+            const fechaNueva = new Date(
+              item.fecha || item.fechaReporte || new Date(),
+            ).getTime();
+            if (fechaNueva > fechaExistente) {
+              nuevoMap.set(tareaId, {
+                ...tareaExistente,
+                texto:
+                  item.texto ||
+                  item.explicacion ||
+                  item.descripcion ||
+                  tareaExistente.texto,
+                fechaReporte:
+                  item.fecha ||
+                  item.fechaReporte ||
+                  tareaExistente.fechaReporte,
+                estado: item.estado || tareaExistente.estado,
+                reportadoPor,
+                emailReportado,
+                esMiReporte,
+                esReporteColaborativo:
+                  item.esReporteColaborativo || !esMiReporte,
+                _raw: item,
+              });
+            }
+          } else {
+            nuevoMap.set(tareaId, {
+              id: tareaId,
+              pendienteId: tareaId,
+              nombreTarea:
+                item.tarea ||
+                item.nombreTarea ||
+                item.nombre ||
+                "Tarea sin nombre",
+              explicacion:
+                item.texto || item.explicacion || item.descripcion || "",
+              reportadoPor,
+              emailReportado,
+              esMiReporte,
+              esReporteColaborativo: item.esReporteColaborativo || !esMiReporte,
+              fechaReporte:
+                item.fecha || item.fechaReporte || item.updatedAt || new Date(),
+              actividadTitulo:
+                item.actividad || item.actividadTitulo || "Actividad",
+              duracionMin: item.duracionMin || 0,
+              estado: item.estado || "reportado",
+              texto: item.texto || item.explicacion || item.descripcion || "",
+              _raw: item,
+            });
+          }
+        });
+
+        return nuevoMap;
+      });
+    },
+    [currentUserEmail, mostrandoReportesDeOtros],
+  );
+
+  const handleAbrirModalReporte = useCallback(() => {
+    if (tareasSeleccionadas.size === 0) {
+      mostrarAlertaMensaje(
+        "Por favor selecciona al menos una tarea para reportar",
+      );
+      return;
     }
+    setMostrarModalReporte(true);
+  }, [tareasSeleccionadas, mostrarAlertaMensaje]);
 
-    const interval = setInterval(() => {
-      cargarTareasReportadas(false);
-    }, INTERVALO_ACTUALIZACION_TAREAS);
+  const cargarTareasReportadas = useCallback(
+    async (esForzado: boolean = false) => {
+      if (!currentUserEmail) return;
+      if (actualizandoRef.current && !esForzado) return;
 
-    return () => {
-      clearInterval(interval);
-    };
-  }, [currentUserEmail, cargarTareasReportadas, mostrarModalReporte]); // ← Agregado
+      setIsLoading(true);
+      actualizandoRef.current = true;
 
+      try {
+        const url = `http://localhost:4000/api/v1/reportes/tareas-reportadas?email=${encodeURIComponent(currentUserEmail)}&limit=100`;
+        const response = await fetch(url, {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+
+        const data = await response.json();
+        const tareasData = data.data || data.tareas || data.resultados || [];
+        const metadata = data.metadata || data.info || {};
+
+        if (Array.isArray(tareasData) && tareasData.length > 0) {
+          procesarTareasReportadas(tareasData, metadata);
+          if (esForzado) {
+            setTimeout(() => {
+              mostrarAlertaMensaje(
+                metadata.mensaje || `${tareasData.length} tarea(s) cargada(s)`,
+              );
+            }, 500);
+          }
+        } else {
+          procesarTareasReportadas([], metadata);
+          if (esForzado) {
+            const totalActual = tareasReportadasMap.size;
+            mostrarAlertaMensaje(
+              metadata.mensaje ||
+                (totalActual > 0
+                  ? `No hay nuevas tareas. Tienes ${totalActual} en historial`
+                  : "No tienes tareas reportadas aún"),
+            );
+          }
+        }
+      } catch (error) {
+        if (esForzado)
+          mostrarAlertaMensaje("No se pudieron cargar las tareas reportadas");
+      } finally {
+        setIsLoading(false);
+        actualizandoRef.current = false;
+      }
+    },
+    [
+      currentUserEmail,
+      procesarTareasReportadas,
+      mostrarAlertaMensaje,
+      tareasReportadasMap,
+    ],
+  );
+
+  const handleGuardarReporte = useCallback(async () => {
+    setGuardandoReporte(true);
+    try {
+      await cargarTareasReportadas(true);
+      setTareasSeleccionadas(new Set());
+      setMostrarModalReporte(false);
+      if (onReportCompleted) onReportCompleted();
+      mostrarAlertaMensaje("Reporte completado exitosamente");
+    } catch (error) {
+      mostrarAlertaMensaje("Error al completar el reporte");
+    } finally {
+      setGuardandoReporte(false);
+    }
+  }, [cargarTareasReportadas, onReportCompleted, mostrarAlertaMensaje]);
+
+  useEffect(() => {
+    if (mostrarModalReporte) return;
+    const interval = setInterval(
+      () => cargarTareasReportadas(false),
+      INTERVALO_ACTUALIZACION_TAREAS,
+    );
+    return () => clearInterval(interval);
+  }, [currentUserEmail, cargarTareasReportadas, mostrarModalReporte]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    
     if (!mostrarModalReporte && ultimoReporteEnviado > 0) {
-      console.log("🔄 Modal cerrado - recargando tareas en 1 segundo");
-      timer = setTimeout(() => {
-        cargarTareasReportadas(true);
-      }, 1000);
+      timer = setTimeout(() => cargarTareasReportadas(true), 1000);
     }
-
     return () => {
       if (timer) clearTimeout(timer);
     };
   }, [mostrarModalReporte, ultimoReporteEnviado, cargarTareasReportadas]);
 
-    // Filtrar actividades con tareas pendientes
-    const actividadesConTareas = useMemo(() => {
-      if (!assistantAnalysis?.data?.revisionesPorActividad) {
-        return [];
-      }
-      console.log("=== ACTIVIDADES CON TAREAS ===");
-      console.log("Total actividades:", assistantAnalysis.data);
+  const actividadesConTareas = useMemo(() => {
+    if (!assistantAnalysis?.data?.revisionesPorActividad) return [];
 
-      return assistantAnalysis.data.revisionesPorActividad
-        .map((revision) => {
-          const colaboradoresReales =
-            revision.colaboradores ||
-            assistantAnalysis.colaboradoresInvolucrados ||
-            [];
+    return assistantAnalysis.data.revisionesPorActividad
+      .map((revision) => {
+        const colaboradoresReales =
+          revision.colaboradores ||
+          assistantAnalysis.colaboradoresInvolucrados ||
+          [];
 
-          const tareasReportadas = revision.tareasConTiempo.filter((tarea) => {
-            const reporte = Array.from(tareasReportadasMap.values()).find((r) => {
-              const coincidePorId = r.pendienteId === tarea.id;
-              const coincidePorNombre = r.nombreTarea === tarea.nombre;
-              if (coincidePorId || coincidePorNombre) {
-                console.log(
-                  `  MATCH → tarea: "${tarea.nombre}" | coincidePorId: ${coincidePorId} | coincidePorNombre: ${coincidePorNombre} | esMiReporte: ${r.esMiReporte}`,
-                );
-              }
-              return coincidePorId || coincidePorNombre;
-            });
-            return !!reporte;
-          });
-
-          const tareasNoReportadas = revision.tareasConTiempo.filter((tarea) => {
-            const estaReportada = Array.from(tareasReportadasMap.values()).some(
-              (r) => {
-                const coincidePorId = r.pendienteId === tarea.id;
-                const coincidePorNombre = r.nombreTarea === tarea.nombre;
-                return coincidePorId || coincidePorNombre;
-              },
-            );
-            const tieneDescripcion = tareasConDescripcion.has(tarea.id);
-            return !estaReportada && !tieneDescripcion;
-          });
-
-          return {
-            ...revision,
-            colaboradoresReales,
-            esActividadIndividual: colaboradoresReales.length <= 1,
-            tareasReportadas,
-            tareasNoReportadas,
-          } as RevisionProcesada;
-        })
-        .filter(
-          (revision: RevisionProcesada) =>
-            revision.tareasReportadas.length > 0 ||
-            revision.tareasNoReportadas.length > 0,
+        const tareasReportadas = revision.tareasConTiempo.filter((tarea) =>
+          Array.from(tareasReportadasMap.values()).find(
+            (r) => r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre,
+          ),
         );
-    }, [assistantAnalysis, tareasConDescripcion, tareasReportadasMap]);
 
-    // Calcular estadísticas
-    const estadisticas = useMemo(() => {
-      const todasTareasReportadas = actividadesConTareas.flatMap(
-        (a) => a.tareasReportadas,
-      );
-
-      const totalReportadasPorMi = todasTareasReportadas.filter((tarea: any) => {
-        const reporte = Array.from(tareasReportadasMap.values()).find((r) => {
-          const coincidePorId = r.pendienteId === tarea.id;
-          const coincidePorNombre = r.nombreTarea === tarea.nombre;
-          return (coincidePorId || coincidePorNombre) && r.esMiReporte;
-        });
-        return !!reporte;
-      }).length;
-
-      const totalReportadasPorOtros = todasTareasReportadas.filter(
-        (tarea: any) => {
-          const reporte = Array.from(tareasReportadasMap.values()).find((r) => {
-            const coincidePorId = r.pendienteId === tarea.id;
-            const coincidePorNombre = r.nombreTarea === tarea.nombre;
-            return (coincidePorId || coincidePorNombre) && !r.esMiReporte;
-          });
-          return !!reporte;
-        },
-      ).length;
-
-      const totalNoReportadas = actividadesConTareas.reduce(
-        (sum, actividad) => sum + actividad.tareasNoReportadas.length,
-        0,
-      );
-
-      return {
-        totalReportadasPorMi,
-        totalReportadasPorOtros,
-        totalReportadas: totalReportadasPorMi + totalReportadasPorOtros,
-        totalNoReportadas,
-        totalTareas:
-          totalReportadasPorMi + totalReportadasPorOtros + totalNoReportadas,
-      };
-    }, [actividadesConTareas, tareasReportadasMap]);
-
-    const hayTareas = actividadesConTareas.length > 0;
-
-    // Función para toggle de selección de tarea
-    const toggleSeleccionTarea = useCallback(
-      (tarea: any) => {
-        const tareaId = tarea.id;
-
-        // ✅ NUEVO: Verificar si la tarea NO tiene descripción
-        if (!tarea.descripcion || tarea.descripcion.trim().length === 0) {
-          mostrarAlertaMensaje(
-            `"${tarea.nombre}" no tiene descripción del pendiente. Solo se pueden reportar tareas con descripción previa.`,
+        const tareasNoReportadas = revision.tareasConTiempo.filter((tarea) => {
+          const estaReportada = Array.from(tareasReportadasMap.values()).some(
+            (r) => r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre,
           );
-          return; // ← BLOQUEA la selección
-        }
-
-        const reporte = Array.from(tareasReportadasMap.values()).find((r) => {
-          const coincidePorId = r.pendienteId === tareaId;
-          const coincidePorNombre = r.nombreTarea === tarea.nombre;
-          return coincidePorId || coincidePorNombre;
+          return !estaReportada && !tareasConDescripcion.has(tarea.id);
         });
 
-        if (reporte) {
-          if (reporte.esMiReporte) {
-            mostrarAlertaMensaje(
-              `Ya reportaste esta tarea: "${reporte.nombreTarea}"`,
-            );
-          } else {
-            const nombreReportante = reporte.reportadoPor || "otro colaborador";
-            mostrarAlertaMensaje(
-              `"${reporte.nombreTarea}" ya fue reportada por ${nombreReportante}`,
-            );
-          }
-          return;
-        }
+        return {
+          ...revision,
+          colaboradoresReales,
+          esActividadIndividual: colaboradoresReales.length <= 1,
+          tareasReportadas,
+          tareasNoReportadas,
+        } as RevisionProcesada;
+      })
+      .filter(
+        (revision: RevisionProcesada) =>
+          revision.tareasReportadas.length > 0 ||
+          revision.tareasNoReportadas.length > 0,
+      );
+  }, [assistantAnalysis, tareasConDescripcion, tareasReportadasMap]);
 
-        setTareasSeleccionadas((prev) => {
-          const nuevasSeleccionadas = new Set(prev);
-          if (nuevasSeleccionadas.has(tareaId)) {
-            nuevasSeleccionadas.delete(tareaId);
-          } else {
-            nuevasSeleccionadas.add(tareaId);
-          }
-          return nuevasSeleccionadas;
-        });
-      },
-      [tareasReportadasMap, mostrarAlertaMensaje],
+  const estadisticas = useMemo(() => {
+    const todasTareasReportadas = actividadesConTareas.flatMap(
+      (a) => a.tareasReportadas,
     );
 
-    // Función para seleccionar todas las tareas NO REPORTADAS
-    const seleccionarTodasTareas = useCallback(() => {
-      // ✅ FILTRAR solo tareas con descripción
-      const todasTareasIds = actividadesConTareas.flatMap((actividad) =>
-        actividad.tareasNoReportadas
-          .filter((t: any) => t.descripcion && t.descripcion.trim().length > 0)
-          .map((t: any) => t.id),
-      );
+    const totalReportadasPorMi = todasTareasReportadas.filter((tarea: any) =>
+      Array.from(tareasReportadasMap.values()).find(
+        (r) =>
+          (r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre) &&
+          r.esMiReporte,
+      ),
+    ).length;
 
-      if (todasTareasIds.length === 0) {
+    const totalReportadasPorOtros = todasTareasReportadas.filter((tarea: any) =>
+      Array.from(tareasReportadasMap.values()).find(
+        (r) =>
+          (r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre) &&
+          !r.esMiReporte,
+      ),
+    ).length;
+
+    const totalNoReportadas = actividadesConTareas.reduce(
+      (sum, actividad) => sum + actividad.tareasNoReportadas.length,
+      0,
+    );
+
+    return {
+      totalReportadasPorMi,
+      totalReportadasPorOtros,
+      totalReportadas: totalReportadasPorMi + totalReportadasPorOtros,
+      totalNoReportadas,
+      totalTareas:
+        totalReportadasPorMi + totalReportadasPorOtros + totalNoReportadas,
+    };
+  }, [actividadesConTareas, tareasReportadasMap]);
+
+  const hayTareas = actividadesConTareas.length > 0;
+
+  const toggleSeleccionTarea = useCallback(
+    (tarea: any) => {
+      const tareaId = tarea.id;
+      if (!tarea.descripcion || tarea.descripcion.trim().length === 0) {
         mostrarAlertaMensaje(
-          "No hay tareas con descripción pendientes por reportar",
+          `"${tarea.nombre}" no tiene descripción del pendiente.`,
         );
         return;
       }
 
-      setTareasSeleccionadas(new Set(todasTareasIds));
+      const reporte = Array.from(tareasReportadasMap.values()).find(
+        (r) => r.pendienteId === tareaId || r.nombreTarea === tarea.nombre,
+      );
+
+      if (reporte) {
+        mostrarAlertaMensaje(
+          reporte.esMiReporte
+            ? `Ya reportaste: "${reporte.nombreTarea}"`
+            : `Ya reportada por ${reporte.reportadoPor || "otro colaborador"}`,
+        );
+        return;
+      }
+
+      setTareasSeleccionadas((prev) => {
+        const nuevas = new Set(prev);
+        nuevas.has(tareaId) ? nuevas.delete(tareaId) : nuevas.add(tareaId);
+        return nuevas;
+      });
+    },
+    [tareasReportadasMap, mostrarAlertaMensaje],
+  );
+
+  const seleccionarTodasTareas = useCallback(() => {
+    const ids = actividadesConTareas.flatMap((actividad) =>
+      actividad.tareasNoReportadas
+        .filter((t: any) => t.descripcion && t.descripcion.trim().length > 0)
+        .map((t: any) => t.id),
+    );
+    if (ids.length === 0) {
+      mostrarAlertaMensaje("No hay tareas con descripción por reportar");
+      return;
+    }
+    setTareasSeleccionadas(new Set(ids));
+    mostrarAlertaMensaje(
+      `${ids.length} tarea${ids.length !== 1 ? "s" : ""} seleccionada${ids.length !== 1 ? "s" : ""}`,
+    );
+  }, [actividadesConTareas, mostrarAlertaMensaje]);
+
+  const deseleccionarTodasTareas = useCallback(() => {
+    setTareasSeleccionadas(new Set());
+    mostrarAlertaMensaje("Todas las tareas deseleccionadas");
+  }, [mostrarAlertaMensaje]);
+
+  const handleExplicarTareasSeleccionadas = useCallback(async () => {
+    if (tareasSeleccionadas.size === 0) {
+      mostrarAlertaMensaje("Selecciona al menos una tarea para explicar");
+      return;
+    }
+    setUltimoReporteEnviado(Date.now());
+
+    if (onStartVoiceModeWithTasks) {
+      onStartVoiceModeWithTasks(Array.from(tareasSeleccionadas));
       mostrarAlertaMensaje(
-        `${todasTareasIds.length} tarea${todasTareasIds.length !== 1 ? "s" : ""} con descripción seleccionada${todasTareasIds.length !== 1 ? "s" : ""}`,
+        `Iniciando reporte de ${tareasSeleccionadas.size} tarea${tareasSeleccionadas.size !== 1 ? "s" : ""}`,
       );
-    }, [actividadesConTareas, mostrarAlertaMensaje]);
 
-    // Función para deseleccionar todas
-    const deseleccionarTodasTareas = useCallback(() => {
-      setTareasSeleccionadas(new Set());
-      mostrarAlertaMensaje("Todas las tareas deseleccionadas");
-    }, [mostrarAlertaMensaje]);
+      setTimeout(() => {
+        cargarTareasReportadas(true);
+        if (onReportCompleted) onReportCompleted();
+        setTareasSeleccionadas(new Set());
+        setTimeout(() => cargarTareasReportadas(true), 5000);
+      }, 3000);
+    } else if (onStartVoiceMode) {
+      onStartVoiceMode();
+      mostrarAlertaMensaje(
+        `Modo voz iniciado con ${tareasSeleccionadas.size} tarea${tareasSeleccionadas.size !== 1 ? "s" : ""} seleccionada${tareasSeleccionadas.size !== 1 ? "s" : ""}`,
+      );
+    }
+  }, [
+    tareasSeleccionadas,
+    onStartVoiceModeWithTasks,
+    onStartVoiceMode,
+    onReportCompleted,
+    cargarTareasReportadas,
+    mostrarAlertaMensaje,
+  ]);
 
-    // Función para explicar tareas seleccionadas (ACTUALIZADA)
-    const handleExplicarTareasSeleccionadas = useCallback(async () => {
-      if (tareasSeleccionadas.size === 0) {
-        mostrarAlertaMensaje(
-          "Por favor selecciona al menos una tarea pendiente para explicar",
-        );
-        return;
-      }
+  const handleRecargarTareas = useCallback(
+    () => cargarTareasReportadas(true),
+    [cargarTareasReportadas],
+  );
 
-      setUltimoReporteEnviado(Date.now());
-
-      if (onStartVoiceModeWithTasks) {
-        onStartVoiceModeWithTasks(Array.from(tareasSeleccionadas));
-        mostrarAlertaMensaje(
-          `Iniciando reporte de ${tareasSeleccionadas.size} tarea${tareasSeleccionadas.size !== 1 ? "s" : ""}`,
-        );
-
-        setTimeout(() => {
-          cargarTareasReportadas(true);
-
-          if (onReportCompleted) {
-            onReportCompleted();
-          }
-
-          setTareasSeleccionadas(new Set());
-
-          setTimeout(() => {
-            cargarTareasReportadas(true);
-          }, 5000);
-        }, 3000);
-      } else if (onStartVoiceMode) {
-        console.warn("Usando onStartVoiceMode (fallback)");
-        onStartVoiceMode();
-        mostrarAlertaMensaje(
-          `Modo voz iniciado con ${tareasSeleccionadas.size} tarea${tareasSeleccionadas.size !== 1 ? "s" : ""} seleccionada${tareasSeleccionadas.size !== 1 ? "s" : ""}`,
-        );
-      }
-    }, [
-      tareasSeleccionadas,
-      onStartVoiceModeWithTasks,
-      onStartVoiceMode,
-      onReportCompleted,
-      cargarTareasReportadas,
-      mostrarAlertaMensaje,
-    ]);
-
-    // Función para recargar tareas reportadas
-    const handleRecargarTareas = useCallback(() => {
-      cargarTareasReportadas(true);
-    }, [cargarTareasReportadas]);
-
-    // ========== RENDER ==========
-
-    return (
-      <div className="w-full animate-in slide-in-from-bottom-2 duration-300">
-        {/* Alerta flotante - ESTILO TARDE (Naranja) */}
-        {mostrarAlerta && (
-          <div className="fixed top-3 right-3 z-50 animate-in slide-in-from-right duration-300">
-            <div
-              className={`px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 backdrop-blur-sm ${
-                theme === "dark"
-                  ? "bg-gradient-to-r from-orange-900/90 to-amber-900/90 text-white border border-orange-500/50"
-                  : "bg-gradient-to-r from-orange-100 to-amber-100 text-gray-800 border border-orange-300"
-              }`}
-            >
-              <Sunset className="w-4 h-4 text-orange-500 animate-pulse" />
-              <span className="text-xs font-medium">{mensajeAlerta}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-1 p-0.5 h-auto hover:bg-orange-500/20"
-                onClick={() => setMostrarAlerta(false)}
-              >
-                ×
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* BANNER ESPECIAL SI SOLO HAY REPORTES DE OTROS */}
-        {mostrandoReportesDeOtros && estadisticasServidor && (
+  // ========== RENDER ==========
+  return (
+    <div className="w-full animate-in slide-in-from-bottom-2 duration-300">
+      {/* Alerta flotante — ocupa todo el ancho en móvil */}
+      {mostrarAlerta && (
+        <div className="fixed top-0 left-0 right-0 z-50 animate-in slide-in-from-top duration-300 sm:top-3 sm:left-auto sm:right-3 sm:max-w-sm">
           <div
-            className={`p-2.5 rounded-lg mb-2 border ${
+            className={`px-4 py-3 flex items-center gap-2 sm:rounded-lg shadow-lg backdrop-blur-sm ${
               theme === "dark"
-                ? "bg-gradient-to-r from-orange-900/30 to-amber-900/30 border-orange-700/50"
-                : "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-300"
+                ? "bg-gradient-to-r from-orange-900/95 to-amber-900/95 text-white border-b border-orange-500/50 sm:border"
+                : "bg-gradient-to-r from-orange-100 to-amber-100 text-gray-800 border-b border-orange-300 sm:border"
             }`}
           >
-            <div className="flex items-start gap-2">
-              <Users className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <h4
-                  className={`font-bold text-xs mb-0.5 flex items-center gap-1.5 ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
+            <Sunset className="w-4 h-4 text-orange-500 animate-pulse flex-shrink-0" />
+            <span className="text-xs font-medium flex-1 min-w-0">
+              {mensajeAlerta}
+            </span>
+            <button
+              className="ml-1 p-1 rounded-full hover:bg-orange-500/20 flex-shrink-0 min-w-[32px] min-h-[32px] flex items-center justify-center"
+              onClick={() => setMostrarAlerta(false)}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner colaborativo */}
+      {mostrandoReportesDeOtros && estadisticasServidor && (
+        <div
+          className={`p-3 rounded-xl mb-3 border ${
+            theme === "dark"
+              ? "bg-gradient-to-r from-orange-900/30 to-amber-900/30 border-orange-700/50"
+              : "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-300"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={`p-2 rounded-lg flex-shrink-0 ${theme === "dark" ? "bg-orange-500/20" : "bg-orange-200"}`}
+            >
+              <Users className="w-4 h-4 text-orange-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4
+                className={`font-bold text-sm mb-1 ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
+              >
+                Reportes del equipo — Turno Tarde
+              </h4>
+              <p
+                className={`text-xs mb-2 leading-relaxed ${theme === "dark" ? "text-orange-200" : "text-orange-600"}`}
+              >
+                {estadisticasServidor.mensaje ||
+                  "No tienes reportes propios, pero hay reportes de otros colaboradores."}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${theme === "dark" ? "bg-orange-800/50 text-orange-200" : "bg-orange-200 text-orange-800"}`}
                 >
-                  <Sunset className="w-3 h-3" />
-                  Reportes del equipo - Turno Tarde
-                </h4>
-                <p
-                  className={`text-[10px] mb-1.5 ${theme === "dark" ? "text-orange-200" : "text-orange-600"}`}
+                  Tú: {currentUserEmail.split("@")[0]}
+                </span>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${theme === "dark" ? "bg-blue-800/50 text-blue-200" : "bg-blue-200 text-blue-800"}`}
                 >
-                  {estadisticasServidor.mensaje ||
-                    "No tienes reportes propios, pero hay reportes de otros colaboradores en tus actividades."}
-                </p>
-                <div className="flex flex-wrap gap-1 text-[9px]">
-                  <span
-                    className={`px-2 py-0.5 rounded-full font-medium ${
-                      theme === "dark"
-                        ? "bg-orange-800/50 text-orange-200"
-                        : "bg-orange-200 text-orange-800"
-                    }`}
-                  >
-                    Tú: {currentUserEmail.split("@")[0]}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full font-medium ${
-                      theme === "dark"
-                        ? "bg-blue-800/50 text-blue-200"
-                        : "bg-blue-200 text-blue-800"
-                    }`}
-                  >
-                    {estadisticasServidor.tareasColaboradores || 0} reportes de
-                    otros
-                  </span>
-                </div>
+                  {estadisticasServidor.tareasColaboradores || 0} reportes de
+                  otros
+                </span>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TasksPanel o NoTasksMessage */}
-        {hayTareas ? (
+      {/* Panel principal */}
+      {hayTareas ? (
+        <div
+          className={`w-full rounded-xl border overflow-hidden shadow-md ${
+            theme === "dark"
+              ? "bg-[#1e1e1e] border-orange-900/50"
+              : "bg-white border-orange-200"
+          }`}
+        >
+          {/* Header */}
           <div
-            className={`w-full max-w-xl rounded-lg border overflow-hidden shadow-md ${
-              theme === "dark"
-                ? "bg-gradient-to-b from-[#1a1a1a] to-[#252527] border-orange-900/50"
-                : "bg-gradient-to-b from-white to-orange-50/30 border-orange-200"
+            className={`px-3 py-3 border-b bg-orange-500/10 ${
+              theme === "dark" ? "border-orange-900/50" : "border-orange-200"
             }`}
           >
-            {/* Header - ESTILO TARDE */}
-            <div
-              className={`px-3 py-2 border-b bg-gradient-to-r from-orange-500/20 to-amber-500/20 flex justify-between items-center ${
-                theme === "dark" ? "border-orange-900/50" : "border-orange-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
+              {/* Título izquierda */}
+              <div className="flex items-center gap-2 min-w-0">
+                <Sunset className="w-4 h-4 text-orange-500 flex-shrink-0" />
                 <h4
-                  className={`font-bold text-xs flex items-center gap-1.5 uppercase tracking-wide ${
-                    theme === "dark" ? "text-orange-200" : "text-orange-800"
-                  }`}
+                  className={`font-bold text-xs uppercase tracking-wide truncate ${theme === "dark" ? "text-orange-200" : "text-orange-800"}`}
                 >
-                  <Sunset className="w-4 h-4 text-orange-500" />
-                  Tareas Tarde ({estadisticas.totalTareas})
+                  Tareas Tarde
+                </h4>
+                {/* Counters en píldoras */}
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
-                      theme === "dark"
-                        ? "bg-green-500/30 text-green-200"
-                        : "bg-green-200 text-green-800"
-                    }`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
+                  >
+                    {estadisticas.totalTareas}
+                  </span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/30 text-green-200" : "bg-green-100 text-green-700"}`}
                   >
                     ✓ {estadisticas.totalReportadas}
                   </span>
-                  {mostrandoReportesDeOtros && (
-                    <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
-                        theme === "dark"
-                          ? "bg-orange-500/30 text-orange-200"
-                          : "bg-orange-200 text-orange-800"
-                      }`}
-                    >
-                      De otros
-                    </span>
-                  )}
-                </h4>
-
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleRecargarTareas}
-                  disabled={isLoading}
-                  className="h-6 w-6 p-0 hover:bg-orange-500/20"
-                  title="Recargar tareas reportadas"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 text-orange-500 ${isLoading ? "animate-spin" : ""}`}
-                  />
-                </Button>
+                </div>
               </div>
 
-              <Badge
-                variant="secondary"
-                className="text-[9px] font-bold bg-gradient-to-r from-orange-500 to-amber-500 text-white border-none px-2 py-0.5"
-              >
-                <Zap className="w-2.5 h-2.5 mr-0.5" />
-                SELECCIONAR
-              </Badge>
+              {/* Acciones derecha */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {mostrandoReportesDeOtros && (
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold hidden sm:inline-block ${theme === "dark" ? "bg-orange-500/30 text-orange-200" : "bg-orange-200 text-orange-800"}`}
+                  >
+                    De otros
+                  </span>
+                )}
+                {/* Botón recargar — touch target 40x40 */}
+                <button
+                  onClick={handleRecargarTareas}
+                  disabled={isLoading}
+                  className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                    theme === "dark"
+                      ? "hover:bg-orange-500/20 text-orange-400"
+                      : "hover:bg-orange-100 text-orange-600"
+                  }`}
+                  title="Recargar tareas"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                  />
+                </button>
+              </div>
             </div>
+          </div>
 
-            {/* Contenido */}
-            <div className="p-2.5">
-              <div
-                className={`text-xs p-2.5 rounded-lg mb-2.5 border ${
-                  theme === "dark"
-                    ? mostrandoReportesDeOtros
-                      ? "bg-orange-900/30 text-orange-200 border-orange-700/50"
-                      : "bg-blue-900/30 text-blue-200 border-blue-700/50"
-                    : mostrandoReportesDeOtros
-                      ? "bg-orange-100 text-orange-800 border-orange-300"
-                      : "bg-blue-100 text-blue-800 border-blue-300"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  {mostrandoReportesDeOtros ? (
-                    <>
-                      <Users className="w-4 h-4" />
-                      <strong className="flex items-center gap-1.5">
-                        Trabajo colaborativo{" "}
-                        <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[9px]">
-                          {estadisticasServidor?.tareasColaboradores || 0}{" "}
-                          reportes
-                        </span>
-                      </strong>
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="w-4 h-4" />
-                      <strong className="flex items-center gap-1.5">
-                        Tareas Pendientes:{" "}
-                        <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[9px]">
-                          {estadisticas.totalNoReportadas}
-                        </span>
-                      </strong>
-                    </>
-                  )}
-                  {!mostrandoReportesDeOtros && (
-                    <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/30 text-amber-900 dark:text-amber-200 rounded-full font-semibold">
+          {/* Contenido */}
+          <div className="p-3">
+            {/* Info box */}
+            <div
+              className={`text-xs p-3 rounded-xl mb-3 border ${
+                theme === "dark"
+                  ? mostrandoReportesDeOtros
+                    ? "bg-orange-900/30 text-orange-200 border-orange-700/50"
+                    : "bg-blue-900/30 text-blue-200 border-blue-700/50"
+                  : mostrandoReportesDeOtros
+                    ? "bg-orange-50 text-orange-800 border-orange-200"
+                    : "bg-blue-50 text-blue-800 border-blue-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                {mostrandoReportesDeOtros ? (
+                  <Users className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <TrendingUp className="w-4 h-4 flex-shrink-0" />
+                )}
+                <strong className="font-bold">
+                  {mostrandoReportesDeOtros
+                    ? "Trabajo colaborativo"
+                    : `Pendientes por reportar: ${estadisticas.totalNoReportadas}`}
+                </strong>
+                {!mostrandoReportesDeOtros &&
+                  estadisticas.totalNoReportadas > 0 && (
+                    <span className="ml-auto text-[10px] px-2 py-0.5 bg-amber-500/30 text-amber-900 dark:text-amber-200 rounded-full font-semibold flex-shrink-0">
                       Por reportar
                     </span>
                   )}
-                </div>
-                <span className="block text-[10px] mt-1 opacity-90 font-medium">
-                  {mostrandoReportesDeOtros ? (
-                    <>
-                      <strong>Tú:</strong>{" "}
-                      {currentUserEmail
-                        ? currentUserEmail.split("@")[0]
-                        : "Usuario"}
-                      <span className="mx-1.5">•</span> No tienes reportes
-                      propios, pero hay reportes de otros colaboradores.
-                    </>
-                  ) : (
-                    <>
-                      {estadisticas.totalReportadasPorMi > 0 &&
-                        `Tienes ${estadisticas.totalReportadasPorMi} tarea(s) reportada(s). `}
-                      {estadisticas.totalReportadasPorOtros > 0 &&
-                        `${estadisticas.totalReportadasPorOtros} tarea(s) reportada(s) por otros. `}
-                      <br />
-                      <strong>Tú:</strong>{" "}
-                      {currentUserEmail
-                        ? currentUserEmail.split("@")[0]
-                        : "Usuario"}
-                    </>
-                  )}
-                </span>
               </div>
-
-              {/* Lista de actividades */}
-              <div className="space-y-2.5">
-                {actividadesConTareas.map(
-                  (revision: RevisionProcesada, idx: number) => {
-                    const actividad = assistantAnalysis.data.actividades.find(
-                      (act) => act.id === revision.actividadId,
-                    );
-
-                    if (!actividad) return null;
-
-                    return (
-                      <ActivityItem
-                        key={revision.actividadId}
-                        revision={revision}
-                        actividad={actividad}
-                        index={idx}
-                        theme={theme}
-                        tareasSeleccionadas={tareasSeleccionadas}
-                        onToggleTarea={toggleSeleccionTarea}
-                        todosColaboradores={
-                          (assistantAnalysis as any).colaboradoresInvolucrados ||
-                          []
-                        }
-                        tareasReportadasMap={tareasReportadasMap}
-                        currentUserEmail={currentUserEmail}
-                        mostrandoReportesDeOtros={mostrandoReportesDeOtros}
-                      />
-                    );
-                  },
+              <p className="text-xs leading-relaxed opacity-90">
+                {mostrandoReportesDeOtros ? (
+                  <>
+                    <strong>Tú:</strong>{" "}
+                    {currentUserEmail
+                      ? currentUserEmail.split("@")[0]
+                      : "Usuario"}
+                    {" · "}No tienes reportes propios pero hay reportes de otros
+                    colaboradores.
+                  </>
+                ) : (
+                  <>
+                    {estadisticas.totalReportadasPorMi > 0 &&
+                      `${estadisticas.totalReportadasPorMi} tarea(s) reportada(s) por ti. `}
+                    {estadisticas.totalReportadasPorOtros > 0 &&
+                      `${estadisticas.totalReportadasPorOtros} por otros. `}
+                    <strong>Tú:</strong>{" "}
+                    {currentUserEmail
+                      ? currentUserEmail.split("@")[0]
+                      : "Usuario"}
+                  </>
                 )}
-              </div>
+              </p>
             </div>
 
-            <ReporteActividadesModal
-              isOpen={mostrarModalReporte}
-              onOpenChange={setMostrarModalReporte}
-              theme={theme}
-              actividadesDiarias={actividadesDiarias}
-              tareasSeleccionadas={tareasSeleccionadas}
-              actividadesConTareas={actividadesConTareas}
-              tareasReportadasMap={tareasReportadasMap}
-              onGuardarReporte={handleGuardarReporte}
-              guardandoReporte={guardandoReporte}
-              turno={turno}
-            />
-
-            {/* Footer con acciones */}
-            <PiePanelReporte
-              totalTareasPendientes={estadisticas.totalNoReportadas}
-              totalTareasReportadas={estadisticas.totalReportadas}
-              tareasReportadasPorMi={estadisticas.totalReportadasPorMi}
-              tareasReportadasPorOtros={estadisticas.totalReportadasPorOtros}
-              esHoraReporte={false}
-              theme={theme}
-              onStartVoiceMode={onStartVoiceMode}
-              tareasSeleccionadas={tareasSeleccionadas}
-              onSeleccionarTodas={seleccionarTodasTareas}
-              onDeseleccionarTodas={deseleccionarTodasTareas}
-              onExplicarTareasSeleccionadas={handleExplicarTareasSeleccionadas}
-              todosColaboradores={
-                assistantAnalysis.colaboradoresInvolucrados || []
-              }
-              onRecargar={handleRecargarTareas}
-              isLoading={isLoading}
-              currentUserEmail={currentUserEmail}
-              mostrandoReportesDeOtros={mostrandoReportesDeOtros}
-              estadisticasServidor={estadisticasServidor}
-              turno={turno}
-              onOpenReporteModal={handleAbrirModalReporte}
-            />
+            {/* Lista de actividades */}
+            <div className="space-y-3">
+              {actividadesConTareas.map(
+                (revision: RevisionProcesada, idx: number) => {
+                  const actividad = assistantAnalysis.data.actividades.find(
+                    (act) => act.id === revision.actividadId,
+                  );
+                  if (!actividad) return null;
+                  return (
+                    <ActivityItem
+                      key={revision.actividadId}
+                      revision={revision}
+                      actividad={actividad}
+                      index={idx}
+                      theme={theme}
+                      tareasSeleccionadas={tareasSeleccionadas}
+                      onToggleTarea={toggleSeleccionTarea}
+                      todosColaboradores={
+                        (assistantAnalysis as any).colaboradoresInvolucrados ||
+                        []
+                      }
+                      tareasReportadasMap={tareasReportadasMap}
+                      currentUserEmail={currentUserEmail}
+                      mostrandoReportesDeOtros={mostrandoReportesDeOtros}
+                    />
+                  );
+                },
+              )}
+            </div>
           </div>
-        ) : (
-          <NoTasksMessage
+
+          <ReporteActividadesModal
+            isOpen={mostrarModalReporte}
+            onOpenChange={setMostrarModalReporte}
             theme={theme}
+            actividadesDiarias={actividadesDiarias}
+            tareasSeleccionadas={tareasSeleccionadas}
+            actividadesConTareas={actividadesConTareas}
+            tareasReportadasMap={tareasReportadasMap}
+            onGuardarReporte={handleGuardarReporte}
+            guardandoReporte={guardandoReporte}
+            turno={turno}
+          />
+
+          <PiePanelReporte
+            totalTareasPendientes={estadisticas.totalNoReportadas}
+            totalTareasReportadas={estadisticas.totalReportadas}
+            tareasReportadasPorMi={estadisticas.totalReportadasPorMi}
+            tareasReportadasPorOtros={estadisticas.totalReportadasPorOtros}
+            esHoraReporte={false}
+            theme={theme}
+            onStartVoiceMode={onStartVoiceMode}
+            tareasSeleccionadas={tareasSeleccionadas}
+            onSeleccionarTodas={seleccionarTodasTareas}
+            onDeseleccionarTodas={deseleccionarTodasTareas}
+            onExplicarTareasSeleccionadas={handleExplicarTareasSeleccionadas}
+            todosColaboradores={
+              assistantAnalysis.colaboradoresInvolucrados || []
+            }
             onRecargar={handleRecargarTareas}
+            isLoading={isLoading}
             currentUserEmail={currentUserEmail}
             mostrandoReportesDeOtros={mostrandoReportesDeOtros}
             estadisticasServidor={estadisticasServidor}
+            turno={turno}
+            onOpenReporteModal={handleAbrirModalReporte}
           />
-        )}
-      </div>
-    );
-  }
+        </div>
+      ) : (
+        <NoTasksMessage
+          theme={theme}
+          onRecargar={handleRecargarTareas}
+          currentUserEmail={currentUserEmail}
+          mostrandoReportesDeOtros={mostrandoReportesDeOtros}
+          estadisticasServidor={estadisticasServidor}
+        />
+      )}
+    </div>
+  );
+}
 
-  // ========== COMPONENTES AUXILIARES ==========
+// ========== ACTIVITY ITEM ==========
 
-  interface ActivityItemProps {
-    revision: any;
-    actividad: any;
-    index: number;
-    theme: "light" | "dark";
-    tareasSeleccionadas: Set<string>;
-    onToggleTarea: (tarea: any) => void;
-    todosColaboradores: string[];
-    tareasReportadasMap: Map<string, any>;
-    currentUserEmail: string;
-    mostrandoReportesDeOtros?: boolean;
-  }
+interface ActivityItemProps {
+  revision: any;
+  actividad: any;
+  index: number;
+  theme: "light" | "dark";
+  tareasSeleccionadas: Set<string>;
+  onToggleTarea: (tarea: any) => void;
+  todosColaboradores: string[];
+  tareasReportadasMap: Map<string, any>;
+  currentUserEmail: string;
+  mostrandoReportesDeOtros?: boolean;
+}
 
-  function ActivityItem({
-    revision,
-    actividad,
-    index,
-    theme,
-    tareasSeleccionadas,
-    onToggleTarea,
-    todosColaboradores,
-    tareasReportadasMap,
-    currentUserEmail,
-    mostrandoReportesDeOtros = false,
-  }: ActivityItemProps) {
-    const badgeColor = useMemo(() => {
-      const colors = [
-        "bg-orange-500/30 text-orange-400 border-orange-500/50",
-        "bg-amber-500/30 text-amber-400 border-amber-500/50",
-        "bg-yellow-500/30 text-yellow-400 border-yellow-500/50",
-      ];
-      return colors[index % 3];
-    }, [index]);
+function ActivityItem({
+  revision,
+  actividad,
+  index,
+  theme,
+  tareasSeleccionadas,
+  onToggleTarea,
+  todosColaboradores,
+  tareasReportadasMap,
+  currentUserEmail,
+  mostrandoReportesDeOtros = false,
+}: ActivityItemProps) {
+  const badgeColor = useMemo(() => {
+    const colors = [
+      "bg-orange-500/30 text-orange-400 border-orange-500/50",
+      "bg-amber-500/30 text-amber-400 border-amber-500/50",
+      "bg-yellow-500/30 text-yellow-400 border-yellow-500/50",
+    ];
+    return colors[index % 3];
+  }, [index]);
 
-    const colaboradoresReales =
-      revision.colaboradoresReales || revision.colaboradores || [];
-    const esActividadIndividual =
-      revision.esActividadIndividual || colaboradoresReales.length <= 1;
+  const colaboradoresReales =
+    revision.colaboradoresReales || revision.colaboradores || [];
+  const esActividadIndividual =
+    revision.esActividadIndividual || colaboradoresReales.length <= 1;
 
-    return (
+  return (
+    <div
+      className={`rounded-xl border overflow-hidden ${
+        theme === "dark"
+          ? "bg-[#252525] border-orange-900/30"
+          : "bg-white border-orange-100 shadow-sm"
+      }`}
+    >
+      {/* Header actividad */}
       <div
-        className={`p-2.5 rounded-lg border ${
-          theme === "dark"
-            ? "bg-gradient-to-br from-[#2a2a2a] to-[#1f1f1f] border-orange-900/30"
-            : "bg-gradient-to-br from-white to-orange-50/50 border-orange-200"
-        }`}
+        className={`px-3 py-3 ${theme === "dark" ? "border-b border-orange-900/20" : "border-b border-orange-50"}`}
       >
-        {/* Header de actividad - ESTILO TARDE */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeColor}`}
-            >
-              {index + 1}
-            </div>
-            <div className="max-w-[70%]">
+        <div className="flex items-start gap-3">
+          {/* Número */}
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border flex-shrink-0 ${badgeColor}`}
+          >
+            {index + 1}
+          </div>
+
+          {/* Info actividad */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 mb-1">
               <h5
-                className={`font-bold text-xs line-clamp-2 ${
-                  theme === "dark" ? "text-orange-200" : "text-orange-900"
-                }`}
+                className={`font-bold text-sm leading-tight ${theme === "dark" ? "text-orange-200" : "text-orange-900"}`}
               >
                 {actividad.titulo}
               </h5>
+              {/* Horario badge — siempre visible */}
+              <span
+                className={`text-xs font-semibold flex items-center gap-1 flex-shrink-0 px-2 py-0.5 rounded-lg ${
+                  theme === "dark"
+                    ? "bg-orange-900/40 text-orange-300"
+                    : "bg-orange-100 text-orange-700"
+                }`}
+              >
+                <Clock className="w-3 h-3" />
+                {actividad.horario}
+              </span>
+            </div>
+
+            {/* Usuario + tipo trabajo en fila */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-1">
               {currentUserEmail && (
                 <span
-                  className={`text-[9px] font-semibold ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
+                  className={`text-xs font-semibold ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
                 >
                   Tú: {currentUserEmail.split("@")[0]}
                 </span>
               )}
+              {/* Separador */}
+              {currentUserEmail && (
+                <span
+                  className={`text-xs ${theme === "dark" ? "text-gray-600" : "text-gray-300"}`}
+                >
+                  ·
+                </span>
+              )}
+
+              {esActividadIndividual ? (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+                    theme === "dark"
+                      ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                      : "bg-blue-50 text-blue-700 border border-blue-200"
+                  }`}
+                >
+                  <UserIcon className="w-3 h-3" />
+                  Individual
+                </span>
+              ) : (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+                    theme === "dark"
+                      ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                      : "bg-green-50 text-green-700 border border-green-200"
+                  }`}
+                >
+                  <UsersIcon className="w-3 h-3" />
+                  Equipo ({colaboradoresReales.length})
+                </span>
+              )}
+
               {mostrandoReportesDeOtros && (
                 <span
-                  className={`text-[9px] block mt-0.5 font-semibold ${theme === "dark" ? "text-orange-300" : "text-orange-600"}`}
+                  className={`text-xs font-semibold ${theme === "dark" ? "text-orange-400" : "text-orange-600"}`}
                 >
-                  Mostrando reportes de otros colaboradores
+                  Mostrando reportes de otros
                 </span>
               )}
             </div>
           </div>
-          <Badge
-            variant="outline"
-            className={`text-[10px] flex-shrink-0 font-semibold ${
-              theme === "dark"
-                ? "border-orange-700 text-orange-300 bg-orange-900/20"
-                : "border-orange-400 text-orange-700 bg-orange-100"
-            }`}
-          >
-            <Clock className="w-2.5 h-2.5 mr-0.5" />
-            {actividad.horario}
-          </Badge>
         </div>
+      </div>
 
-        {/* INDICADOR DE TIPO DE TRABAJO - ESTILO TARDE */}
-        <div className="ml-8 mb-2">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              {esActividadIndividual ? (
-                <Badge
-                  variant="secondary"
-                  className={`text-[9px] px-2 py-0.5 flex items-center gap-0.5 font-bold rounded-full ${
-                    theme === "dark"
-                      ? "bg-blue-500/30 text-blue-200 border border-blue-500/50"
-                      : "bg-blue-200 text-blue-800 border border-blue-400"
-                  }`}
-                >
-                  <UserIcon className="w-2.5 h-2.5" />
-                  Individual
-                  <span className="text-[8px] opacity-80 ml-0.5">(Solo tú)</span>
-                </Badge>
-              ) : (
-                <Badge
-                  variant="secondary"
-                  className={`text-[9px] px-2 py-0.5 flex items-center gap-0.5 font-bold rounded-full ${
-                    theme === "dark"
-                      ? "bg-green-500/30 text-green-200 border border-green-500/50"
-                      : "bg-green-200 text-green-800 border border-green-400"
-                  }`}
-                >
-                  <UsersIcon className="w-2.5 h-2.5" />
-                  Equipo ({colaboradoresReales.length})
-                  <span className="text-[8px] opacity-80 ml-0.5">
-                    {colaboradoresReales
-                      .slice(0, 2)
-                      .map((c: string) => c.split("@")[0])
-                      .join(", ")}
-                    {colaboradoresReales.length > 2 &&
-                      ` +${colaboradoresReales.length - 2}`}
-                  </span>
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* SECCIÓN ÚNICA: TAREAS YA REPORTADAS (TUS REPORTES + REPORTES DE OTROS) */}
+      {/* Body con tareas */}
+      <div className="p-3 space-y-3">
+        {/* Tareas reportadas */}
         {revision.tareasReportadas.length > 0 && (
-          <div className="mb-2.5">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Badge
-                variant="outline"
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  theme === "dark"
-                    ? "bg-green-500/20 text-green-300 border-green-500/50"
-                    : "bg-green-200 text-green-800 border-green-400"
-                }`}
-              >
-                <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
-                Reportadas ({revision.tareasReportadas.length})
-              </Badge>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
               <span
-                className={`text-[10px] font-medium ${
-                  theme === "dark" ? "text-gray-400" : "text-gray-600"
-                }`}
+                className={`text-xs font-bold ${theme === "dark" ? "text-green-400" : "text-green-700"}`}
               >
-                Estas tareas ya fueron reportadas
+                Reportadas ({revision.tareasReportadas.length})
               </span>
             </div>
-
-            <div className="ml-8 space-y-2">
+            <div className="space-y-2">
               {revision.tareasReportadas.map((tarea: any) => {
-                const reporteInfo = Array.from(tareasReportadasMap.values()).find(
-                  (r) => {
-                    const coincidePorId = r.pendienteId === tarea.id;
-                    const coincidePorNombre = r.nombreTarea === tarea.nombre;
-                    return coincidePorId || coincidePorNombre;
-                  },
+                const reporteInfo = Array.from(
+                  tareasReportadasMap.values(),
+                ).find(
+                  (r) =>
+                    r.pendienteId === tarea.id ||
+                    r.nombreTarea === tarea.nombre,
                 );
-
                 if (!reporteInfo) return null;
-
-                const esMiReporte = reporteInfo.esMiReporte || false;
-
                 return (
                   <TareaReportada
                     key={tarea.id}
                     tarea={tarea}
                     theme={theme}
                     reporteInfo={reporteInfo}
-                    esMiReporte={esMiReporte}
+                    esMiReporte={reporteInfo.esMiReporte || false}
                     currentUserEmail={currentUserEmail}
                   />
                 );
@@ -1062,44 +903,33 @@
           </div>
         )}
 
-        {/* SECCIÓN DE TAREAS PENDIENTES */}
+        {/* Tareas pendientes */}
         {revision.tareasNoReportadas.length > 0 && (
           <div>
-            <div className="flex items-center gap-1.5 mb-2">
-              <Badge
-                variant="outline"
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  theme === "dark"
-                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-                    : "bg-amber-200 text-amber-800 border-amber-400"
-                }`}
-              >
-                <Clock className="w-2.5 h-2.5 mr-0.5" />
-                Pendientes ({revision.tareasNoReportadas.length})
-              </Badge>
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
               <span
-                className={`text-[10px] font-medium ${
-                  theme === "dark" ? "text-gray-400" : "text-gray-600"
-                }`}
+                className={`text-xs font-bold ${theme === "dark" ? "text-amber-400" : "text-amber-700"}`}
               >
-                Selecciona para reportar
+                Pendientes ({revision.tareasNoReportadas.length})
+              </span>
+              <span
+                className={`text-xs ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+              >
+                · Toca para seleccionar
               </span>
             </div>
 
-            <div className="ml-8 space-y-2">
+            <div className="space-y-2">
               {revision.tareasNoReportadas.map((tarea: any) => {
                 const estaReportada = Array.from(
                   tareasReportadasMap.values(),
-                ).some((r) => {
-                  const coincidePorId = r.pendienteId === tarea.id;
-                  const coincidePorNombre = r.nombreTarea === tarea.nombre;
-                  return coincidePorId || coincidePorNombre;
-                });
-
-                if (estaReportada) {
-                  return null;
-                }
-
+                ).some(
+                  (r) =>
+                    r.pendienteId === tarea.id ||
+                    r.nombreTarea === tarea.nombre,
+                );
+                if (estaReportada) return null;
                 return (
                   <TareaPendiente
                     key={tarea.id}
@@ -1118,957 +948,779 @@
           </div>
         )}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  interface TareaReportadaProps {
-    tarea: any;
-    theme: "light" | "dark";
-    reporteInfo?: any;
-    esMiReporte: boolean;
-    currentUserEmail: string;
-  }
+// ========== TAREA REPORTADA ==========
 
-  function TareaReportada({
-    tarea,
-    theme,
-    reporteInfo,
-    esMiReporte,
-    currentUserEmail,
-  }: TareaReportadaProps) {
-    const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
+interface TareaReportadaProps {
+  tarea: any;
+  theme: "light" | "dark";
+  reporteInfo?: any;
+  esMiReporte: boolean;
+  currentUserEmail: string;
+}
 
-    if (!reporteInfo) return null;
+function TareaReportada({
+  tarea,
+  theme,
+  reporteInfo,
+  esMiReporte,
+  currentUserEmail,
+}: TareaReportadaProps) {
+  const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
+  if (!reporteInfo) return null;
 
-    const reportadoPor = reporteInfo.reportadoPor || "Usuario";
-    const emailReportado = reporteInfo.emailReportado || "";
+  const reportadoPor = reporteInfo.reportadoPor || "Usuario";
+  const emailReportado = reporteInfo.emailReportado || "";
+  const esRealmenteMiReporte =
+    esMiReporte &&
+    currentUserEmail &&
+    emailReportado.toLowerCase() === currentUserEmail.toLowerCase();
+  const nombreFormateado =
+    reportadoPor.charAt(0).toUpperCase() + reportadoPor.slice(1);
+  const fechaFormateada = new Date(
+    reporteInfo.fechaReporte || new Date(),
+  ).toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-    const esRealmenteMiReporte =
-      esMiReporte &&
-      currentUserEmail &&
-      emailReportado.toLowerCase() === currentUserEmail.toLowerCase();
+  return (
+    <div
+      className={`p-3 rounded-xl border ${
+        esRealmenteMiReporte
+          ? theme === "dark"
+            ? "bg-green-900/20 border-green-700/40"
+            : "bg-green-50 border-green-200"
+          : theme === "dark"
+            ? "bg-orange-900/20 border-orange-700/40"
+            : "bg-orange-50 border-orange-200"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {/* Ícono check */}
+        <div
+          className={`w-6 h-6 flex items-center justify-center rounded-full border flex-shrink-0 mt-0.5 ${
+            esRealmenteMiReporte
+              ? theme === "dark"
+                ? "bg-green-500/30 text-green-300 border-green-500/50"
+                : "bg-green-100 text-green-700 border-green-300"
+              : theme === "dark"
+                ? "bg-orange-500/30 text-orange-300 border-orange-500/50"
+                : "bg-orange-100 text-orange-700 border-orange-300"
+          }`}
+        >
+          <Check className="w-3.5 h-3.5" />
+        </div>
 
-    const nombreFormateado =
-      reportadoPor.charAt(0).toUpperCase() + reportadoPor.slice(1);
+        <div className="flex-1 min-w-0">
+          {/* Nombre */}
+          <p
+            className={`text-sm font-semibold leading-tight mb-1.5 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            {tarea.nombre}
+          </p>
 
-    const fechaReporte = reporteInfo.fechaReporte || new Date().toISOString();
-    const fechaFormateada = new Date(fechaReporte).toLocaleDateString("es-MX", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    return (
-      <div
-        className={`p-2.5 rounded-lg border ${
-          esRealmenteMiReporte
-            ? theme === "dark"
-              ? "bg-gradient-to-br from-green-900/30 to-emerald-900/30 border-green-500/50"
-              : "bg-gradient-to-br from-green-100 to-emerald-100 border-green-400"
-            : theme === "dark"
-              ? "bg-gradient-to-br from-orange-900/30 to-amber-900/30 border-orange-500/50"
-              : "bg-gradient-to-br from-orange-100 to-amber-100 border-orange-400"
-        }`}
-      >
-        <div className="flex items-start gap-2">
-          <div className="flex items-center mt-0.5">
-            <div
-              className={`w-5 h-5 flex items-center justify-center rounded-full border ${
+          {/* Badge + metadata en fila */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                 esRealmenteMiReporte
                   ? theme === "dark"
-                    ? "bg-green-500/40 text-green-300 border-green-400"
-                    : "bg-green-500/30 text-green-700 border-green-500"
+                    ? "bg-green-500/30 text-green-300"
+                    : "bg-green-100 text-green-800"
                   : theme === "dark"
-                    ? "bg-orange-500/40 text-orange-300 border-orange-400"
-                    : "bg-orange-500/30 text-orange-700 border-orange-500"
+                    ? "bg-orange-500/30 text-orange-300"
+                    : "bg-orange-100 text-orange-800"
               }`}
             >
-              <Check className="w-3 h-3 font-bold" />
-            </div>
+              {esRealmenteMiReporte ? (
+                <span className="flex items-center gap-1">
+                  <User className="w-3 h-3 inline" />
+                  Mi reporte
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <Users className="w-3 h-3 inline" />
+                  Por {nombreFormateado}
+                </span>
+              )}
+            </span>
+
+            <span
+              className={`text-xs flex items-center gap-1 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+            >
+              <Calendar className="w-3 h-3" />
+              {fechaFormateada}
+            </span>
+
+            {tarea.duracionMin > 0 && (
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-semibold ${theme === "dark" ? "text-blue-300 bg-blue-500/20" : "text-blue-700 bg-blue-100"}`}
+              >
+                {tarea.duracionMin} min
+              </span>
+            )}
           </div>
 
-          <div className="flex-1">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <span
-                  className={`text-xs font-semibold line-clamp-2 ${
-                    theme === "dark" ? "text-gray-200" : "text-gray-800"
-                  }`}
-                >
-                  {tarea.nombre}
-                </span>
-                <Badge
-                  className={`text-[9px] flex-shrink-0 font-bold rounded-full px-1.5 py-0.5 ${
-                    esRealmenteMiReporte
-                      ? theme === "dark"
-                        ? "bg-green-500/40 text-green-200 border-green-400"
-                        : "bg-green-500/30 text-green-800 border-green-500"
-                      : theme === "dark"
-                        ? "bg-orange-500/40 text-orange-200 border-orange-400"
-                        : "bg-orange-500/30 text-orange-800 border-orange-500"
-                  }`}
-                >
-                  {esRealmenteMiReporte ? (
-                    <>
-                      <User className="w-2.5 h-2.5 mr-0.5 inline" />
-                      MI REPORTE
-                    </>
-                  ) : (
-                    <>
-                      <Users className="w-2.5 h-2.5 mr-0.5 inline" />
-                      POR {nombreFormateado.toUpperCase()}
-                    </>
-                  )}
-                </Badge>
-              </div>
+          {/* Toggle descripción — botón grande para toque */}
+          {reporteInfo.texto && (
+            <div className="mt-2">
+              <button
+                onClick={() => setMostrarDescripcion(!mostrarDescripcion)}
+                className={`flex items-center gap-1.5 text-xs font-semibold py-1.5 px-0 rounded-md transition-colors min-h-[36px] ${
+                  theme === "dark"
+                    ? "text-gray-400 hover:text-gray-200"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                {mostrarDescripcion ? "Ocultar explicación" : "Ver explicación"}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${mostrarDescripcion ? "rotate-180" : ""}`}
+                />
+              </button>
 
-              <div className="flex items-center justify-between text-[10px]">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`flex items-center gap-0.5 font-medium ${
-                      theme === "dark" ? "text-gray-400" : "text-gray-600"
-                    }`}
-                  >
-                    <User className="w-2.5 h-2.5" />
+              {mostrarDescripcion && (
+                <div
+                  className={`mt-1.5 p-3 rounded-xl text-xs leading-relaxed ${
+                    theme === "dark"
+                      ? "bg-[#2a2a2a] text-gray-300 border border-[#3a3a3a]"
+                      : "bg-white text-gray-700 border border-gray-200"
+                  }`}
+                >
+                  <p className="font-semibold mb-1 text-xs">
                     {esRealmenteMiReporte
-                      ? "Yo reporté"
-                      : `Reportado por: ${nombreFormateado}`}
-                  </span>
-
-                  <span
-                    className={`flex items-center gap-0.5 font-medium ${
-                      theme === "dark" ? "text-gray-400" : "text-gray-600"
-                    }`}
-                  >
-                    <Calendar className="w-2.5 h-2.5" />
-                    {fechaFormateada}
-                  </span>
-                </div>
-
-                {tarea.duracionMin > 0 && (
-                  <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                      theme === "dark"
-                        ? "text-blue-300 bg-blue-500/30"
-                        : "text-blue-800 bg-blue-200"
-                    }`}
-                  >
-                    {tarea.duracionMin} min
-                  </span>
-                )}
-              </div>
-
-              {/* Botón para mostrar/ocultar descripción */}
-              {reporteInfo.texto && (
-                <div className="mt-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setMostrarDescripcion(!mostrarDescripcion)}
-                    className={`text-[10px] h-6 px-2 py-0.5 font-semibold rounded-md ${
-                      theme === "dark"
-                        ? "text-gray-300 hover:text-gray-200 hover:bg-[#3a3a3a]"
-                        : "text-gray-700 hover:text-gray-900 hover:bg-gray-200"
-                    }`}
-                  >
-                    <MessageSquare className="w-2.5 h-2.5 mr-0.5" />
-                    {mostrarDescripcion
-                      ? "Ocultar explicación"
-                      : "Ver explicación"}
-                    <ChevronDown
-                      className={`w-2.5 h-2.5 ml-0.5 transition-transform ${mostrarDescripcion ? "rotate-180" : ""}`}
-                    />
-                  </Button>
-
-                  {mostrarDescripcion && (
-                    <div
-                      className={`mt-1.5 p-2 rounded-md text-[10px] ${
-                        theme === "dark"
-                          ? "bg-[#2a2a2a] text-gray-300 border border-[#3a3a3a]"
-                          : "bg-white text-gray-700 border border-gray-300"
-                      }`}
+                      ? "Mi explicación:"
+                      : `Explicación de ${nombreFormateado}:`}
+                  </p>
+                  <p className="italic">"{reporteInfo.texto}"</p>
+                  {reporteInfo.encontradoEn && (
+                    <p
+                      className={`mt-2 pt-2 border-t text-[11px] ${theme === "dark" ? "border-[#3a3a3a] text-gray-500" : "border-gray-200 text-gray-500"}`}
                     >
-                      <div className="flex items-start gap-1 mb-1">
-                        <MessageSquare className="w-2.5 h-2.5 mt-0.5 flex-shrink-0" />
-                        <span className="font-bold">
-                          {esRealmenteMiReporte
-                            ? "Mi explicación:"
-                            : `Explicación de ${nombreFormateado}:`}
-                        </span>
-                      </div>
-                      <p className="italic whitespace-pre-wrap font-medium">
-                        "{reporteInfo.texto}"
-                      </p>
-                      {reporteInfo.encontradoEn && (
-                        <div
-                          className={`mt-1.5 pt-1.5 border-t ${theme === "dark" ? "border-[#3a3a3a]" : "border-gray-300"}`}
-                        >
-                          <span
-                            className={`text-[9px] font-semibold ${theme === "dark" ? "text-gray-500" : "text-gray-600"}`}
-                          >
-                            Fuente: {reporteInfo.encontradoEn}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                      Fuente: {reporteInfo.encontradoEn}
+                    </p>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ========== TAREA PENDIENTE ==========
+
+interface TareaPendienteProps {
+  tarea: any;
+  theme: "light" | "dark";
+  estaSeleccionada: boolean;
+  onToggleSeleccion: () => void;
+  esActividadIndividual: boolean;
+  colaboradoresReales: string[];
+}
+
+function TareaPendiente({
+  tarea,
+  theme,
+  estaSeleccionada,
+  onToggleSeleccion,
+  esActividadIndividual,
+  colaboradoresReales,
+}: TareaPendienteProps) {
+  const tieneDescripcion = !!(
+    tarea.descripcion &&
+    typeof tarea.descripcion === "string" &&
+    tarea.descripcion.trim().length > 0
+  );
+  const tieneQueHizo = !!(
+    tarea.queHizo &&
+    typeof tarea.queHizo === "string" &&
+    tarea.queHizo.trim().length > 0
+  );
+  const estaBloqueada = !tieneDescripcion;
+  const estaExplicada = tieneDescripcion && tieneQueHizo;
+
+  return (
+    <div
+      className={`p-3 rounded-xl border transition-all duration-150 ${
+        estaBloqueada
+          ? `opacity-50 ${
+              theme === "dark"
+                ? "bg-gray-900/50 border-gray-700"
+                : "bg-gray-50 border-gray-200"
+            }`
+          : estaSeleccionada
+            ? `border-orange-500 shadow-md ${theme === "dark" ? "bg-orange-900/20" : "bg-orange-50"}`
+            : theme === "dark"
+              ? "bg-[#222222] border-[#3a3a3a] active:bg-[#2a2a2a]"
+              : "bg-white border-gray-200 active:bg-orange-50/50"
+      }`}
+      onClick={() => {
+        if (!estaBloqueada) onToggleSeleccion();
+      }}
+      role={estaBloqueada ? undefined : "checkbox"}
+      aria-checked={estaSeleccionada}
+      aria-disabled={estaBloqueada}
+    >
+      <div className="flex items-start gap-3">
+        {/* Checkbox — mínimo 24x24 para touch */}
+        <div
+          className={`w-6 h-6 flex items-center justify-center border-2 rounded-lg transition-all flex-shrink-0 mt-0.5 ${
+            estaBloqueada
+              ? theme === "dark"
+                ? "border-red-700 bg-red-900/30"
+                : "border-red-300 bg-red-50"
+              : estaSeleccionada
+                ? "bg-orange-500 border-orange-500 shadow-sm"
+                : theme === "dark"
+                  ? "border-gray-600"
+                  : "border-gray-300"
+          }`}
+        >
+          {estaBloqueada ? (
+            <X className="w-3.5 h-3.5 text-red-500" />
+          ) : (
+            estaSeleccionada && <Check className="w-3.5 h-3.5 text-white" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Nombre tarea */}
+          <p
+            className={`text-sm font-semibold leading-tight mb-2 ${
+              estaBloqueada
+                ? theme === "dark"
+                  ? "text-gray-600"
+                  : "text-gray-400"
+                : theme === "dark"
+                  ? "text-gray-200"
+                  : "text-gray-800"
+            }`}
+          >
+            {tarea.nombre}
+          </p>
+
+          {/* Badges en fila con wrap */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            {estaBloqueada ? (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                <X className="w-3 h-3" />
+                Sin descripción
+              </span>
+            ) : estaExplicada ? (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-500 border border-green-500/30 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                Explicada
+              </span>
+            ) : (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30 flex items-center gap-1">
+                <Mic className="w-3 h-3" />
+                Pendiente
+              </span>
+            )}
+
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
+                estaBloqueada
+                  ? "opacity-50"
+                  : tarea.prioridad === "ALTA"
+                    ? "bg-red-500/20 text-red-400 border-red-500/30"
+                    : theme === "dark"
+                      ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                      : "bg-amber-100 text-amber-800 border-amber-300"
+              }`}
+            >
+              {tarea.prioridad}
+            </span>
+          </div>
+
+          {/* Descripción truncada */}
+          {tieneDescripcion && (
+            <p
+              className={`text-xs mb-1.5 leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+            >
+              <FileText className="w-3 h-3 inline mr-1 opacity-70" />
+              {tarea.descripcion.substring(0, 90)}
+              {tarea.descripcion.length > 90 && "…"}
+            </p>
+          )}
+
+          {tieneQueHizo && (
+            <p
+              className={`text-xs mb-1.5 leading-relaxed ${theme === "dark" ? "text-green-400" : "text-green-600"}`}
+            >
+              <CheckCircle2 className="w-3 h-3 inline mr-1" />
+              {tarea.queHizo.substring(0, 90)}
+              {tarea.queHizo.length > 90 && "…"}
+            </p>
+          )}
+
+          {/* Footer: colaboradores + tiempo */}
+          <div className="flex items-center justify-between gap-2 mt-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={`text-xs font-medium flex items-center gap-1 ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+              >
+                {esActividadIndividual ? (
+                  <>
+                    <User className="w-3 h-3" />
+                    Tú solo
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-3 h-3" />
+                    Equipo ({colaboradoresReales.length})
+                  </>
+                )}
+              </span>
+              {!esActividadIndividual &&
+                colaboradoresReales.slice(0, 2).map((c: string, i: number) => (
+                  <span
+                    key={i}
+                    className={`text-xs px-1.5 py-0.5 rounded-full ${estaBloqueada ? "opacity-50" : theme === "dark" ? "bg-[#2a2a2a] text-gray-400" : "bg-gray-100 text-gray-600"}`}
+                  >
+                    {c.split("@")[0]}
+                  </span>
+                ))}
+              {colaboradoresReales.length > 2 && (
+                <span
+                  className={`text-xs ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+                >
+                  +{colaboradoresReales.length - 2}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {tarea.duracionMin > 0 && (
+                <span
+                  className={`text-xs font-medium ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                >
+                  {tarea.duracionMin}m
+                </span>
+              )}
+              {tarea.diasPendiente > 0 && (
+                <span
+                  className={`text-xs font-semibold ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-amber-400" : "text-amber-600"}`}
+                >
+                  {tarea.diasPendiente}d
+                </span>
               )}
             </div>
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  interface TareaPendienteProps {
-    tarea: any;
-    theme: "light" | "dark";
-    estaSeleccionada: boolean;
-    onToggleSeleccion: () => void;
-    esActividadIndividual: boolean;
-    colaboradoresReales: string[];
-  }
+// ========== PIE PANEL ==========
 
-  function TareaPendiente({
-    tarea,
-    theme,
-    estaSeleccionada,
-    onToggleSeleccion,
-    esActividadIndividual,
-    colaboradoresReales,
-  }: TareaPendienteProps) {
-    // ✅ VALIDACIÓN MEJORADA: Verifica descripción
-    const tieneDescripcion = !!(
-      tarea.descripcion &&
-      typeof tarea.descripcion === "string" &&
-      tarea.descripcion.trim().length > 0
-    );
+interface PiePanelReporteProps {
+  totalTareasPendientes: number;
+  totalTareasReportadas?: number;
+  tareasReportadasPorMi?: number;
+  tareasReportadasPorOtros?: number;
+  esHoraReporte: boolean;
+  theme: "light" | "dark";
+  onOpenReport?: () => void;
+  onStartVoiceMode?: () => void;
+  todosColaboradores: string[];
+  tareasSeleccionadas: Set<string>;
+  onSeleccionarTodas: () => void;
+  onDeseleccionarTodas: () => void;
+  onExplicarTareasSeleccionadas: () => void;
+  onRecargar?: () => void;
+  isLoading?: boolean;
+  currentUserEmail?: string;
+  mostrandoReportesDeOtros?: boolean;
+  estadisticasServidor?: any;
+  turno?: "mañana" | "tarde";
+  onOpenReporteModal?: () => void;
+}
 
-    // ✅ VALIDACIÓN MEJORADA: Verifica queHizo
-    const tieneQueHizo = !!(
-      tarea.queHizo &&
-      typeof tarea.queHizo === "string" &&
-      tarea.queHizo.trim().length > 0
-    );
+function PiePanelReporte({
+  totalTareasPendientes,
+  totalTareasReportadas = 0,
+  tareasReportadasPorMi = 0,
+  tareasReportadasPorOtros = 0,
+  esHoraReporte,
+  theme,
+  onOpenReport,
+  onStartVoiceMode,
+  todosColaboradores,
+  tareasSeleccionadas,
+  onSeleccionarTodas,
+  onDeseleccionarTodas,
+  onExplicarTareasSeleccionadas,
+  onRecargar,
+  isLoading = false,
+  currentUserEmail = "",
+  mostrandoReportesDeOtros = false,
+  estadisticasServidor = null,
+  turno,
+  onOpenReporteModal,
+}: PiePanelReporteProps) {
+  const countSeleccionadas = tareasSeleccionadas?.size ?? 0;
+  const todasSeleccionadas =
+    countSeleccionadas === totalTareasPendientes && totalTareasPendientes > 0;
+  const esTrabajoEnEquipo = todosColaboradores.length > 1;
+  const esTurnoTarde = turno === "tarde";
+  const nombreUsuario = currentUserEmail.includes("@")
+    ? currentUserEmail.split("@")[0]
+    : currentUserEmail;
 
-    // ✅ LÓGICA DE ESTADO CORREGIDA
-    const estaBloqueada = !tieneDescripcion; // Solo bloquear si NO tiene descripción
-    const estaExplicada = tieneDescripcion && tieneQueHizo; // Verde: tiene ambos
-    const necesitaExplicacion = tieneDescripcion && !tieneQueHizo; // Amarillo: solo tiene descripción
+  const handleMainAction = () => {
+    if (esHoraReporte) {
+      onOpenReport?.();
+    } else {
+      if (countSeleccionadas === 0) return;
+      if (esTurnoTarde && onOpenReporteModal) onOpenReporteModal();
+      else onExplicarTareasSeleccionadas();
+    }
+  };
 
-    return (
-      <div
-        className={`p-2.5 rounded-lg border transition-all duration-200 ${
-          estaBloqueada
-            ? // BLOQUEADO (sin descripción) - NO se puede seleccionar
-              `opacity-50 cursor-not-allowed ${
-                theme === "dark"
-                  ? "bg-gradient-to-br from-gray-900/50 to-gray-800/50 border-gray-700"
-                  : "bg-gradient-to-br from-gray-100 to-gray-200 border-gray-400"
-              }`
-            : // SELECCIONABLE (con descripción) - SÍ se puede seleccionar
-              estaSeleccionada
-              ? "border-orange-500 bg-gradient-to-br from-orange-500/20 to-amber-500/20 shadow-md scale-[1.01] cursor-pointer"
-              : theme === "dark"
-                ? "bg-gradient-to-br from-[#1f1f1f] to-[#252527] border-[#3a3a3a] hover:bg-[#2a2a2a] hover:border-orange-700 cursor-pointer"
-                : "bg-gradient-to-br from-white to-gray-50 border-gray-300 hover:bg-orange-50/50 hover:border-orange-400 cursor-pointer"
-        }`}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!estaBloqueada) {
-            onToggleSeleccion();
-          }
-        }}
-        title={
-          estaBloqueada
-            ? "Esta tarea no tiene descripción del pendiente. No se puede reportar."
-            : estaExplicada
-              ? "Tarea completada con explicación."
-              : "Tarea con descripción. Click para seleccionar y explicar qué hiciste."
-        }
-      >
-        <div className="flex items-start gap-2">
-          <div className="flex items-center mt-0.5">
-            <div
-              className={`w-5 h-5 flex items-center justify-center border rounded-md transition-all ${
-                estaBloqueada
-                  ? // X roja para bloqueadas (sin descripción)
-                    theme === "dark"
-                    ? "border-red-700 bg-red-900/30"
-                    : "border-red-500 bg-red-100"
-                  : // Checkbox normal para seleccionables
-                    estaSeleccionada
-                    ? "bg-orange-500 border-orange-500 shadow-md"
-                    : theme === "dark"
-                      ? "border-gray-600 hover:border-orange-500"
-                      : "border-gray-400 hover:border-orange-500"
-              }`}
-            >
-              {estaBloqueada ? (
-                // X roja para bloqueadas
-                <X className="w-3 h-3 text-red-500 font-bold" />
+  return (
+    <div
+      className={`px-3 py-3 border-t ${
+        theme === "dark"
+          ? "border-orange-900/40 bg-[#1c1c1c]"
+          : "border-orange-100 bg-orange-50/50"
+      }`}
+    >
+      <div className="flex flex-col gap-3">
+        {/* Stats + tipo trabajo */}
+        <div className="flex items-start justify-between gap-3">
+          {/* Izquierda: stats */}
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={`text-xs font-bold ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+              >
+                {totalTareasPendientes} pendiente
+                {totalTareasPendientes !== 1 ? "s" : ""}
+              </span>
+
+              {mostrandoReportesDeOtros ? (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-800"}`}
+                >
+                  De otros: {tareasReportadasPorOtros}
+                </span>
               ) : (
-                estaSeleccionada && (
-                  // Check naranja para seleccionadas
-                  <Check className="w-3 h-3 text-white font-bold" />
+                totalTareasReportadas > 0 && (
+                  <div className="flex gap-1 flex-wrap">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-800"}`}
+                    >
+                      {tareasReportadasPorMi} mías
+                    </span>
+                    {tareasReportadasPorOtros > 0 && (
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-800"}`}
+                      >
+                        {tareasReportadasPorOtros} de otros
+                      </span>
+                    )}
+                  </div>
                 )
               )}
             </div>
-          </div>
 
-          <div className="flex-1">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <span
-                  className={`text-xs font-semibold line-clamp-2 ${
-                    estaBloqueada
-                      ? theme === "dark"
-                        ? "text-gray-500"
-                        : "text-gray-500"
-                      : theme === "dark"
-                        ? "text-gray-200"
-                        : "text-gray-800"
-                  }`}
-                >
-                  {tarea.nombre}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  {/* ✅ BADGES CORREGIDOS CON LÓGICA EXPLÍCITA */}
-                  {estaBloqueada ? (
-                    // ❌ SIN DESCRIPCIÓN - Rojo
-                    <Badge className="text-[9px] flex-shrink-0 font-bold rounded-full px-1.5 py-0.5 bg-red-500/30 text-red-400 border-red-500/50">
-                      <X className="w-2.5 h-2.5 mr-0.5 inline" />
-                      SIN DESCRIPCIÓN
-                    </Badge>
-                  ) : estaExplicada ? (
-                    // ✅ EXPLICADA (tiene descripción + queHizo) - Verde
-                    <Badge className="text-[9px] flex-shrink-0 font-bold rounded-full px-1.5 py-0.5 bg-green-500/30 text-green-400 border-green-500/50">
-                      <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 inline" />
-                      EXPLICADA
-                    </Badge>
-                  ) : (
-                    // ⚠️ PENDIENTE EXPLICAR (tiene descripción, sin queHizo) - Amarillo
-                    <Badge className="text-[9px] flex-shrink-0 font-bold rounded-full px-1.5 py-0.5 bg-amber-500/30 text-amber-400 border-amber-500/50">
-                      <Mic className="w-2.5 h-2.5 mr-0.5 inline" />
-                      PENDIENTE EXPLICAR
-                    </Badge>
-                  )}
-
-                  {/* Badge de prioridad */}
-                  <Badge
-                    variant={
-                      tarea.prioridad === "ALTA" ? "destructive" : "secondary"
-                    }
-                    className={`text-[9px] flex-shrink-0 font-bold rounded-full px-1.5 py-0.5 ${
-                      estaBloqueada
-                        ? "opacity-50"
-                        : tarea.prioridad === "ALTA"
-                          ? "bg-red-500/30 text-red-400 border-red-500/50"
-                          : theme === "dark"
-                            ? "bg-amber-500/30 text-amber-300 border-amber-500/50"
-                            : "bg-amber-300 text-amber-900 border-amber-500"
-                    }`}
-                  >
-                    {tarea.prioridad}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Mostrar descripción si existe */}
-              {tieneDescripcion && (
-                <div
-                  className={`text-[10px] italic ${
-                    theme === "dark" ? "text-gray-400" : "text-gray-600"
-                  }`}
-                >
-                  <FileText className="w-2.5 h-2.5 inline mr-0.5" />
-                  <strong>Descripción:</strong>{" "}
-                  {tarea.descripcion.substring(0, 100)}
-                  {tarea.descripcion.length > 100 && "..."}
-                </div>
-              )}
-
-              {/* Mostrar queHizo si existe */}
-              {tieneQueHizo && (
-                <div
-                  className={`text-[10px] italic ${
-                    theme === "dark" ? "text-green-400" : "text-green-600"
-                  }`}
-                >
-                  <CheckCircle2 className="w-2.5 h-2.5 inline mr-0.5" />
-                  <strong>Qué hiciste:</strong> {tarea.queHizo.substring(0, 100)}
-                  {tarea.queHizo.length > 100 && "..."}
-                </div>
-              )}
-
-              {/* Información de colaboradores y tiempo */}
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span
-                  className={`flex-shrink-0 font-semibold ${
-                    estaBloqueada
-                      ? "opacity-50"
-                      : theme === "dark"
-                        ? "text-gray-400"
-                        : "text-gray-600"
-                  }`}
-                >
-                  {esActividadIndividual ? (
-                    <>
-                      <User className="w-2.5 h-2.5 inline mr-0.5" />
-                      Tú solo
-                    </>
-                  ) : (
-                    <>
-                      <Users className="w-2.5 h-2.5 inline mr-0.5" />
-                      Equipo ({colaboradoresReales.length})
-                    </>
-                  )}
-                </span>
-
-                {!esActividadIndividual && colaboradoresReales.length > 0 && (
-                  <div className="flex flex-wrap gap-0.5">
-                    {colaboradoresReales
-                      .slice(0, 2)
-                      .map((colaborador: string, idx: number) => {
-                        const nombre = colaborador.split("@")[0];
-                        return (
-                          <span
-                            key={idx}
-                            className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${
-                              estaBloqueada
-                                ? "opacity-50"
-                                : theme === "dark"
-                                  ? "bg-[#2a2a2a] text-gray-400"
-                                  : "bg-gray-200 text-gray-700"
-                            }`}
-                          >
-                            {nombre}
-                          </span>
-                        );
-                      })}
-                    {colaboradoresReales.length > 2 && (
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
-                          estaBloqueada
-                            ? "opacity-50"
-                            : theme === "dark"
-                              ? "text-gray-400"
-                              : "text-gray-600"
-                        }`}
-                      >
-                        +{colaboradoresReales.length - 2}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Tiempo y estado */}
-              <div className="flex items-center justify-between text-[10px]">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`font-semibold ${
-                      estaBloqueada
-                        ? "opacity-50"
-                        : theme === "dark"
-                          ? "text-gray-400"
-                          : "text-gray-600"
-                    }`}
-                  >
-                    {tarea.duracionMin} min
-                  </span>
-                  {tarea.diasPendiente > 0 && (
-                    <span
-                      className={`font-semibold ${
-                        estaBloqueada
-                          ? "opacity-50"
-                          : theme === "dark"
-                            ? "text-amber-300"
-                            : "text-amber-700"
-                      }`}
-                    >
-                      {tarea.diasPendiente}d pendiente
-                    </span>
-                  )}
-                </div>
-
-                <span
-                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                    estaBloqueada
-                      ? theme === "dark"
-                        ? "bg-gray-700/50 text-gray-500"
-                        : "bg-gray-300 text-gray-600"
-                      : estaExplicada
-                        ? theme === "dark"
-                          ? "bg-green-500/40 text-green-200"
-                          : "bg-green-300 text-green-900"
-                        : theme === "dark"
-                          ? "bg-amber-500/40 text-amber-200"
-                          : "bg-amber-300 text-amber-900"
-                  }`}
-                >
-                  <Clock className="w-2.5 h-2.5 inline mr-0.5" />
-                  {estaBloqueada
-                    ? "BLOQUEADA"
-                    : estaExplicada
-                      ? "EXPLICADA"
-                      : "POR EXPLICAR"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  interface PiePanelReporteProps {
-    totalTareasPendientes: number;
-    totalTareasReportadas?: number;
-    tareasReportadasPorMi?: number;
-    tareasReportadasPorOtros?: number;
-    esHoraReporte: boolean;
-    theme: "light" | "dark";
-    onOpenReport?: () => void;
-    onStartVoiceMode?: () => void;
-    todosColaboradores: string[];
-    tareasSeleccionadas: Set<string>;
-    onSeleccionarTodas: () => void;
-    onDeseleccionarTodas: () => void;
-    onExplicarTareasSeleccionadas: () => void;
-    onRecargar?: () => void;
-    isLoading?: boolean;
-    currentUserEmail?: string;
-    mostrandoReportesDeOtros?: boolean;
-    estadisticasServidor?: any;
-    turno?: "mañana" | "tarde";
-    onOpenReporteModal?: () => void;
-  }
-
-  function PiePanelReporte({
-    totalTareasPendientes,
-    totalTareasReportadas = 0,
-    tareasReportadasPorMi = 0,
-    tareasReportadasPorOtros = 0,
-    esHoraReporte,
-    theme,
-    onOpenReport,
-    onStartVoiceMode,
-    todosColaboradores,
-    tareasSeleccionadas,
-    onSeleccionarTodas,
-    onDeseleccionarTodas,
-    onExplicarTareasSeleccionadas,
-    onRecargar,
-    isLoading = false,
-    currentUserEmail = "",
-    mostrandoReportesDeOtros = false,
-    estadisticasServidor = null,
-    turno,
-    onOpenReporteModal,
-  }: PiePanelReporteProps) {
-    const countSeleccionadas = tareasSeleccionadas ? tareasSeleccionadas.size : 0;
-    const todasSeleccionadas = countSeleccionadas === totalTareasPendientes;
-    const esTrabajoEnEquipo = todosColaboradores.length > 1;
-    const nombreUsuario = currentUserEmail.includes("@")
-      ? currentUserEmail.split("@")[0]
-      : currentUserEmail;
-
-    const esTurnoTarde = turno === "tarde";
-
-    const handleMainAction = () => {
-      if (esHoraReporte) {
-        onOpenReport?.();
-      } else {
-        if (countSeleccionadas === 0) {
-          console.warn(
-            "Por favor selecciona al menos una tarea pendiente para explicar",
-          );
-          return;
-        }
-        if (esTurnoTarde && onOpenReporteModal) {
-          onOpenReporteModal();
-        } else {
-          onExplicarTareasSeleccionadas();
-        }
-      }
-    };
-
-    const handleContinuarChat = () => {
-      if (onStartVoiceMode) {
-        onStartVoiceMode();
-      } else {
-        console.warn("onStartVoiceMode no está definido");
-      }
-    };
-
-    return (
-      <div
-        className={`p-2.5 border-t ${
-          theme === "dark"
-            ? "border-orange-900/50 bg-gradient-to-r from-[#2a2a2a] to-[#1f1f1f]"
-            : "border-orange-300 bg-gradient-to-r from-orange-50 to-amber-50"
-        }`}
-      >
-        <div className="flex flex-col gap-2">
-          <div className="flex justify-between items-center text-[10px]">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`font-bold ${theme === "dark" ? "text-gray-400" : "text-gray-700"}`}
-                >
-                  {totalTareasPendientes} pendiente
-                  {totalTareasPendientes !== 1 ? "s" : ""}
-                </span>
-                {mostrandoReportesDeOtros ? (
-                  <div className="flex gap-1">
-                    <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                        theme === "dark"
-                          ? "bg-orange-500/30 text-orange-200"
-                          : "bg-orange-300 text-orange-900"
-                      }`}
-                    >
-                      De otros: {tareasReportadasPorOtros}
-                    </span>
-                    {estadisticasServidor?.tareasUsuario !== undefined && (
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                          theme === "dark"
-                            ? "bg-gray-700 text-gray-300"
-                            : "bg-gray-300 text-gray-800"
-                        }`}
-                      >
-                        Tú: {estadisticasServidor.tareasUsuario}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  totalTareasReportadas > 0 && (
-                    <div className="flex gap-1">
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                          theme === "dark"
-                            ? "bg-green-500/30 text-green-200"
-                            : "bg-green-300 text-green-900"
-                        }`}
-                      >
-                        {tareasReportadasPorMi} mías
-                      </span>
-                      {tareasReportadasPorOtros > 0 && (
-                        <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                            theme === "dark"
-                              ? "bg-orange-500/30 text-orange-200"
-                              : "bg-orange-300 text-orange-900"
-                          }`}
-                        >
-                          {tareasReportadasPorOtros} de otros
-                        </span>
-                      )}
-                    </div>
-                  )
-                )}
-              </div>
-
-              {!esHoraReporte && countSeleccionadas > 0 && (
-                <span
-                  className={`text-[9px] flex items-center gap-0.5 font-bold ${
-                    theme === "dark" ? "text-orange-300" : "text-orange-700"
-                  }`}
-                >
-                  <CheckSquare className="w-2.5 h-2.5" />
-                  {countSeleccionadas} seleccionada
-                  {countSeleccionadas !== 1 ? "s" : ""}
-                </span>
-              )}
-
-              {currentUserEmail && (
-                <span
-                  className={`text-[9px] font-semibold ${theme === "dark" ? "text-gray-500" : "text-gray-600"}`}
-                >
-                  {nombreUsuario}
-                  {mostrandoReportesDeOtros && " (No tienes reportes propios)"}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {mostrandoReportesDeOtros ? (
-                <Badge
-                  variant="outline"
-                  className={`text-[9px] px-2 py-0.5 flex items-center gap-0.5 font-bold rounded-full ${
-                    theme === "dark"
-                      ? "bg-orange-500/20 text-orange-200 border-orange-500/50"
-                      : "bg-orange-200 text-orange-900 border-orange-400"
-                  }`}
-                >
-                  <UsersIcon className="w-2.5 h-2.5" />
-                  Trabajo colaborativo
-                </Badge>
-              ) : esTrabajoEnEquipo ? (
-                <Badge
-                  variant="outline"
-                  className={`text-[9px] px-2 py-0.5 flex items-center gap-0.5 font-bold rounded-full ${
-                    theme === "dark"
-                      ? "bg-green-500/20 text-green-200 border-green-500/50"
-                      : "bg-green-200 text-green-900 border-green-400"
-                  }`}
-                >
-                  <UsersIcon className="w-2.5 h-2.5" />
-                  Equipo ({todosColaboradores.length})
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className={`text-[9px] px-2 py-0.5 flex items-center gap-0.5 font-bold rounded-full ${
-                    theme === "dark"
-                      ? "bg-blue-500/20 text-blue-200 border-blue-500/50"
-                      : "bg-blue-200 text-blue-900 border-blue-400"
-                  }`}
-                >
-                  <UserIcon className="w-2.5 h-2.5" />
-                  Individual
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          {!esHoraReporte && totalTareasPendientes > 0 && (
-            <div className="flex gap-1.5">
-              <Button
-                onClick={
-                  todasSeleccionadas ? onDeseleccionarTodas : onSeleccionarTodas
-                }
+            {countSeleccionadas > 0 && !esHoraReporte && (
+              <span
+                className={`text-xs flex items-center gap-1 font-bold ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
               >
-                <CheckSquare className="w-3 h-3 mr-1" />
-                {todasSeleccionadas
-                  ? "Deseleccionar todas"
-                  : "Seleccionar con descripción"}
-              </Button>
-              {onRecargar && (
-                <Button
-                  onClick={onRecargar}
-                  size="sm"
-                  variant="ghost"
-                  disabled={isLoading}
-                  className="h-7 w-7 p-0 hover:bg-orange-500/20"
-                  title="Recargar tareas reportadas"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 text-orange-500 ${isLoading ? "animate-spin" : ""}`}
-                  />
-                </Button>
-              )}
-            </div>
-          )}
+                <CheckSquare className="w-3.5 h-3.5" />
+                {countSeleccionadas} seleccionada
+                {countSeleccionadas !== 1 ? "s" : ""}
+              </span>
+            )}
 
-          <div className="flex gap-1.5">
-            <Button
-              onClick={handleMainAction}
-              size="sm"
-              className={`flex-1 text-white text-[11px] h-8 font-bold rounded-lg shadow-md ${
-                countSeleccionadas === 0 && !esHoraReporte
-                  ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600"
-              }`}
-              disabled={!esHoraReporte && countSeleccionadas === 0}
-            >
-              {esHoraReporte ? (
-                <>
-                  <ClipboardList className="w-3.5 h-3.5 mr-1" />
-                  Iniciar Reporte
-                </>
-              ) : esTurnoTarde ? (
-                <>
-                  <Mic className="w-3.5 h-3.5 mr-1" />
-                  Explicar Tareas{" "}
-                  {countSeleccionadas > 0 && `(${countSeleccionadas})`}
-                </>
-              ) : (
-                <>
-                  <Mic className="w-3.5 h-3.5 mr-1" />
-                  Reportar Tareas{" "}
-                  {countSeleccionadas > 0 && `(${countSeleccionadas})`}
-                </>
-              )}
-            </Button>
+            {currentUserEmail && (
+              <span
+                className={`text-xs ${theme === "dark" ? "text-gray-600" : "text-gray-400"}`}
+              >
+                {nombreUsuario}
+                {mostrandoReportesDeOtros && " · Sin reportes propios"}
+              </span>
+            )}
+          </div>
+
+          {/* Derecha: badge tipo */}
+          <div className="flex-shrink-0">
+            {mostrandoReportesDeOtros ? (
+              <span
+                className={`text-xs px-2.5 py-1 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-orange-500/20 text-orange-300 border border-orange-500/30" : "bg-orange-100 text-orange-800 border border-orange-200"}`}
+              >
+                <UsersIcon className="w-3 h-3" />
+                Colaborativo
+              </span>
+            ) : esTrabajoEnEquipo ? (
+              <span
+                className={`text-xs px-2.5 py-1 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-green-500/20 text-green-300 border border-green-500/30" : "bg-green-100 text-green-800 border border-green-200"}`}
+              >
+                <UsersIcon className="w-3 h-3" />
+                Equipo ({todosColaboradores.length})
+              </span>
+            ) : (
+              <span
+                className={`text-xs px-2.5 py-1 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" : "bg-blue-100 text-blue-800 border border-blue-200"}`}
+              >
+                <UserIcon className="w-3 h-3" />
+                Individual
+              </span>
+            )}
           </div>
         </div>
-      </div>
-    );
-  }
 
-  interface NoTasksMessageProps {
-    theme: "light" | "dark";
-    onRecargar?: () => void;
-    currentUserEmail?: string;
-    mostrandoReportesDeOtros?: boolean;
-    estadisticasServidor?: any;
-  }
+        {/* Seleccionar todas — botón touch-friendly */}
+        {!esHoraReporte && totalTareasPendientes > 0 && (
+          <div className="flex gap-2">
+            <button
+              onClick={
+                todasSeleccionadas ? onDeseleccionarTodas : onSeleccionarTodas
+              }
+              className={`flex-1 h-10 flex items-center justify-center gap-2 text-xs font-semibold rounded-xl border transition-colors ${
+                theme === "dark"
+                  ? "border-orange-700/50 text-orange-300 hover:bg-orange-900/30 active:bg-orange-900/50"
+                  : "border-orange-300 text-orange-700 hover:bg-orange-100 active:bg-orange-200"
+              }`}
+            >
+              <CheckSquare className="w-4 h-4" />
+              {todasSeleccionadas
+                ? "Deseleccionar todas"
+                : "Seleccionar con descripción"}
+            </button>
 
-  export function NoTasksMessage({
-    theme,
-    onRecargar,
-    currentUserEmail,
-    mostrandoReportesDeOtros = false,
-    estadisticasServidor = null,
-  }: NoTasksMessageProps) {
-    const nombreUsuario = currentUserEmail?.includes("@")
-      ? currentUserEmail.split("@")[0]
-      : "Usuario";
+            {onRecargar && (
+              <button
+                onClick={onRecargar}
+                disabled={isLoading}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-colors flex-shrink-0 ${
+                  theme === "dark"
+                    ? "border-orange-700/50 text-orange-400 hover:bg-orange-900/30"
+                    : "border-orange-300 text-orange-600 hover:bg-orange-100"
+                }`}
+                title="Recargar"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                />
+              </button>
+            )}
+          </div>
+        )}
 
-    return (
-      <div className="animate-in slide-in-from-bottom-2 duration-300 flex justify-center">
-        <div
-          className={`p-4 rounded-lg border text-center shadow-md ${
-            theme === "dark"
-              ? "bg-gradient-to-br from-[#1a1a1a] to-[#252527] border-orange-900/50"
-              : "bg-gradient-to-br from-white to-orange-50 border-orange-300"
+        {/* Botón principal — altura 48px (mínimo recomendado para móvil) */}
+        <button
+          onClick={handleMainAction}
+          disabled={!esHoraReporte && countSeleccionadas === 0}
+          className={`w-full h-12 flex items-center justify-center gap-2 text-sm font-bold text-white rounded-xl shadow-md transition-all active:scale-[0.98] ${
+            countSeleccionadas === 0 && !esHoraReporte
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-gradient-to-r from-orange-500 to-amber-500 active:from-orange-600 active:to-amber-600 shadow-orange-500/30"
           }`}
         >
-          {mostrandoReportesDeOtros && estadisticasServidor ? (
+          {esHoraReporte ? (
             <>
-              <Users className="w-8 h-8 text-orange-500 mx-auto mb-2" />
-              <h4
-                className={`font-bold mb-1 text-sm flex items-center justify-center gap-1.5 ${
-                  theme === "dark" ? "text-orange-300" : "text-orange-800"
-                }`}
-              >
-                <Sunset className="w-4 h-4" />
-                Reportes del equipo
-              </h4>
-              <p
-                className={`text-xs mb-2 font-medium ${
-                  theme === "dark" ? "text-gray-400" : "text-gray-600"
-                }`}
-              >
-                {nombreUsuario}, no tienes tareas reportadas, pero hay{" "}
-                {estadisticasServidor.tareasColaboradores || 0}
-                reporte{estadisticasServidor.tareasColaboradores !== 1
-                  ? "s"
-                  : ""}{" "}
-                de otros colaboradores.
-              </p>
-              <div
-                className={`text-[10px] p-2 rounded-lg mb-2 ${
-                  theme === "dark"
-                    ? "bg-orange-900/30 text-orange-200 border border-orange-700/50"
-                    : "bg-orange-100 text-orange-800 border border-orange-300"
-                }`}
-              >
-                {estadisticasServidor.mensaje || "Trabajo colaborativo"}
-              </div>
+              <ClipboardList className="w-4 h-4" />
+              Iniciar Reporte
+            </>
+          ) : esTurnoTarde ? (
+            <>
+              <Mic className="w-4 h-4" />
+              Explicar Tareas
+              {countSeleccionadas > 0 && ` (${countSeleccionadas})`}
             </>
           ) : (
             <>
-              <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
-              <h4
-                className={`font-bold mb-1 text-sm ${
-                  theme === "dark" ? "text-gray-200" : "text-gray-800"
-                }`}
-              >
-                Todas las tareas reportadas
-              </h4>
-              <p
-                className={`text-xs mb-2 font-medium ${
-                  theme === "dark" ? "text-gray-500" : "text-gray-600"
-                }`}
-              >
-                {nombreUsuario}, no hay tareas pendientes por reportar.
-              </p>
+              <Mic className="w-4 h-4" />
+              Reportar Tareas
+              {countSeleccionadas > 0 && ` (${countSeleccionadas})`}
             </>
           )}
-          {onRecargar && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onRecargar}
-              className="text-[10px] font-bold bg-transparent hover:bg-orange-500/20 rounded-lg h-7"
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ========== NO TASKS MESSAGE ==========
+
+interface NoTasksMessageProps {
+  theme: "light" | "dark";
+  onRecargar?: () => void;
+  currentUserEmail?: string;
+  mostrandoReportesDeOtros?: boolean;
+  estadisticasServidor?: any;
+}
+
+export function NoTasksMessage({
+  theme,
+  onRecargar,
+  currentUserEmail,
+  mostrandoReportesDeOtros = false,
+  estadisticasServidor = null,
+}: NoTasksMessageProps) {
+  const nombreUsuario = currentUserEmail?.includes("@")
+    ? currentUserEmail.split("@")[0]
+    : "Usuario";
+
+  return (
+    <div className="animate-in slide-in-from-bottom-2 duration-300 px-1">
+      <div
+        className={`p-6 rounded-xl border text-center shadow-sm ${
+          theme === "dark"
+            ? "bg-[#1e1e1e] border-orange-900/40"
+            : "bg-white border-orange-100"
+        }`}
+      >
+        {mostrandoReportesDeOtros && estadisticasServidor ? (
+          <>
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${theme === "dark" ? "bg-orange-500/20" : "bg-orange-100"}`}
             >
-              <RefreshCw className="w-2.5 h-2.5 mr-1" />
-              Recargar tareas
-            </Button>
-          )}
+              <Users className="w-6 h-6 text-orange-500" />
+            </div>
+            <h4
+              className={`font-bold mb-2 text-base ${theme === "dark" ? "text-orange-300" : "text-orange-800"}`}
+            >
+              Reportes del equipo
+            </h4>
+            <p
+              className={`text-sm mb-3 leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+            >
+              {nombreUsuario}, no tienes tareas propias, pero hay{" "}
+              <strong>{estadisticasServidor.tareasColaboradores || 0}</strong>{" "}
+              reporte{estadisticasServidor.tareasColaboradores !== 1 ? "s" : ""}{" "}
+              de otros colaboradores.
+            </p>
+            <div
+              className={`text-xs p-3 rounded-xl mb-3 ${theme === "dark" ? "bg-orange-900/30 text-orange-200 border border-orange-700/40" : "bg-orange-50 text-orange-800 border border-orange-200"}`}
+            >
+              {estadisticasServidor.mensaje || "Trabajo colaborativo"}
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${theme === "dark" ? "bg-green-500/20" : "bg-green-100"}`}
+            >
+              <CheckCircle2 className="w-6 h-6 text-green-500" />
+            </div>
+            <h4
+              className={`font-bold mb-2 text-base ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            >
+              Todas las tareas reportadas
+            </h4>
+            <p
+              className={`text-sm mb-3 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+            >
+              {nombreUsuario}, no hay tareas pendientes.
+            </p>
+          </>
+        )}
+        {onRecargar && (
+          <button
+            onClick={onRecargar}
+            className={`inline-flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl border transition-colors min-h-[40px] ${
+              theme === "dark"
+                ? "border-orange-700/50 text-orange-400 hover:bg-orange-900/30"
+                : "border-orange-300 text-orange-700 hover:bg-orange-50"
+            }`}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Recargar tareas
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ========== TYPING INDICATOR ==========
+
+interface TypingIndicatorProps {
+  theme: "light" | "dark";
+}
+
+export function TypingIndicator({ theme }: TypingIndicatorProps) {
+  return (
+    <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
+      <div
+        className={`rounded-xl px-4 py-3 flex items-center gap-2 shadow-md ${
+          theme === "dark"
+            ? "bg-gradient-to-r from-orange-900/50 to-amber-900/50 text-white"
+            : "bg-gradient-to-r from-orange-100 to-amber-100 text-gray-900"
+        }`}
+      >
+        <Sunset className="w-4 h-4 text-orange-500 flex-shrink-0" />
+        <div className="flex gap-1">
+          {[0, 150, 300].map((delay) => (
+            <div
+              key={delay}
+              className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
+              style={{ animationDelay: `${delay}ms` }}
+            />
+          ))}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  interface TypingIndicatorProps {
-    theme: "light" | "dark";
-  }
+// ========== TASKS PANEL ==========
 
-  export function TypingIndicator({ theme }: TypingIndicatorProps) {
-    return (
-      <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
-        <div
-          className={`rounded-lg px-3 py-2 flex items-center gap-1.5 shadow-md ${
-            theme === "dark"
-              ? "bg-gradient-to-r from-orange-900/50 to-amber-900/50 text-white"
-              : "bg-gradient-to-r from-orange-100 to-amber-100 text-gray-900"
-          }`}
-        >
-          <Sunset className="w-3 h-3 text-orange-500" />
-          <div className="flex gap-0.5">
-            {[0, 150, 300].map((delay) => (
-              <div
-                key={delay}
-                className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce"
-                style={{ animationDelay: `${delay}ms` }}
-              />
-            ))}
-          </div>
-        </div>
+export function TasksPanel({
+  actividadesConTareasPendientes = [],
+  totalTareasPendientes = 0,
+  esHoraReporte = false,
+  theme = "light",
+  assistantAnalysis = null,
+  onOpenReport,
+  onStartVoiceMode,
+  tareasSeleccionadas = new Set(),
+  onToggleTarea = () => {},
+  onSeleccionarTodas = () => {},
+  onDeseleccionarTodas = () => {},
+  onExplicarTareasSeleccionadas = () => {},
+}: any) {
+  const todosColaboradores = useMemo(() => {
+    if (!assistantAnalysis?.colaboradoresInvolucrados) return [];
+    return assistantAnalysis.colaboradoresInvolucrados;
+  }, [assistantAnalysis]);
+
+  return (
+    <div className="animate-in slide-in-from-bottom-2 duration-300">
+      <div
+        className={`w-full rounded-xl border overflow-hidden shadow-md ${
+          theme === "dark"
+            ? "bg-[#1a1a1a] border-orange-900/50"
+            : "bg-white border-orange-200"
+        }`}
+      >
+        <PiePanelReporte
+          totalTareasPendientes={totalTareasPendientes}
+          esHoraReporte={esHoraReporte}
+          theme={theme}
+          onOpenReport={onOpenReport}
+          onStartVoiceMode={onStartVoiceMode}
+          tareasSeleccionadas={tareasSeleccionadas}
+          onSeleccionarTodas={onSeleccionarTodas}
+          onDeseleccionarTodas={onDeseleccionarTodas}
+          onExplicarTareasSeleccionadas={onExplicarTareasSeleccionadas}
+          todosColaboradores={todosColaboradores}
+        />
       </div>
-    );
-  }
-
-  // TasksPanel para exportar
-  export function TasksPanel({
-    actividadesConTareasPendientes = [],
-    totalTareasPendientes = 0,
-    esHoraReporte = false,
-    theme = "light",
-    assistantAnalysis = null,
-    onOpenReport,
-    onStartVoiceMode,
-    tareasSeleccionadas = new Set(),
-    onToggleTarea = () => {},
-    onSeleccionarTodas = () => {},
-    onDeseleccionarTodas = () => {},
-    onExplicarTareasSeleccionadas = () => {},
-  }: any) {
-    const todosColaboradores = useMemo(() => {
-      if (!assistantAnalysis?.colaboradoresInvolucrados) return [];
-      return assistantAnalysis.colaboradoresInvolucrados;
-    }, [assistantAnalysis]);
-
-    return (
-      <div className="animate-in slide-in-from-bottom-2 duration-300 space-y-2.5">
-        <div
-          className={`w-full max-w-xl rounded-lg border overflow-hidden shadow-md ${
-            theme === "dark"
-              ? "bg-gradient-to-b from-[#1a1a1a] to-[#252527] border-orange-900/50"
-              : "bg-gradient-to-b from-white to-orange-50/30 border-orange-200"
-          }`}
-        >
-          <PiePanelReporte
-            totalTareasPendientes={totalTareasPendientes}
-            esHoraReporte={esHoraReporte}
-            theme={theme}
-            onOpenReport={onOpenReport}
-            onStartVoiceMode={onStartVoiceMode}
-            tareasSeleccionadas={tareasSeleccionadas}
-            onSeleccionarTodas={onSeleccionarTodas}
-            onDeseleccionarTodas={onDeseleccionarTodas}
-            onExplicarTareasSeleccionadas={onExplicarTareasSeleccionadas}
-            todosColaboradores={todosColaboradores}
-          />
-        </div>
-      </div>
-    );
-  }
+    </div>
+  );
+}
