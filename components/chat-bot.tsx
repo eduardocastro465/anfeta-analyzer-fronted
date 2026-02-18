@@ -167,6 +167,9 @@ export function ChatBot({
 
   // ==================== FUNCTIONS ====================
   function getTurnoActual(): "mañana" | "tarde" {
+    // return "mañana";
+    return "tarde";
+
     const esTurnoMañana = isReportTime(
       horaInicioReporteMañana,
       horaFinReporteMañana,
