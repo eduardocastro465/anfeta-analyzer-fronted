@@ -10,8 +10,8 @@ import {
   sendPendienteValidarYGuardar,
   chatGeneralIA,
   consultarIAProyecto,
-  obtenerCambiosTareas,
 } from "@/lib/api";
+import { wsService } from "@/lib/websocket.service"; // ✅ NUEVO: Servicio WebSocket
 import type {
   Message,
   AssistantAnalysis,
@@ -38,6 +38,7 @@ import {
   Brain,
   Check,
   Clock,
+  Users, // ✅ NUEVO: Icono para colaboradores
 } from "lucide-react";
 import { getDisplayName } from "@/util/utils-chat";
 import { useVoiceSynthesis } from "@/components/hooks/use-voice-synthesis";
@@ -126,9 +127,11 @@ export function ChatBot({
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [assistantAnalysis, setAssistantAnalysis] =
-    useState<AssistantAnalysis | null>(null);
+  const [assistantAnalysis, setAssistantAnalysis] = useState<AssistantAnalysis | null>(null);
   const [isLoadingIA, setIsLoadingIA] = useState(false);
+  
+  // ✅ NUEVO: Estado para colaboradores únicos
+  const [colaboradoresUnicos, setColaboradoresUnicos] = useState<string[]>([]);
 
   // ==================== STATE: DIALOGS ====================
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -153,17 +156,14 @@ export function ChatBot({
 
   // ==================== STATE: TASKS ====================
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [filteredActivitiesForVoice, setFilteredActivitiesForVoice] = useState<
-    any[]
-  >([]);
+  const [filteredActivitiesForVoice, setFilteredActivitiesForVoice] = useState<any[]>([]);
 
   // ==================== STATE: TURNO ACTUAL ====================
   const [turnoActual, setTurnoActual] = useState<"mañana" | "tarde">(() =>
     getTurnoActual(),
   );
 
-  const canUserType =
-    step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
+  const canUserType = step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
 
   // ==================== FUNCTIONS ====================
   function getTurnoActual(): "mañana" | "tarde" {
@@ -249,35 +249,157 @@ export function ChatBot({
     addMessage(type, content, undefined, isWide);
   };
 
-  // ==================== ✅ FUNCIÓN: ACTUALIZAR PANEL DE TURNO ====================
-  const actualizarPanelTurno = (nuevoTurno: "mañana" | "tarde") => {
-    if (!assistantAnalysis) return;
+  // ✅ NUEVO: Función para extraer colaboradores de los datos
+  const extraerColaboradores = (data: any): string[] => {
+    const colaboradores = [
+      ...(data.colaboradoresInvolucrados || []),
+      ...(data.data?.actividades?.flatMap((a: any) => a.colaboradores || []) || []),
+      ...(data.data?.revisionesPorActividad?.flatMap((rev: any) => rev.colaboradores || []) || [])
+    ];
+    return [...new Set(colaboradores)].filter(Boolean);
+  };
+
+  // ✅ NUEVO: Función para actualizar datos desde WebSocket
+  const actualizarDatosPorWebSocket = async () => {
+    try {
+      const requestBody = {
+        email: colaborador.email,
+        showAll: true,
+      };
+
+      const data = await obtenerActividadesConRevisiones(requestBody);
+      
+      console.log("🚀 ~ WebSocket ~ datos actualizados:", data);
+
+      // ✅ Extraer colaboradores
+      const colaboradores = extraerColaboradores(data);
+      setColaboradoresUnicos(colaboradores);
+
+      const adaptedData = adaptarDatosAnalisis(data);
+
+      // ✅ Actualizar ref y estado
+      assistantAnalysisRef.current = adaptedData;
+      setAssistantAnalysis(adaptedData);
+
+      // ✅ Actualizar el panel en los mensajes
+      actualizarPanelTurno(turnoActual, adaptedData);
+
+      toast({
+        title: "Datos actualizados",
+        description: "Se detectaron cambios en tus actividades",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error("❌ Error al actualizar datos:", error);
+    }
+  };
+
+  // ✅ NUEVO: Configurar WebSocket (REEMPLAZA EL INTERVALO)
+  useEffect(() => {
+    if (!colaborador?.email) return;
+
+    console.log("🔌 Conectando WebSocket para:", colaborador.email);
+    wsService.conectar(colaborador.email);
+
+    // Escuchar cambios
+    wsService.on('cambios-tareas', (data) => {
+      console.log("🔄 Cambio detectado via WebSocket:", data);
+      
+      toast({
+        title: "Actualizando datos",
+        description: "Hay cambios en tus actividades",
+        duration: 2000,
+      });
+
+      // Actualizar datos
+      actualizarDatosPorWebSocket();
+    });
+
+    // Cleanup
+    return () => {
+      console.log("🔌 Desconectando WebSocket");
+      wsService.off('cambios-tareas');
+      wsService.desconectar();
+    };
+  }, [colaborador?.email]);
+
+  // ✅ Función adaptarDatosAnalisis (para no repetir código)
+  const adaptarDatosAnalisis = (data: any): AssistantAnalysis & { colaboradoresInvolucrados?: any[] } => ({
+    success: data.success,
+    answer: data.answer,
+    provider: data.provider || "Gemini",
+    sessionId: data.sessionId,
+    proyectoPrincipal: data.proyectoPrincipal || "Sin proyecto principal",
+    colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
+    metrics: {
+      totalActividades: data.metrics?.totalActividadesProgramadas || 0,
+      actividadesConTiempoTotal: data.metrics?.actividadesConTiempoTotal || 0,
+      actividadesFinales: data.metrics?.actividadesFinales || 0,
+      tareasConTiempo: data.metrics?.tareasConTiempo || 0,
+      tareasAltaPrioridad: data.metrics?.tareasAltaPrioridad || 0,
+      tiempoEstimadoTotal: data.metrics?.tiempoEstimadoTotal || "0h 0m",
+    },
+    data: {
+      actividades: (data.data?.actividades || []).map((a: any) => ({
+        id: a.id,
+        titulo: a.titulo,
+        horario: a.horario,
+        status: a.status,
+        proyecto: a.proyecto,
+        colaboradores: a.colaboradores || [],
+        esHorarioLaboral: a.esHorarioLaboral || false,
+        tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
+      })),
+      revisionesPorActividad: (data.data?.revisionesPorActividad || []).map((act: any) => {
+        const tareasMapeadas = (act.tareasConTiempo || []).map((t: any) => ({
+          id: t.id,
+          nombre: t.nombre,
+          terminada: t.terminada || false,
+          confirmada: t.confirmada || false,
+          reportada: t.reportada || false,
+          duracionMin: t.duracionMin || 0,
+          descripcion: t.descripcion || "",
+          fechaCreacion: t.fechaCreacion,
+          fechaFinTerminada: t.fechaFinTerminada || null,
+          diasPendiente: t.diasPendiente || 0,
+          prioridad: t.prioridad || "BAJA",
+          colaboradores: t.colaboradores || [],
+        }));
+
+        return {
+          actividadId: act.actividadId,
+          actividadTitulo: act.actividadTitulo,
+          actividadHorario: act.actividadHorario,
+          colaboradores: act.colaboradores || [],
+          assigneesOriginales: act.assigneesOriginales || [],
+          tareasConTiempo: tareasMapeadas,
+          totalTareasConTiempo: act.totalTareasConTiempo || 0,
+          tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
+          tiempoTotal: act.tiempoTotal || 0,
+          tiempoFormateado: act.tiempoFormateado || "0h 0m",
+        };
+      }),
+    },
+    multiActividad: data.multiActividad || false,
+  });
+
+  // ==================== FUNCIÓN: ACTUALIZAR PANEL DE TURNO ====================
+  const actualizarPanelTurno = (nuevoTurno: "mañana" | "tarde", analysis?: AssistantAnalysis) => {
+    const dataToUse = analysis || assistantAnalysis;
+    if (!dataToUse) return;
 
     setMessages((prevMessages) => {
       const reversedMessages = [...prevMessages].reverse();
       const reversedIndex = reversedMessages.findIndex((msg) => {
-        if (msg.type !== "bot" || msg.isWide !== true) {
-          return false;
-        }
-
-        if (!React.isValidElement(msg.content)) {
-          return false;
-        }
+        if (msg.type !== "bot" || msg.isWide !== true) return false;
+        if (!React.isValidElement(msg.content)) return false;
 
         const content = msg.content as any;
-        if (!content.props?.children) {
-          return false;
-        }
+        if (!content.props?.children) return false;
 
         const hasPanel = content.props.children.some?.((child: any) => {
-          if (!React.isValidElement(child)) {
-            return false;
-          }
-
-          if (
-            typeof child.type === "function" ||
-            typeof child.type === "object"
-          ) {
+          if (!React.isValidElement(child)) return false;
+          if (typeof child.type === "function" || typeof child.type === "object") {
             const componentType = child.type as any;
             return (
               componentType.name === "TasksPanelWithDescriptions" ||
@@ -286,52 +408,56 @@ export function ChatBot({
               componentType.displayName === "PanelReporteTareasTarde"
             );
           }
-
           return false;
         });
 
         return hasPanel;
       });
 
-      if (reversedIndex === -1) {
-        return prevMessages;
-      }
+      if (reversedIndex === -1) return prevMessages;
 
       const lastPanelMessageIndex = prevMessages.length - 1 - reversedIndex;
 
       const nuevoContenido =
         nuevoTurno === "mañana" ? (
           <div className="space-y-3">
-            <div
-              className={`p-3 rounded-lg border ${
-                theme === "dark"
-                  ? "bg-blue-900/20 border-blue-700/30"
-                  : "bg-blue-50 border-blue-200"
-              }`}
-            >
+            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="w-4 h-4 text-blue-500" />
-                <span
-                  className={`text-sm font-medium ${
-                    theme === "dark" ? "text-blue-300" : "text-blue-700"
-                  }`}
-                >
+                <span className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}>
                   🌅 Turno Mañana (12:00 AM - 2:29 PM)
                 </span>
               </div>
-              <p
-                className={`text-xs ${
-                  theme === "dark" ? "text-blue-200" : "text-blue-600"
-                }`}
-              >
-                Es hora de explicar cómo resolverás las tareas que ya tienen
-                descripción.
+              <p className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}>
+                Es hora de explicar cómo resolverás las tareas que ya tienen descripción.
               </p>
+
+              {/* ✅ Mostrar colaboradores */}
+              {colaboradoresUnicos.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-blue-200/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-medium">Colaboradores en tus actividades:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {colaboradoresUnicos.map((col, idx) => (
+                      <span
+                        key={idx}
+                        className={`text-xs px-2 py-1 rounded ${
+                          theme === "dark" ? "bg-blue-800/30 text-blue-200" : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {col}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <TasksPanelWithDescriptions
               key={`panel-turno-${nuevoTurno}-${Date.now()}`}
-              assistantAnalysis={assistantAnalysis}
+              assistantAnalysis={dataToUse}
               theme={theme}
               userEmail={colaborador.email}
               turno={nuevoTurno}
@@ -346,35 +472,43 @@ export function ChatBot({
           </div>
         ) : (
           <div className="space-y-3">
-            <div
-              className={`p-3 rounded-lg border ${
-                theme === "dark"
-                  ? "bg-purple-900/20 border-purple-700/30"
-                  : "bg-purple-50 border-purple-200"
-              }`}
-            >
+            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="w-4 h-4 text-purple-500" />
-                <span
-                  className={`text-sm font-medium ${
-                    theme === "dark" ? "text-purple-300" : "text-purple-700"
-                  }`}
-                >
+                <span className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}>
                   🌆 Turno Tarde (2:30 PM - 11:59 PM)
                 </span>
               </div>
-              <p
-                className={`text-xs ${
-                  theme === "dark" ? "text-purple-200" : "text-purple-600"
-                }`}
-              >
+              <p className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}>
                 Es hora de reportar tus tareas pendientes del día.
               </p>
+
+              {/* ✅ Mostrar colaboradores */}
+              {colaboradoresUnicos.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-purple-200/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4 text-purple-500" />
+                    <span className="text-xs font-medium">Colaboradores en tus actividades:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {colaboradoresUnicos.map((col, idx) => (
+                      <span
+                        key={idx}
+                        className={`text-xs px-2 py-1 rounded ${
+                          theme === "dark" ? "bg-purple-800/30 text-purple-200" : "bg-purple-100 text-purple-700"
+                        }`}
+                      >
+                        {col}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <PanelReporteTareasTarde
               key={`panel-turno-${nuevoTurno}-${Date.now()}`}
-              assistantAnalysis={assistantAnalysis}
+              assistantAnalysis={dataToUse}
               theme={theme}
               userEmail={colaborador.email}
               turno={nuevoTurno}
@@ -821,43 +955,6 @@ export function ChatBot({
     speakText(mensaje);
   };
 
-  const verificarCambios = async (): Promise<boolean> => {
-    try {
-      const data = await obtenerCambiosTareas();
-
-      if (!data.success || !data.cambios) {
-        return false;
-      }
-
-      const nuevoEstado = data.cambios;
-
-      if (!ultimoEstadoRef.current) {
-        ultimoEstadoRef.current = nuevoEstado;
-        return false;
-      }
-
-      const huboCambios =
-        ultimoEstadoRef.current.totalTareasSinDescripcion !==
-          nuevoEstado.totalTareasSinDescripcion ||
-        ultimoEstadoRef.current.totalTareasConDescripcion !==
-          nuevoEstado.totalTareasConDescripcion ||
-        ultimoEstadoRef.current.totalTareas !== nuevoEstado.totalTareas ||
-        ultimoEstadoRef.current.totalActividadesConTareas !==
-          nuevoEstado.totalActividadesConTareas ||
-        new Date(ultimoEstadoRef.current.ultimaModificacion).getTime() !==
-          new Date(nuevoEstado.ultimaModificacion).getTime() ||
-        ultimoEstadoRef.current.checksum !== nuevoEstado.checksum;
-
-      if (huboCambios) {
-        ultimoEstadoRef.current = nuevoEstado;
-        return true;
-      }
-      return false;
-    } catch (error) {
-      return false;
-    }
-  };
-
   // ==================== EFECTO: INICIALIZACIÓN ====================
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -877,6 +974,12 @@ export function ChatBot({
       if (analisisRestaurado) {
         assistantAnalysisRef.current = analisisRestaurado;
         setAssistantAnalysis(analisisRestaurado);
+        
+        // ✅ Extraer colaboradores del análisis restaurado
+        if (analisisRestaurado.colaboradoresInvolucrados) {
+          setColaboradoresUnicos(analisisRestaurado.colaboradoresInvolucrados);
+        }
+        
         setStep("ready");
         setIsTyping(false);
       }
@@ -917,121 +1020,8 @@ export function ChatBot({
     init();
   }, []);
 
-  useEffect(() => {
-    if (!assistantAnalysis) {
-      return;
-    }
-
-    const intervalo = setInterval(async () => {
-      const huboCambios = await verificarCambios();
-
-      if (huboCambios) {
-        try {
-          const requestBody = {
-            email: colaborador.email,
-            showAll: true,
-          };
-
-          const data = await obtenerActividadesConRevisiones(requestBody);
-
-          const adaptedData: AssistantAnalysis & {
-            colaboradoresInvolucrados?: any[];
-          } = {
-            success: data.success,
-            answer: data.answer,
-            provider: data.provider || "Gemini",
-            sessionId: data.sessionId,
-            proyectoPrincipal:
-              data.proyectoPrincipal || "Sin proyecto principal",
-            colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
-            metrics: {
-              totalActividades: data.metrics?.totalActividadesProgramadas || 0,
-              actividadesConTiempoTotal:
-                data.metrics?.actividadesConTiempoTotal || 0,
-              actividadesFinales: data.metrics?.actividadesFinales || 0,
-              tareasConTiempo: data.metrics?.tareasConTiempo || 0,
-              tareasAltaPrioridad: data.metrics?.tareasAltaPrioridad || 0,
-              tiempoEstimadoTotal: data.metrics?.tiempoEstimadoTotal || "0h 0m",
-            },
-            data: {
-              actividades: (data.data?.actividades || []).map((a: any) => ({
-                id: a.id,
-                titulo: a.titulo,
-                horario: a.horario,
-                status: a.status,
-                proyecto: a.proyecto,
-                colaboradores: a.colaboradores || [],
-                esHorarioLaboral: a.esHorarioLaboral || false,
-                tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
-              })),
-
-              revisionesPorActividad: (
-                data.data?.revisionesPorActividad || []
-              ).map((act: any) => {
-                const tareasMapeadas = (act.tareasConTiempo || []).map(
-                  (t: any) => ({
-                    id: t.id,
-                    nombre: t.nombre,
-                    terminada: t.terminada || false,
-                    confirmada: t.confirmada || false,
-                    reportada: t.reportada || false,
-                    duracionMin: t.duracionMin || 0,
-                    descripcion: t.descripcion || "",
-                    fechaCreacion: t.fechaCreacion,
-                    fechaFinTerminada: t.fechaFinTerminada || null,
-                    diasPendiente: t.diasPendiente || 0,
-                    prioridad: t.prioridad || "BAJA",
-                    colaboradores: t.colaboradores || [],
-                  }),
-                );
-
-                return {
-                  actividadId: act.actividadId,
-                  actividadTitulo: act.actividadTitulo,
-                  actividadHorario: act.actividadHorario,
-                  colaboradores: act.colaboradores || [],
-                  assigneesOriginales: act.assigneesOriginales || [],
-                  tareasConTiempo: tareasMapeadas,
-                  totalTareasConTiempo: act.totalTareasConTiempo || 0,
-                  tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
-                  tiempoTotal: act.tiempoTotal || 0,
-                  tiempoFormateado: act.tiempoFormateado || "0h 0m",
-                };
-              }),
-            },
-            multiActividad: data.multiActividad || false,
-          };
-
-          assistantAnalysisRef.current = adaptedData;
-          setAssistantAnalysis(adaptedData);
-          actualizarPanelTurno(turnoActual);
-
-          toast({
-            title: "Datos actualizados",
-            description: "Se detectaron cambios en tus actividades",
-            duration: 2000,
-          });
-        } catch (error) {
-          console.error("❌ Error al actualizar datos:", error);
-        }
-      }
-    }, 10000);
-
-    return () => {
-      clearInterval(intervalo);
-    };
-  }, [
-    assistantAnalysis,
-    colaborador.email,
-    toast,
-    theme,
-    turnoActual,
-    handleStartVoiceModeWithTasks,
-    stopVoice,
-    isSpeaking,
-    speakText,
-    handleStartVoiceMode,
-  ]);
+  // ✅ ELIMINAMOS EL INTERVALO DE POLLING COMPLETAMENTE
+  // El useEffect con setInterval ha sido eliminado y reemplazado por WebSocket arriba
 
   // ==================== EFECTO: RESTAURACIÓN DE MENSAJES ====================
   useMessageRestoration({
@@ -1687,73 +1677,11 @@ export function ChatBot({
 
       const data = await obtenerActividadesConRevisiones(requestBody);
 
-      const adaptedData: AssistantAnalysis & {
-        colaboradoresInvolucrados?: any[];
-      } = {
-        success: data.success,
-        answer: data.answer,
-        provider: data.provider || "Gemini",
-        sessionId: data.sessionId,
-        proyectoPrincipal: data.proyectoPrincipal || "Sin proyecto principal",
-        colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
-        metrics: {
-          totalActividades: data.metrics?.totalActividadesProgramadas || 0,
-          actividadesConTiempoTotal:
-            data.metrics?.actividadesConTiempoTotal || 0,
-          actividadesFinales: data.metrics?.actividadesFinales || 0,
-          tareasConTiempo: data.metrics?.tareasConTiempo || 0,
-          tareasAltaPrioridad: data.metrics?.tareasAltaPrioridad || 0,
-          tiempoEstimadoTotal: data.metrics?.tiempoEstimadoTotal || "0h 0m",
-        },
-        data: {
-          actividades: (data.data?.actividades || []).map((a: any) => ({
-            id: a.id,
-            titulo: a.titulo,
-            horario: a.horario,
-            status: a.status,
-            proyecto: a.proyecto,
-            colaboradores: a.colaboradores || [],
-            esHorarioLaboral: a.esHorarioLaboral || false,
-            tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
-          })),
+      // ✅ Extraer colaboradores
+      const colaboradores = extraerColaboradores(data);
+      setColaboradoresUnicos(colaboradores);
 
-          revisionesPorActividad: (data.data?.revisionesPorActividad || []).map(
-            (act: any) => {
-              const tareasMapeadas = (act.tareasConTiempo || []).map(
-                (t: any) => ({
-                  id: t.id,
-                  nombre: t.nombre,
-                  terminada: t.terminada || false,
-                  confirmada: t.confirmada || false,
-                  duracionMin: t.duracionMin || 0,
-                  descripcion: t.descripcion || "",
-                  queHizo: t.queHizo || "",
-                  reportada: t.reportada || false,
-                  fechaCreacion: t.fechaCreacion,
-                  fechaFinTerminada: t.fechaFinTerminada || null,
-                  diasPendiente: t.diasPendiente || 0,
-                  prioridad: t.prioridad || "BAJA",
-                  colaboradores: t.colaboradores || [],
-                }),
-              );
-
-              return {
-                actividadId: act.actividadId,
-                actividadTitulo: act.actividadTitulo,
-                actividadHorario: act.actividadHorario,
-                colaboradores: act.colaboradores || [],
-                assigneesOriginales: act.assigneesOriginales || [],
-                tareasConTiempo: tareasMapeadas,
-                totalTareasConTiempo: act.totalTareasConTiempo || 0,
-                tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
-                tiempoTotal: act.tiempoTotal || 0,
-                tiempoFormateado: act.tiempoFormateado || "0h 0m",
-              };
-            },
-          ),
-        },
-        multiActividad: data.multiActividad || false,
-      };
+      const adaptedData = adaptarDatosAnalisis(data);
 
       assistantAnalysisRef.current = adaptedData;
       setAssistantAnalysis(adaptedData);
@@ -1922,7 +1850,6 @@ export function ChatBot({
   };
 
   // ==================== RENDER ====================
-  // Solo se muestran los cambios del return — el resto del componente no cambia.
   return (
     <div
       className={`flex flex-col h-screen min-w-0 overflow-hidden ${
@@ -1986,16 +1913,6 @@ export function ChatBot({
         selectedTaskIds={selectedTaskIds}
       />
 
-      {/* ── Área de mensajes ─────────────────────────────────────── */}
-      {/*
-        CLAVES DEL FIX:
-        - `min-h-0` en el contenedor flex-1: sin esto, un hijo con contenido
-          grande empuja hacia afuera y el layout se rompe.
-        - `overflow-y-auto` aquí (no en MessageList) para que el scroll
-          quede dentro de este contenedor y no desborde.
-        - El wrapper interior usa `max-w` fijo en lugar de porcentajes para
-          que los paneles isWide tengan un límite predecible.
-      */}
       <div
         className={`
           flex-1 min-h-0 overflow-y-auto
@@ -2043,7 +1960,6 @@ export function ChatBot({
         />
       )}
 
-      {/* Dialog éxito */}
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <AlertDialogContent
           className={`max-w-sm mx-4 sm:max-w-md sm:mx-auto ${
@@ -2076,7 +1992,6 @@ export function ChatBot({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog logout */}
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
         <AlertDialogContent
           className={`font-['Arial'] max-w-sm mx-4 sm:max-w-md sm:mx-auto ${
