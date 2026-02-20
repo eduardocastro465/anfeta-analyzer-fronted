@@ -94,14 +94,7 @@ export function ChatBot({
   const initializationRef = useRef(false);
   const fetchingAnalysisRef = useRef(false);
   const welcomeSentRef = useRef(false);
-  const ultimoEstadoRef = useRef<{
-    totalTareasSinDescripcion: number;
-    totalTareasConDescripcion: number;
-    totalTareas: number;
-    totalActividadesConTareas: number;
-    ultimaModificacion: string;
-    checksum: string;
-  } | null>(null);
+  const actualizarDatosRef = useRef<() => Promise<void>>(async () => {});
 
   // ==================== HOOKS ====================
   const router = useRouter();
@@ -126,7 +119,8 @@ export function ChatBot({
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [assistantAnalysis, setAssistantAnalysis] = useState<AssistantAnalysis | null>(null);
+  const [assistantAnalysis, setAssistantAnalysis] =
+    useState<AssistantAnalysis | null>(null);
   const [isLoadingIA, setIsLoadingIA] = useState(false);
   const [colaboradoresUnicos, setColaboradoresUnicos] = useState<string[]>([]);
 
@@ -153,18 +147,22 @@ export function ChatBot({
 
   // ==================== STATE: TASKS ====================
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [filteredActivitiesForVoice, setFilteredActivitiesForVoice] = useState<any[]>([]);
+  const [filteredActivitiesForVoice, setFilteredActivitiesForVoice] = useState<
+    any[]
+  >([]);
 
   // ==================== STATE: TURNO ACTUAL ====================
   const [turnoActual, setTurnoActual] = useState<"mañana" | "tarde">(() =>
     getTurnoActual(),
   );
 
-  const canUserType = step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
+  const canUserType =
+    step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
 
   // ==================== FUNCTIONS ====================
   function getTurnoActual(): "mañana" | "tarde" {
-    return "tarde";
+    // return "tarde";
+    // return "mañana";
     const esTurnoMañana = isReportTime(
       horaInicioReporteMañana,
       horaFinReporteMañana,
@@ -233,13 +231,18 @@ export function ChatBot({
   const extraerColaboradores = (data: any): string[] => {
     const colaboradores = [
       ...(data.colaboradoresInvolucrados || []),
-      ...(data.data?.actividades?.flatMap((a: any) => a.colaboradores || []) || []),
-      ...(data.data?.revisionesPorActividad?.flatMap((rev: any) => rev.colaboradores || []) || [])
+      ...(data.data?.actividades?.flatMap((a: any) => a.colaboradores || []) ||
+        []),
+      ...(data.data?.revisionesPorActividad?.flatMap(
+        (rev: any) => rev.colaboradores || [],
+      ) || []),
     ];
     return [...new Set(colaboradores)].filter(Boolean);
   };
 
-  const adaptarDatosAnalisis = (data: any): AssistantAnalysis & { colaboradoresInvolucrados?: any[] } => ({
+  const adaptarDatosAnalisis = (
+    data: any,
+  ): AssistantAnalysis & { colaboradoresInvolucrados?: any[] } => ({
     success: data.success,
     answer: data.answer,
     provider: data.provider || "Gemini",
@@ -247,7 +250,7 @@ export function ChatBot({
     proyectoPrincipal: data.proyectoPrincipal || "Sin proyecto principal",
     colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
     metrics: {
-      totalActividades: data.metrics?.totalActividadesProgramadas || 0,
+      totalActividades: data.metrics?.totalActividades || 0,
       actividadesConTiempoTotal: data.metrics?.actividadesConTiempoTotal || 0,
       actividadesFinales: data.metrics?.actividadesFinales || 0,
       tareasConTiempo: data.metrics?.tareasConTiempo || 0,
@@ -265,39 +268,45 @@ export function ChatBot({
         esHorarioLaboral: a.esHorarioLaboral || false,
         tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
       })),
-      revisionesPorActividad: (data.data?.revisionesPorActividad || []).map((act: any) => {
-        const tareasMapeadas = (act.tareasConTiempo || []).map((t: any) => ({
-          id: t.id,
-          nombre: t.nombre,
-          terminada: t.terminada || false,
-          confirmada: t.confirmada || false,
-          reportada: t.reportada || false,
-          duracionMin: t.duracionMin || 0,
-          descripcion: t.descripcion || "",
-          fechaCreacion: t.fechaCreacion,
-          fechaFinTerminada: t.fechaFinTerminada || null,
-          diasPendiente: t.diasPendiente || 0,
-          prioridad: t.prioridad || "BAJA",
-          colaboradores: t.colaboradores || [],
-        }));
-        return {
-          actividadId: act.actividadId,
-          actividadTitulo: act.actividadTitulo,
-          actividadHorario: act.actividadHorario,
-          colaboradores: act.colaboradores || [],
-          assigneesOriginales: act.assigneesOriginales || [],
-          tareasConTiempo: tareasMapeadas,
-          totalTareasConTiempo: act.totalTareasConTiempo || 0,
-          tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
-          tiempoTotal: act.tiempoTotal || 0,
-          tiempoFormateado: act.tiempoFormateado || "0h 0m",
-        };
-      }),
+      revisionesPorActividad: (data.data?.revisionesPorActividad || []).map(
+        (act: any) => {
+          const tareasMapeadas = (act.tareasConTiempo || []).map((t: any) => ({
+            id: t.id,
+            nombre: t.nombre,
+            terminada: t.terminada || false,
+            confirmada: t.confirmada || false,
+            reportada: t.reportada || false,
+            duracionMin: t.duracionMin || 0,
+            descripcion: t.descripcion || "",
+            fechaCreacion: t.fechaCreacion,
+            fechaFinTerminada: t.fechaFinTerminada || null,
+            diasPendiente: t.diasPendiente || 0,
+            prioridad: t.prioridad || "BAJA",
+            colaboradores: t.colaboradores || [],
+            explicacionVoz: t.explicacionVoz || null,
+          }));
+          return {
+            actividadId: act.actividadId,
+            actividadTitulo: act.actividadTitulo,
+            actividadHorario: act.actividadHorario,
+            colaboradores: act.colaboradores || [],
+            assigneesOriginales: act.assigneesOriginales || [],
+            tareasConTiempo: tareasMapeadas,
+            totalTareasConTiempo: act.totalTareasConTiempo || 0,
+            tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
+            tiempoTotal: act.tiempoTotal || 0,
+            tiempoFormateado: act.tiempoFormateado || "0h 0m",
+          };
+        },
+      ),
     },
     multiActividad: data.multiActividad || false,
   });
 
-  const actualizarPanelTurno = (nuevoTurno: "mañana" | "tarde", analysis?: AssistantAnalysis) => {
+  const actualizarPanelTurno = (
+    nuevoTurno: "mañana" | "tarde",
+    analysis?: AssistantAnalysis,
+  ) => {
     const dataToUse = analysis || assistantAnalysis;
     if (!dataToUse) return;
 
@@ -310,7 +319,10 @@ export function ChatBot({
         if (!content.props?.children) return false;
         const hasPanel = content.props.children.some?.((child: any) => {
           if (!React.isValidElement(child)) return false;
-          if (typeof child.type === "function" || typeof child.type === "object") {
+          if (
+            typeof child.type === "function" ||
+            typeof child.type === "object"
+          ) {
             const componentType = child.type as any;
             return (
               componentType.name === "TasksPanelWithDescriptions" ||
@@ -326,27 +338,160 @@ export function ChatBot({
 
       if (reversedIndex === -1) {
         // No hay panel, crear uno nuevo
-        const nuevoPanel = nuevoTurno === "mañana" ? (
+        const nuevoPanel =
+          nuevoTurno === "mañana" ? (
+            <div className="space-y-3">
+              <div
+                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  <span
+                    className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}
+                  >
+                    Turno Mañana (12:00 AM - 2:29 PM)
+                  </span>
+                </div>
+                <p
+                  className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}
+                >
+                  Es hora de explicar cómo resolverás las tareas que ya tienen
+                  descripción.
+                </p>
+                {colaboradoresUnicos.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-blue-200/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-4 h-4 text-blue-500" />
+                      <span className="text-xs font-medium">
+                        Colaboradores en tus actividades:
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {colaboradoresUnicos.map((col, idx) => (
+                        <span
+                          key={idx}
+                          className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-blue-800/30 text-blue-200" : "bg-blue-100 text-blue-700"}`}
+                        >
+                          {col}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <TasksPanelWithDescriptions
+                assistantAnalysis={dataToUse}
+                theme={theme}
+                userEmail={colaborador.email}
+                turno={nuevoTurno}
+                onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
+                onReportCompleted={async () => {
+                  await fetchAssistantAnalysis(true, false, true);
+                }}
+                stopVoice={stopVoice}
+                isSpeaking={isSpeaking}
+                speakText={speakText}
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div
+                className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="w-4 h-4 text-purple-500" />
+                  <span
+                    className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}
+                  >
+                    Turno Tarde (2:30 PM - 11:59 PM)
+                  </span>
+                </div>
+                <p
+                  className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}
+                >
+                  Es hora de reportar tus tareas pendientes del día.
+                </p>
+                {colaboradoresUnicos.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-purple-200/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-4 h-4 text-purple-500" />
+                      <span className="text-xs font-medium">
+                        Colaboradores en tus actividades:
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {colaboradoresUnicos.map((col, idx) => (
+                        <span
+                          key={idx}
+                          className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-purple-800/30 text-purple-200" : "bg-purple-100 text-purple-700"}`}
+                        >
+                          {col}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <PanelReporteTareasTarde
+                assistantAnalysis={dataToUse}
+                theme={theme}
+                userEmail={colaborador.email}
+                turno={nuevoTurno}
+                onStartVoiceMode={handleStartVoiceMode}
+                onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
+                onReportCompleted={async () => {
+                  await fetchAssistantAnalysis(false, false);
+                }}
+              />
+            </div>
+          );
+        return [
+          ...prevMessages,
+          {
+            id: `panel-${Date.now()}`,
+            type: "bot",
+            content: nuevoPanel,
+            timestamp: new Date(),
+            isWide: true,
+          },
+        ];
+      }
+
+      const lastPanelMessageIndex = prevMessages.length - 1 - reversedIndex;
+      const nuevoContenido =
+        nuevoTurno === "mañana" ? (
           <div className="space-y-3">
-            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}>
+            <div
+              className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}
+            >
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="w-4 h-4 text-blue-500" />
-                <span className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}>
+                <span
+                  className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}
+                >
                   Turno Mañana (12:00 AM - 2:29 PM)
                 </span>
               </div>
-              <p className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}>
-                Es hora de explicar cómo resolverás las tareas que ya tienen descripción.
+              <p
+                className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}
+              >
+                Es hora de explicar cómo resolverás las tareas que ya tienen
+                descripción.
               </p>
               {colaboradoresUnicos.length > 0 && (
                 <div className="mt-3 pt-2 border-t border-blue-200/30">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-4 h-4 text-blue-500" />
-                    <span className="text-xs font-medium">Colaboradores en tus actividades:</span>
+                    <span className="text-xs font-medium">
+                      Colaboradores en tus actividades:
+                    </span>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {colaboradoresUnicos.map((col, idx) => (
-                      <span key={idx} className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-blue-800/30 text-blue-200" : "bg-blue-100 text-blue-700"}`}>
+                      <span
+                        key={idx}
+                        className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-blue-800/30 text-blue-200" : "bg-blue-100 text-blue-700"}`}
+                      >
                         {col}
                       </span>
                     ))}
@@ -355,6 +500,7 @@ export function ChatBot({
               )}
             </div>
             <TasksPanelWithDescriptions
+              key={`panel-turno-${nuevoTurno}-${Date.now()}`}
               assistantAnalysis={dataToUse}
               theme={theme}
               userEmail={colaborador.email}
@@ -370,25 +516,36 @@ export function ChatBot({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}>
+            <div
+              className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}
+            >
               <div className="flex items-center gap-2 mb-1">
                 <Clock className="w-4 h-4 text-purple-500" />
-                <span className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}>
+                <span
+                  className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}
+                >
                   Turno Tarde (2:30 PM - 11:59 PM)
                 </span>
               </div>
-              <p className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}>
+              <p
+                className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}
+              >
                 Es hora de reportar tus tareas pendientes del día.
               </p>
               {colaboradoresUnicos.length > 0 && (
                 <div className="mt-3 pt-2 border-t border-purple-200/30">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-4 h-4 text-purple-500" />
-                    <span className="text-xs font-medium">Colaboradores en tus actividades:</span>
+                    <span className="text-xs font-medium">
+                      Colaboradores en tus actividades:
+                    </span>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {colaboradoresUnicos.map((col, idx) => (
-                      <span key={idx} className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-purple-800/30 text-purple-200" : "bg-purple-100 text-purple-700"}`}>
+                      <span
+                        key={idx}
+                        className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-purple-800/30 text-purple-200" : "bg-purple-100 text-purple-700"}`}
+                      >
                         {col}
                       </span>
                     ))}
@@ -397,6 +554,7 @@ export function ChatBot({
               )}
             </div>
             <PanelReporteTareasTarde
+              key={`panel-turno-${nuevoTurno}-${Date.now()}`}
               assistantAnalysis={dataToUse}
               theme={theme}
               userEmail={colaborador.email}
@@ -409,101 +567,6 @@ export function ChatBot({
             />
           </div>
         );
-        return [...prevMessages, {
-          id: `panel-${Date.now()}`,
-          type: "bot",
-          content: nuevoPanel,
-          timestamp: new Date(),
-          isWide: true
-        }];
-      }
-
-      const lastPanelMessageIndex = prevMessages.length - 1 - reversedIndex;
-      const nuevoContenido = nuevoTurno === "mañana" ? (
-        <div className="space-y-3">
-          <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-blue-500" />
-              <span className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}>
-                Turno Mañana (12:00 AM - 2:29 PM)
-              </span>
-            </div>
-            <p className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}>
-              Es hora de explicar cómo resolverás las tareas que ya tienen descripción.
-            </p>
-            {colaboradoresUnicos.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-blue-200/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Users className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs font-medium">Colaboradores en tus actividades:</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {colaboradoresUnicos.map((col, idx) => (
-                    <span key={idx} className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-blue-800/30 text-blue-200" : "bg-blue-100 text-blue-700"}`}>
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <TasksPanelWithDescriptions
-            key={`panel-turno-${nuevoTurno}-${Date.now()}`}
-            assistantAnalysis={dataToUse}
-            theme={theme}
-            userEmail={colaborador.email}
-            turno={nuevoTurno}
-            onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
-            onReportCompleted={async () => {
-              await fetchAssistantAnalysis(true, false, true);
-            }}
-            stopVoice={stopVoice}
-            isSpeaking={isSpeaking}
-            speakText={speakText}
-          />
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-purple-500" />
-              <span className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}>
-                Turno Tarde (2:30 PM - 11:59 PM)
-              </span>
-            </div>
-            <p className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}>
-              Es hora de reportar tus tareas pendientes del día.
-            </p>
-            {colaboradoresUnicos.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-purple-200/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Users className="w-4 h-4 text-purple-500" />
-                  <span className="text-xs font-medium">Colaboradores en tus actividades:</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {colaboradoresUnicos.map((col, idx) => (
-                    <span key={idx} className={`text-xs px-2 py-1 rounded ${theme === "dark" ? "bg-purple-800/30 text-purple-200" : "bg-purple-100 text-purple-700"}`}>
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <PanelReporteTareasTarde
-            key={`panel-turno-${nuevoTurno}-${Date.now()}`}
-            assistantAnalysis={dataToUse}
-            theme={theme}
-            userEmail={colaborador.email}
-            turno={nuevoTurno}
-            onStartVoiceMode={handleStartVoiceMode}
-            onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
-            onReportCompleted={async () => {
-              await fetchAssistantAnalysis(false, false);
-            }}
-          />
-        </div>
-      );
 
       const newMessages = [...prevMessages];
       newMessages[lastPanelMessageIndex] = {
@@ -539,22 +602,32 @@ export function ChatBot({
     }
   };
 
+  actualizarDatosRef.current = actualizarDatosPorWebSocket;
+
   useEffect(() => {
     if (!colaborador?.email) return;
-    console.log("🔌 Conectando WebSocket para:", colaborador.email);
     wsService.conectar(colaborador.email);
-    wsService.on('cambios-tareas', (data) => {
-      console.log("🔄 Cambio detectado via WebSocket:", data);
+
+    // const anfetaToken = localStorage.getItem("anfetaToken");
+    // if (anfetaToken) {
+    //   wsService.conectarAnfeta(anfetaToken, colaborador.email);
+    //   wsService.on("actividad_actualizada", () => actualizarDatosRef.current());
+    //   wsService.on("actividad_creada", () => actualizarDatosRef.current());
+    // }
+
+    wsService.on("cambios-tareas", (data: any) => {
       toast({
         title: "Actualizando datos",
         description: "Hay cambios en tus actividades",
         duration: 2000,
       });
-      actualizarDatosPorWebSocket();
+      actualizarDatosRef.current();
     });
+
     return () => {
-      console.log("🔌 Desconectando WebSocket");
-      wsService.off('cambios-tareas');
+      wsService.off("cambios-tareas");
+      // wsService.off("actividad_actualizada");
+      // wsService.off("actividad_creada");
       wsService.desconectar();
     };
   }, [colaborador?.email]);
@@ -610,7 +683,8 @@ export function ChatBot({
       voiceMode.setCurrentActivityIndex(nextActivityIndex);
       voiceMode.setCurrentTaskIndex(0);
       setTimeout(() => {
-        speakActivityByIndex(nextActivityIndex);
+        // ← Antes llamaba speakActivityByIndex, ahora va directo
+        speakTaskByIndices(nextActivityIndex, 0);
       }, 500);
       return;
     }
@@ -751,6 +825,9 @@ export function ChatBot({
           speakText(
             "Perfecto, explicación validada. Pasamos a la siguiente tarea.",
           );
+
+          fetchAssistantAnalysis(true, false, true);
+
           setTimeout(() => {
             const nextTaskIndex = voiceMode.currentTaskIndex + 1;
             if (nextTaskIndex < currentActivity.tareas.length) {
@@ -1105,10 +1182,11 @@ export function ChatBot({
       setTimeout(() => voiceMode.cancelVoiceMode(), 1000);
       return;
     }
-    voiceMode.setVoiceStep("activity-presentation");
-    voiceMode.setExpectedInputType("none");
+    // ← Directo a la tarea, sin pasar por activity-presentation
+    voiceMode.setCurrentActivityIndex(0);
+    voiceMode.setCurrentTaskIndex(0);
     setTimeout(() => {
-      speakActivityByIndex(0);
+      speakTaskByIndices(0, 0);
     }, 300);
   };
 
@@ -1410,7 +1488,7 @@ export function ChatBot({
           email: colaborador.email,
         }),
         400,
-        true,
+        false,
       );
       setTimeout(async () => {
         addMessageWithTyping(
@@ -1432,15 +1510,22 @@ export function ChatBot({
                 addMessage(
                   "bot",
                   <div className="space-y-3">
-                    <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}>
+                    <div
+                      className={`p-3 rounded-lg border ${theme === "dark" ? "bg-blue-900/20 border-blue-700/30" : "bg-blue-50 border-blue-200"}`}
+                    >
                       <div className="flex items-center gap-2 mb-1">
                         <Clock className="w-4 h-4 text-blue-500" />
-                        <span className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}>
+                        <span
+                          className={`text-sm font-medium ${theme === "dark" ? "text-blue-300" : "text-blue-700"}`}
+                        >
                           Turno Mañana (12:00 AM - 2:29 PM)
                         </span>
                       </div>
-                      <p className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}>
-                        Es hora de explicar cómo resolverás las tareas que ya tienen descripción.
+                      <p
+                        className={`text-xs ${theme === "dark" ? "text-blue-200" : "text-blue-600"}`}
+                      >
+                        Es hora de explicar cómo resolverás las tareas que ya
+                        tienen descripción.
                       </p>
                     </div>
                     <TasksPanelWithDescriptions
@@ -1464,14 +1549,20 @@ export function ChatBot({
                 addMessage(
                   "bot",
                   <div className="space-y-3">
-                    <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}>
+                    <div
+                      className={`p-3 rounded-lg border ${theme === "dark" ? "bg-purple-900/20 border-purple-700/30" : "bg-purple-50 border-purple-200"}`}
+                    >
                       <div className="flex items-center gap-2 mb-1">
                         <Clock className="w-4 h-4 text-purple-500" />
-                        <span className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}>
+                        <span
+                          className={`text-sm font-medium ${theme === "dark" ? "text-purple-300" : "text-purple-700"}`}
+                        >
                           Turno Tarde (2:30 PM - 11:59 PM)
                         </span>
                       </div>
-                      <p className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}>
+                      <p
+                        className={`text-xs ${theme === "dark" ? "text-purple-200" : "text-purple-600"}`}
+                      >
                         Es hora de reportar tus tareas pendientes del día.
                       </p>
                     </div>
@@ -1517,6 +1608,7 @@ export function ChatBot({
         showAll: showAll,
       };
       const data = await obtenerActividadesConRevisiones(requestBody);
+      console.log("data", data);
       const colaboradores = extraerColaboradores(data);
       setColaboradoresUnicos(colaboradores);
       const adaptedData = adaptarDatosAnalisis(data);
@@ -1536,9 +1628,12 @@ export function ChatBot({
             <div className="flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-red-500" />
               <div>
-                <span className="font-medium">Error al obtener actividades</span>
+                <span className="font-medium">
+                  Error al obtener actividades
+                </span>
                 <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                  Hubo un problema al obtener tus actividades. Por favor, intenta nuevamente más tarde.
+                  Hubo un problema al obtener tus actividades. Por favor,
+                  intenta nuevamente más tarde.
                 </p>
               </div>
             </div>
@@ -1566,17 +1661,24 @@ export function ChatBot({
     setChatMode(newMode);
     const modeMessage =
       newMode === "ia" ? (
-        <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#6841ea]/10 border-[#6841ea]/20" : "bg-purple-50 border-purple-200"}`}>
+        <div
+          className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#6841ea]/10 border-[#6841ea]/20" : "bg-purple-50 border-purple-200"}`}
+        >
           <div className="flex items-center gap-2">
             <Bot className="w-4 h-4 text-[#6841ea]" />
-            <span className="text-sm font-medium text-[#6841ea]">Modo Asistente IA activado</span>
+            <span className="text-sm font-medium text-[#6841ea]">
+              Modo Asistente IA activado
+            </span>
           </div>
           <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">
-            Ahora puedes hacer preguntas sobre tus tareas y recibir ayuda personalizada.
+            Ahora puedes hacer preguntas sobre tus tareas y recibir ayuda
+            personalizada.
           </p>
         </div>
       ) : (
-        <div className="text-xs text-gray-500 dark:text-gray-400">Modo normal activado</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          Modo normal activado
+        </div>
       );
     addMessage("system", modeMessage);
   };
@@ -1594,7 +1696,8 @@ export function ChatBot({
       setUserInput("");
       setIsTyping(true);
       setIsLoadingIA(true);
-      const sessionId = conversacionActiva || assistantAnalysis?.sessionId || null;
+      const sessionId =
+        conversacionActiva || assistantAnalysis?.sessionId || null;
       let response;
       if (chatMode === "ia" && assistantAnalysis) {
         response = await consultarIAProyecto(mensajeAEnviar, sessionId);
@@ -1610,10 +1713,15 @@ export function ChatBot({
             userId: colaborador.email,
             estadoConversacion: "activa",
             createdAt: new Date().toISOString(),
-            nombreConversacion: response.nombreConversacion || "Nueva conversación",
+            nombreConversacion:
+              response.nombreConversacion || "Nueva conversación",
           });
         }
-        if (response.sessionId && conversacionActiva && response.nombreConversacion) {
+        if (
+          response.sessionId &&
+          conversacionActiva &&
+          response.nombreConversacion
+        ) {
           onActualizarNombre?.(response.sessionId, response.nombreConversacion);
         }
       } else {
@@ -1653,7 +1761,9 @@ export function ChatBot({
 
   // ==================== RENDER ====================
   return (
-    <div className={`flex flex-col h-screen min-w-0 overflow-hidden ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}>
+    <div
+      className={`flex flex-col h-screen min-w-0 overflow-hidden ${theme === "dark" ? "bg-[#101010] text-white" : "bg-white text-gray-900"}`}
+    >
       <ChatHeader
         isInPiPWindow={isInPiPWindow}
         sidebarOpen={conversationHistory.sidebarOpen}
@@ -1682,7 +1792,11 @@ export function ChatBot({
         finishVoiceMode={finishVoiceMode}
         currentActivityIndex={voiceMode.currentActivityIndex}
         currentTaskIndex={voiceMode.currentTaskIndex}
-        activitiesWithTasks={filteredActivitiesForVoice.length > 0 ? filteredActivitiesForVoice : activitiesWithTasks}
+        activitiesWithTasks={
+          filteredActivitiesForVoice.length > 0
+            ? filteredActivitiesForVoice
+            : activitiesWithTasks
+        }
         taskExplanations={voiceMode.taskExplanations}
         voiceTranscript={autoSendVoiceGuided.transcript}
         currentListeningFor={voiceMode.currentListeningFor}
@@ -1707,8 +1821,10 @@ export function ChatBot({
         selectedTaskIds={selectedTaskIds}
       />
 
-      <div className={`flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${isInPiPWindow ? "pt-2" : "pt-3 sm:pt-4"} pb-4 sm:pb-6`}>
-        <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto px-2 sm:px-4">
+      <div
+        className={`flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${isInPiPWindow ? "pt-2" : "pt-3 sm:pt-4"} pb-4 sm:pb-6`}
+      >
+        <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-5xl mx-auto px-2 sm:px-4">
           <MessageList
             messages={messages}
             isTyping={isTyping}
@@ -1748,18 +1864,25 @@ export function ChatBot({
       )}
 
       <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <AlertDialogContent className={`max-w-sm mx-4 sm:max-w-md sm:mx-auto ${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border`}>
+        <AlertDialogContent
+          className={`max-w-sm mx-4 sm:max-w-md sm:mx-auto ${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border`}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-[#6841ea] text-lg sm:text-xl">
               <PartyPopper className="w-5 h-5 sm:w-6 sm:h-6" />
               ¡Análisis completado!
             </AlertDialogTitle>
-            <AlertDialogDescription className={`${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+            <AlertDialogDescription
+              className={`${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+            >
               El análisis de tus actividades ha sido generado exitosamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={onLogout} className="bg-[#6841ea] hover:bg-[#5a36d4] text-white w-full sm:w-auto">
+            <AlertDialogAction
+              onClick={onLogout}
+              className="bg-[#6841ea] hover:bg-[#5a36d4] text-white w-full sm:w-auto"
+            >
               Cerrar sesión
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1767,25 +1890,36 @@ export function ChatBot({
       </AlertDialog>
 
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <AlertDialogContent className={`font-['Arial'] max-w-sm mx-4 sm:max-w-md sm:mx-auto ${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border`}>
+        <AlertDialogContent
+          className={`font-['Arial'] max-w-sm mx-4 sm:max-w-md sm:mx-auto ${theme === "dark" ? "bg-[#1a1a1a] text-white border-[#2a2a2a]" : "bg-white text-gray-900 border-gray-200"} border`}
+        >
           <AlertDialogHeader className="pt-4 sm:pt-6">
             <div className="mx-auto mb-3 sm:mb-4">
-              <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}>
+              <div
+                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
+              >
                 <LogOut className="w-7 h-7 sm:w-8 sm:h-8 text-[#6841ea]" />
               </div>
             </div>
             <AlertDialogTitle className="text-center text-lg sm:text-xl font-bold font-['Arial']">
               ¿Cerrar sesión?
             </AlertDialogTitle>
-            <AlertDialogDescription className={`text-center pt-3 pb-2 font-['Arial'] text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+            <AlertDialogDescription
+              className={`text-center pt-3 pb-2 font-['Arial'] text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+            >
               <p>¿Estás seguro que deseas salir del asistente?</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3 pt-4 sm:pt-6 font-['Arial']">
-            <AlertDialogCancel className={`w-full sm:w-auto rounded-lg h-10 sm:h-11 font-['Arial'] ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535] text-white border-[#353535]" : "bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200"} border`}>
+            <AlertDialogCancel
+              className={`w-full sm:w-auto rounded-lg h-10 sm:h-11 font-['Arial'] ${theme === "dark" ? "bg-[#2a2a2a] hover:bg-[#353535] text-white border-[#353535]" : "bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200"} border`}
+            >
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction onClick={onLogout} className="w-full sm:w-auto bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg h-10 sm:h-11 font-semibold font-['Arial']">
+            <AlertDialogAction
+              onClick={onLogout}
+              className="w-full sm:w-auto bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg h-10 sm:h-11 font-semibold font-['Arial']"
+            >
               <LogOut className="w-4 h-4 mr-2" />
               Confirmar salida
             </AlertDialogAction>

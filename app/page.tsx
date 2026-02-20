@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { LoginForm } from "@/components/login-form";
 import { ChatContainer } from "@/components/ChatContainer";
 import type { Colaborador, Actividad } from "@/lib/types";
-import { logout } from "@/lib/api";
+import { logout,
+  //  getAnfetaToken 
+  } from "@/lib/api";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -23,6 +25,14 @@ export default function Home() {
         setCurrentColaborador(JSON.parse(savedColaborador));
         setUserActividades(JSON.parse(savedActividades));
         setIsLoggedIn(true);
+
+        // if (!localStorage.getItem("anfetaToken")) {
+        //   getAnfetaToken()
+        //     .then((data) => {
+        //       if (data?.token) localStorage.setItem("anfetaToken", data.token);
+        //     })
+        //     .catch(() => {});
+        // }
       }
     } catch (error) {
       clearSession();

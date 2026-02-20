@@ -31,12 +31,10 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    // Detectar tema del sistema
     const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     setTheme(isDark ? "dark" : "light");
     document.documentElement.classList.toggle("dark", isDark);
 
-    // Verificar sesión existente
     checkExistingSession();
   }, []);
 
@@ -46,24 +44,20 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       const user = await validateSession();
 
       if (user && user.email) {
-        // Usuario tiene sesión activa, cargar colaboradores para encontrar sus datos
         const colaboradoresData = await fetchColaboradores();
         setColaboradores(colaboradoresData);
 
-        // Buscar el colaborador que coincida con el email de la sesión
         const colaboradorActivo = colaboradoresData.find(
           (c) => c.email === user.email,
         );
 
         if (colaboradorActivo) {
-          // Guardar en localStorage y hacer login automático
           localStorage.setItem(
             "colaborador",
             JSON.stringify(colaboradorActivo),
           );
           localStorage.setItem("actividades", JSON.stringify([]));
 
-          // Redirigir al chatbot
           onLogin(colaboradorActivo, []);
           return;
         }
@@ -111,6 +105,11 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       if (colaboradorInfo && user) {
         localStorage.setItem("colaborador", JSON.stringify(colaboradorInfo));
         localStorage.setItem("actividades", JSON.stringify([]));
+
+        // if (user.anfetaToken) {
+        //   localStorage.setItem("anfetaToken", user.anfetaToken);
+        // }
+
         onLogin(colaboradorInfo, []);
       }
     });

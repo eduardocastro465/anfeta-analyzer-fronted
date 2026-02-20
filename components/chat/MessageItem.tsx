@@ -26,9 +26,8 @@ export function MessageItem({
 
       case "bot":
         return theme === "dark"
-          ? `${baseStyles} bg-gradient-to-br from-[#2a2a2a] to-[#333333] text-white max-w-[80%] border border-white/5 shadow-lg hover:border-white/10`
-          : `${baseStyles} bg-gradient-to-br from-white to-gray-50 text-gray-900 max-w-[80%] border border-gray-200/80 shadow-md hover:shadow-lg`;
-
+          ? `${baseStyles} ${message.isWide ? "w-full" : "max-w-[100%]"} bg-gradient-to-br from-[#2a2a2a] to-[#333333] text-white border border-white/5 shadow-lg hover:border-white/10`
+          : `${baseStyles} ${message.isWide ? "w-full" : "max-w-[100%]"} bg-gradient-to-br from-white to-gray-50 text-gray-900 border border-gray-200/80 shadow-md hover:shadow-lg`;
       case "voice":
         return `${baseStyles} cursor-pointer transition-all duration-300 max-w-[80%] group ${
           theme === "dark"

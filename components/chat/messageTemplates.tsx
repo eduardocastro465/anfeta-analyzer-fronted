@@ -70,7 +70,7 @@ export const welcomeTemplates = {
     displayName,
     email,
   }: MessageTemplateProps & { displayName: string; email: string }) => (
-    <div className="space-y-4 w-full max-w-full">
+    <div className="flex flex-col gap-3 w-full">
       {/* Card Usuario */}
       <div className="flex items-start gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10 w-full max-w-full">
         <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
@@ -78,11 +78,13 @@ export const welcomeTemplates = {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">Hola, {displayName}!</p>
+          <p className="font-medium text-sm break-words leading-tight">
+            Hola, {displayName}!
+          </p>
 
           <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 min-w-0">
             <Mail className="w-3 h-3 shrink-0" />
-            <span className="truncate break-all">{email}</span>
+            <span className="break-all leading-tight">{email}</span>
           </div>
         </div>
       </div>
@@ -205,14 +207,28 @@ export const analysisTemplates = {
         >
           <div className="flex items-start gap-2">
             <Bot className="w-4 h-4 text-[#6841ea] mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p
-                className={`text-sm leading-relaxed ${
-                  theme === "dark" ? "text-gray-200" : "text-gray-700"
-                }`}
-              >
-                {analysis.answer.split("\n\n")[0]}
-              </p>
+            <div className="flex-1 min-w-0 space-y-1">
+              {analysis.answer
+                .split("\n")
+                .filter((line) => line.trim().length > 0)
+                .map((line, i) => {
+                  const isBold = line.includes("**");
+                  const clean = line.replace(/\*\*/g, "").trim();
+                  return (
+                    <p
+                      key={i}
+                      className={`text-sm leading-relaxed ${
+                        isBold
+                          ? "font-semibold text-[#6841ea]"
+                          : theme === "dark"
+                            ? "text-gray-200"
+                            : "text-gray-700"
+                      }`}
+                    >
+                      {clean}
+                    </p>
+                  );
+                })}
             </div>
           </div>
         </div>
@@ -474,7 +490,9 @@ export const errorTemplates = {
     >
       <div className="flex items-center gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-        <span className="text-sm">Error al guardar el reporte. Intenta nuevamente.</span>
+        <span className="text-sm">
+          Error al guardar el reporte. Intenta nuevamente.
+        </span>
       </div>
     </div>
   ),
@@ -484,7 +502,9 @@ export const errorTemplates = {
       <div className="flex items-center gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
         <div className="min-w-0">
-          <span className="font-medium text-sm">Error al obtener actividades</span>
+          <span className="font-medium text-sm">
+            Error al obtener actividades
+          </span>
           <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
             Hubo un problema al obtener tus actividades. Por favor, intenta
             nuevamente más tarde.

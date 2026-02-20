@@ -371,7 +371,7 @@ export function ChatInputBar({
           <Button
             type="button"
             onClick={isRecording ? onCancelRecording : onStartRecording}
-            disabled={isTranscribing || isSpeaking || isLoadingIA}
+            disabled={isTranscribing || isSpeaking || isLoadingIA || isInteractionDisabled}
             className={`
               relative 
               h-10 w-10 sm:h-11 sm:w-11 

@@ -61,6 +61,22 @@ export async function SignIn(email: string): Promise<any> {
   }
 }
 
+// export async function getAnfetaToken(): Promise<any> {
+//   try {
+//     const response = await fetch(`${BASE_URL_BACK}/auth/getAnfetaToken`, {
+//       method: "GET",
+//       credentials: "include",
+//     });
+//     if (!response.ok) {
+//       throw new Error(`Error ${response.status}: ${response.statusText}`);
+//     }
+//     const data = await response.json();
+//     return data;
+//   } catch (error) {
+//     throw error;
+//   }
+// }
+
 export async function logout(): Promise<boolean> {
   try {
     const response = await fetch(`${BASE_URL_BACK}/auth/logout`, {
@@ -513,6 +529,31 @@ export async function obtenerCambiosTareas() {
 
     if (!response.ok) {
       throw new Error("Error al verificar cambios");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Error de conexión:", error);
+    return { success: false };
+  }
+}
+
+
+export async function obtenerActividadesDesdeDB() {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/assistant/actividades-desde-db`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Error al obtener actividades");
     }
 
     return await response.json();

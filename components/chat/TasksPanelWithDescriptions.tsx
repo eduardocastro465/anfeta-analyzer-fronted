@@ -349,6 +349,7 @@ export function TasksPanelWithDescriptions({
                   : "bg-blue-50 text-blue-700"
               }`}
             >
+              
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <FileText className="w-4 h-4 shrink-0" />
                 <strong>
@@ -568,6 +569,7 @@ function ActivityWithDescriptionItem({
                     esActividadIndividual={esActividadIndividual}
                     colaboradoresReales={colaboradoresReales}
                     onEditarConVoz={onEditarConVoz}
+                    currentUserEmail={currentUserEmail}
                   />
                 ))}
             </div>
@@ -611,6 +613,7 @@ function ActivityWithDescriptionItem({
                     esActividadIndividual={esActividadIndividual}
                     colaboradoresReales={colaboradoresReales}
                     onEditarConVoz={onEditarConVoz}
+                    currentUserEmail={currentUserEmail}
                   />
                 ))}
             </div>
@@ -628,8 +631,8 @@ interface TaskWithDescriptionItemProps {
   onToggleSeleccion: () => void;
   esActividadIndividual: boolean;
   colaboradoresReales: string[];
-  // ✅ NUEVO: reemplaza la edición inline — abre el modal de voz
   onEditarConVoz: (tareaId: string) => void;
+  currentUserEmail: string;
 }
 
 function TaskWithDescriptionItem({
@@ -640,21 +643,31 @@ function TaskWithDescriptionItem({
   esActividadIndividual,
   colaboradoresReales,
   onEditarConVoz,
+  currentUserEmail,
 }: TaskWithDescriptionItemProps) {
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
+  const reportadoPorMi =
+    tarea.explicacionVoz?.emailUsuario === currentUserEmail;
+  const reportadoPorCompañero =
+    tarea.bloqueada && tarea.explicacionVoz?.emailUsuario && !reportadoPorMi;
+  const nombreReportador = tarea.explicacionVoz?.emailUsuario?.split("@")[0];
 
   return (
     <div
       className={`p-3 rounded border transition-all ${
-        tarea.bloqueada
+        reportadoPorMi
           ? theme === "dark"
-            ? "bg-green-900/10 border-green-500/20 opacity-75"
-            : "bg-green-50 border-green-200 opacity-75"
-          : estaSeleccionada
-            ? "border-[#6841ea] bg-[#6841ea]/10"
-            : theme === "dark"
-              ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#2a2a2a]"
-              : "bg-white border-gray-200 hover:bg-gray-50"
+            ? "bg-blue-900/15 border-blue-500/30"
+            : "bg-blue-50 border-blue-300"
+          : reportadoPorCompañero
+            ? theme === "dark"
+              ? "bg-purple-900/15 border-purple-500/30"
+              : "bg-purple-50 border-purple-300"
+            : estaSeleccionada
+              ? "border-[#6841ea] bg-[#6841ea]/10"
+              : theme === "dark"
+                ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#2a2a2a]"
+                : "bg-white border-gray-200 hover:bg-gray-50"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -765,16 +778,24 @@ function TaskWithDescriptionItem({
               </div>
 
               {tarea.bloqueada ? (
-                <UIBadge
-                  className={`text-[10px] px-1.5 py-0.5 ${
-                    theme === "dark"
-                      ? "bg-green-500/30 text-green-300"
-                      : "bg-green-100 text-green-700"
-                  }`}
-                >
-                  <Check className="w-3 h-3 inline mr-1" />
-                  COMPLETADA
-                </UIBadge>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <UIBadge
+                    className={`text-[10px] px-1.5 py-0.5 ${
+                      reportadoPorMi
+                        ? "bg-blue-500/30 text-blue-300"
+                        : reportadoPorCompañero
+                          ? "bg-purple-500/30 text-purple-300"
+                          : "bg-green-500/30 text-green-300"
+                    }`}
+                  >
+                    <Check className="w-3 h-3 inline mr-1" />
+                    {reportadoPorMi
+                      ? "TÚ LO REPORTASTE"
+                      : reportadoPorCompañero
+                        ? `REPORTADO POR ${nombreReportador?.toUpperCase()}`
+                        : "COMPLETADA"}
+                  </UIBadge>
+                </div>
               ) : (
                 <UIBadge
                   className={`text-[10px] px-1.5 py-0.5 ${
