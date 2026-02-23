@@ -75,6 +75,11 @@ export function PanelReporteTareasTarde({
       cargarTareasReportadas(false);
     });
 
+    wsService.on("explicacion_guardada", (data: any) => {
+      console.log("✅ Explicación guardada via WebSocket:", data);
+      cargarTareasReportadas(false); // recarga silenciosa
+    });
+
     // Escuchar cambios específicos de reportes
     wsService.on("reportes-actualizados", (data: any) => {
       console.log("📋 Reportes actualizados via WebSocket:", data);
@@ -84,6 +89,7 @@ export function PanelReporteTareasTarde({
     return () => {
       wsService.off("cambios-tareas");
       wsService.off("reportes-actualizados");
+      wsService.off("explicacion_guardada");
     };
   }, [currentUserEmail]);
 

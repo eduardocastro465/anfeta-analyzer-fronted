@@ -625,8 +625,14 @@ export function ChatBot({
       actualizarDatosRef.current();
     });
 
+    wsService.on("explicacion_guardada", (data: any) => {
+      console.log("✅ Reporte tarde guardado, actualizando análisis...");
+      actualizarDatosRef.current(); // actualiza el panel completo
+    });
+
     return () => {
       wsService.off("cambios-tareas");
+      wsService.off("explicacion_guardada");
       // wsService.off("actividad_actualizada");
       // wsService.off("actividad_creada");
       wsService.desconectar();
