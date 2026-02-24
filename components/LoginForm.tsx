@@ -14,6 +14,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import Image from "next/image";
+import { useToast } from "@/hooks/use-toast";
 
 interface LoginFormProps {
   onLogin: (colaborador: Colaborador, actividades: Actividad[]) => void;
@@ -29,6 +30,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { toast } = useToast();
 
   useEffect(() => {
     const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -100,19 +102,43 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     }
   }, [selectedId, colaboradores]);
 
-  const handleAcceder = () => {
-    SignIn(colaboradorInfo?.email || "").then((user) => {
-      if (colaboradorInfo && user) {
-        localStorage.setItem("colaborador", JSON.stringify(colaboradorInfo));
-        localStorage.setItem("actividades", JSON.stringify([]));
+  const handleAcceder = async () => {
+    try {
+      const user = await SignIn(colaboradorInfo?.email || "");
 
-        // if (user.anfetaToken) {
-        //   localStorage.setItem("anfetaToken", user.anfetaToken);
-        // }
+      if (!colaboradorInfo || !user) {
+        toast({
+          title: "Selecciona un usuario",
+          description: "Debes elegir un colaborador antes de continuar.",
+          variant: "warning",
+        });
 
-        onLogin(colaboradorInfo, []);
+        return;
       }
-    });
+
+      localStorage.setItem("colaborador", JSON.stringify(colaboradorInfo));
+      localStorage.setItem("actividades", JSON.stringify([]));
+
+      onLogin(colaboradorInfo, []);
+    } catch (error: any) {
+      console.error("Error en login:", error);
+
+      if (error.message === "NETWORK_ERROR") {
+        toast({
+          title: "Servidor no disponible",
+          description:
+            "No se pudo establecer conexión con el servidor. Intenta nuevamente más tarde.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Error",
+        description: "No se pudo iniciar sesión. Verifica tus datos.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getDisplayName = (colaborador: Colaborador) => {

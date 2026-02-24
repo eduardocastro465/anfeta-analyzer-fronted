@@ -57,6 +57,9 @@ export async function SignIn(email: string): Promise<any> {
     const data = await response.json();
     return data;
   } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error("NETWORK_ERROR");
+    }
     throw error;
   }
 }
@@ -554,6 +557,55 @@ export async function obtenerActividadesDesdeDB() {
 
     if (!response.ok) {
       throw new Error("Error al obtener actividades");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Error de conexión:", error);
+    return { success: false };
+  }
+}
+
+export async function obtenerPreferenciasUsuario() {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/auth/preferencias`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Error al obtener preferencias");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Error de conexión:", error);
+    return { success: false };
+  }
+}
+
+export async function guardarPreferenciasUsuario(preferencias: any) {
+  try {
+    const response = await fetch(
+      `${BASE_URL_BACK}/auth/preferencias`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(preferencias),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Error al guardar preferencias");
     }
 
     return await response.json();

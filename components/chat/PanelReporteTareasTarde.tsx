@@ -18,19 +18,17 @@ import {
   Calendar,
   ChevronDown,
   X,
-  Zap,
   TrendingUp,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { PanelReporteTareasTardeProps, RevisionProcesada } from "@/lib/types";
 import { ReporteActividadesModal } from "../ReporteActividadesModal";
-import { wsService } from "@/lib/websocket.service"; // ✅ IMPORTAR WEBSOCKET
+import { wsService } from "@/lib/websocket.service";
+import { useTheme } from "@/context/ThemeContext";
 
 export function PanelReporteTareasTarde({
   assistantAnalysis,
-  theme,
+  theme: _theme,
   turno,
   userEmail,
   onStartVoiceMode,
@@ -38,7 +36,8 @@ export function PanelReporteTareasTarde({
   onReportCompleted,
   actividadesDiarias = [],
 }: PanelReporteTareasTardeProps) {
-  // ========== ESTADOS ==========
+  const theme = useTheme();
+
   const [tareasConDescripcion] = useState<Set<string>>(new Set());
   const [tareasSeleccionadas, setTareasSeleccionadas] = useState<Set<string>>(
     new Set(),
@@ -59,41 +58,17 @@ export function PanelReporteTareasTarde({
   const actualizandoRef = useRef(false);
   const currentUserEmail = userEmail || "";
 
-  // ✅ WEBSOCKET: Escuchar cambios en tareas reportadas
   useEffect(() => {
     if (!currentUserEmail) return;
-
-    console.log("🔌 Conectando WebSocket para PanelReporteTareasTarde...");
-
-    // Escuchar cambios en tareas
-    wsService.on("cambios-tareas", (data: any) => {
-      console.log(
-        "🔄 Cambio detectado en tareas reportadas via WebSocket:",
-        data,
-      );
-      // Recargar tareas cuando haya cambios
-      cargarTareasReportadas(false);
-    });
-
-    wsService.on("explicacion_guardada", (data: any) => {
-      console.log("✅ Explicación guardada via WebSocket:", data);
-      cargarTareasReportadas(false); // recarga silenciosa
-    });
-
-    // Escuchar cambios específicos de reportes
-    wsService.on("reportes-actualizados", (data: any) => {
-      console.log("📋 Reportes actualizados via WebSocket:", data);
-      cargarTareasReportadas(false);
-    });
-
+    wsService.on("cambios-tareas", () => cargarTareasReportadas(false));
+    wsService.on("explicacion_guardada", () => cargarTareasReportadas(false));
+    wsService.on("reportes-actualizados", () => cargarTareasReportadas(false));
     return () => {
       wsService.off("cambios-tareas");
       wsService.off("reportes-actualizados");
       wsService.off("explicacion_guardada");
     };
   }, [currentUserEmail]);
-
-  const INTERVALO_ACTUALIZACION_TAREAS = 3000;
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -110,11 +85,9 @@ export function PanelReporteTareasTarde({
     (nuevasTareasReportadas: any[], metadata: any = null) => {
       if (metadata) {
         setEstadisticasServidor(metadata);
-        const tieneReportesPropios = metadata.tieneReportesPropios || false;
-        const tieneReportesColaborativos =
-          metadata.tieneReportesColaborativos || false;
         setMostrandoReportesDeOtros(
-          !tieneReportesPropios && tieneReportesColaborativos,
+          !(metadata.tieneReportesPropios || false) &&
+            (metadata.tieneReportesColaborativos || false),
         );
       }
 
@@ -215,7 +188,7 @@ export function PanelReporteTareasTarde({
         return nuevoMap;
       });
     },
-    [currentUserEmail, mostrandoReportesDeOtros],
+    [currentUserEmail],
   );
 
   const handleAbrirModalReporte = useCallback(() => {
@@ -232,10 +205,8 @@ export function PanelReporteTareasTarde({
     async (esForzado: boolean = false) => {
       if (!currentUserEmail) return;
       if (actualizandoRef.current && !esForzado) return;
-
       setIsLoading(true);
       actualizandoRef.current = true;
-
       try {
         const url = `http://localhost:4000/api/v1/reportes/tareas-reportadas?email=${encodeURIComponent(currentUserEmail)}&limit=100`;
         const response = await fetch(url, {
@@ -243,33 +214,31 @@ export function PanelReporteTareasTarde({
           credentials: "include",
         });
         if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-
         const data = await response.json();
         const tareasData = data.data || data.tareas || data.resultados || [];
         const metadata = data.metadata || data.info || {};
-
         if (Array.isArray(tareasData) && tareasData.length > 0) {
           procesarTareasReportadas(tareasData, metadata);
-          if (esForzado) {
-            setTimeout(() => {
-              mostrarAlertaMensaje(
-                metadata.mensaje || `${tareasData.length} tarea(s) cargada(s)`,
-              );
-            }, 500);
-          }
+          if (esForzado)
+            setTimeout(
+              () =>
+                mostrarAlertaMensaje(
+                  metadata.mensaje ||
+                    `${tareasData.length} tarea(s) cargada(s)`,
+                ),
+              500,
+            );
         } else {
           procesarTareasReportadas([], metadata);
-          if (esForzado) {
-            const totalActual = tareasReportadasMap.size;
+          if (esForzado)
             mostrarAlertaMensaje(
               metadata.mensaje ||
-                (totalActual > 0
-                  ? `No hay nuevas tareas. Tienes ${totalActual} en historial`
+                (tareasReportadasMap.size > 0
+                  ? `No hay nuevas tareas. Tienes ${tareasReportadasMap.size} en historial`
                   : "No tienes tareas reportadas aún"),
             );
-          }
         }
-      } catch (error) {
+      } catch {
         if (esForzado)
           mostrarAlertaMensaje("No se pudieron cargar las tareas reportadas");
       } finally {
@@ -291,17 +260,14 @@ export function PanelReporteTareasTarde({
       await cargarTareasReportadas(true);
       setTareasSeleccionadas(new Set());
       setMostrarModalReporte(false);
-      if (onReportCompleted) onReportCompleted();
+      onReportCompleted?.();
       mostrarAlertaMensaje("Reporte completado exitosamente");
-    } catch (error) {
+    } catch {
       mostrarAlertaMensaje("Error al completar el reporte");
     } finally {
       setGuardandoReporte(false);
     }
   }, [cargarTareasReportadas, onReportCompleted, mostrarAlertaMensaje]);
-
-  // ✅ ELIMINADO: useEffect con setInterval para polling (línea ~170)
-  // ✅ REEMPLAZADO por WebSocket arriba
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -315,27 +281,23 @@ export function PanelReporteTareasTarde({
 
   const actividadesConTareas = useMemo(() => {
     if (!assistantAnalysis?.data?.revisionesPorActividad) return [];
-
     return assistantAnalysis.data.revisionesPorActividad
       .map((revision) => {
         const colaboradoresReales =
           revision.colaboradores ||
           assistantAnalysis.colaboradoresInvolucrados ||
           [];
-
         const tareasReportadas = revision.tareasConTiempo.filter((tarea) =>
           Array.from(tareasReportadasMap.values()).find(
             (r) => r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre,
           ),
         );
-
         const tareasNoReportadas = revision.tareasConTiempo.filter((tarea) => {
           const estaReportada = Array.from(tareasReportadasMap.values()).some(
             (r) => r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre,
           );
           return !estaReportada && !tareasConDescripcion.has(tarea.id);
         });
-
         return {
           ...revision,
           colaboradoresReales,
@@ -355,7 +317,6 @@ export function PanelReporteTareasTarde({
     const todasTareasReportadas = actividadesConTareas.flatMap(
       (a) => a.tareasReportadas,
     );
-
     const totalReportadasPorMi = todasTareasReportadas.filter((tarea: any) =>
       Array.from(tareasReportadasMap.values()).find(
         (r) =>
@@ -363,7 +324,6 @@ export function PanelReporteTareasTarde({
           r.esMiReporte,
       ),
     ).length;
-
     const totalReportadasPorOtros = todasTareasReportadas.filter((tarea: any) =>
       Array.from(tareasReportadasMap.values()).find(
         (r) =>
@@ -371,12 +331,10 @@ export function PanelReporteTareasTarde({
           !r.esMiReporte,
       ),
     ).length;
-
     const totalNoReportadas = actividadesConTareas.reduce(
-      (sum, actividad) => sum + actividad.tareasNoReportadas.length,
+      (sum, a) => sum + a.tareasNoReportadas.length,
       0,
     );
-
     return {
       totalReportadasPorMi,
       totalReportadasPorOtros,
@@ -398,7 +356,6 @@ export function PanelReporteTareasTarde({
         );
         return;
       }
-
       const emailDueño = tarea.explicacionVoz?.emailUsuario;
       if (emailDueño && emailDueño !== currentUserEmail) {
         mostrarAlertaMensaje(
@@ -406,11 +363,9 @@ export function PanelReporteTareasTarde({
         );
         return;
       }
-
       const reporte = Array.from(tareasReportadasMap.values()).find(
         (r) => r.pendienteId === tareaId || r.nombreTarea === tarea.nombre,
       );
-
       if (reporte) {
         mostrarAlertaMensaje(
           reporte.esMiReporte
@@ -419,7 +374,6 @@ export function PanelReporteTareasTarde({
         );
         return;
       }
-
       setTareasSeleccionadas((prev) => {
         const nuevas = new Set(prev);
         nuevas.has(tareaId) ? nuevas.delete(tareaId) : nuevas.add(tareaId);
@@ -430,8 +384,8 @@ export function PanelReporteTareasTarde({
   );
 
   const seleccionarTodasTareas = useCallback(() => {
-    const ids = actividadesConTareas.flatMap((actividad) =>
-      actividad.tareasNoReportadas
+    const ids = actividadesConTareas.flatMap((a) =>
+      a.tareasNoReportadas
         .filter((t: any) => t.descripcion && t.descripcion.trim().length > 0)
         .map((t: any) => t.id),
     );
@@ -456,16 +410,14 @@ export function PanelReporteTareasTarde({
       return;
     }
     setUltimoReporteEnviado(Date.now());
-
     if (onStartVoiceModeWithTasks) {
       onStartVoiceModeWithTasks(Array.from(tareasSeleccionadas));
       mostrarAlertaMensaje(
         `Iniciando reporte de ${tareasSeleccionadas.size} tarea${tareasSeleccionadas.size !== 1 ? "s" : ""}`,
       );
-
       setTimeout(() => {
         cargarTareasReportadas(true);
-        if (onReportCompleted) onReportCompleted();
+        onReportCompleted?.();
         setTareasSeleccionadas(new Set());
         setTimeout(() => cargarTareasReportadas(true), 5000);
       }, 3000);
@@ -489,17 +441,16 @@ export function PanelReporteTareasTarde({
     [cargarTareasReportadas],
   );
 
-  // ========== RENDER ==========
   return (
     <div className="w-full max-w-lg mx-auto animate-in slide-in-from-bottom-2 duration-300">
-      {/* Alerta flotante — ocupa todo el ancho en móvil */}
+      {/* Alerta flotante */}
       {mostrarAlerta && (
         <div className="fixed top-0 left-0 right-0 z-50 animate-in slide-in-from-top duration-300 sm:top-3 sm:left-auto sm:right-3 sm:max-w-sm">
           <div
             className={`px-4 py-3 flex items-center gap-2 sm:rounded-lg shadow-lg backdrop-blur-sm ${
               theme === "dark"
-                ? "bg-gradient-to-r from-orange-900/95 to-amber-900/95 text-white border-b border-orange-500/50 sm:border"
-                : "bg-gradient-to-r from-orange-100 to-amber-100 text-gray-800 border-b border-orange-300 sm:border"
+                ? "bg-orange-900/95 text-white border-b border-orange-500/50 sm:border"
+                : "bg-orange-100 text-gray-800 border-b border-orange-300 sm:border"
             }`}
           >
             <Sunset className="w-4 h-4 text-orange-500 animate-pulse flex-shrink-0" />
@@ -507,7 +458,11 @@ export function PanelReporteTareasTarde({
               {mensajeAlerta}
             </span>
             <button
-              className="ml-1 p-1 rounded-full hover:bg-orange-500/20 flex-shrink-0 min-w-[32px] min-h-[32px] flex items-center justify-center"
+              className={`ml-1 p-1 rounded-full flex-shrink-0 min-w-[32px] min-h-[32px] flex items-center justify-center ${
+                theme === "dark"
+                  ? "hover:bg-orange-500/20"
+                  : "hover:bg-orange-200"
+              }`}
               onClick={() => setMostrarAlerta(false)}
             >
               <X className="w-4 h-4" />
@@ -521,8 +476,8 @@ export function PanelReporteTareasTarde({
         <div
           className={`p-3 rounded-xl mb-3 border ${
             theme === "dark"
-              ? "bg-gradient-to-r from-orange-900/30 to-amber-900/30 border-orange-700/50"
-              : "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-300"
+              ? "bg-orange-900/30 border-orange-700/50"
+              : "bg-orange-50 border-orange-300"
           }`}
         >
           <div className="flex items-start gap-3">
@@ -572,12 +527,13 @@ export function PanelReporteTareasTarde({
         >
           {/* Header */}
           <div
-            className={`px-3 py-3 border-b bg-orange-500/10 ${
-              theme === "dark" ? "border-orange-900/50" : "border-orange-200"
+            className={`px-3 py-3 border-b ${
+              theme === "dark"
+                ? "bg-orange-500/15 border-orange-900/50"
+                : "bg-orange-500/8 border-orange-200"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              {/* Título izquierda */}
               <div className="flex items-center gap-2 min-w-0">
                 <Sunset className="w-4 h-4 text-orange-500 flex-shrink-0" />
                 <h4
@@ -585,7 +541,6 @@ export function PanelReporteTareasTarde({
                 >
                   Tareas Tarde
                 </h4>
-                {/* Counters en píldoras */}
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
@@ -593,14 +548,13 @@ export function PanelReporteTareasTarde({
                     {estadisticas.totalTareas}
                   </span>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/30 text-green-200" : "bg-green-100 text-green-700"}`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/30 text-green-300" : "bg-green-100 text-green-700"}`}
                   >
                     ✓ {estadisticas.totalReportadas}
                   </span>
                 </div>
               </div>
 
-              {/* Acciones derecha */}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {mostrandoReportesDeOtros && (
                   <span
@@ -609,7 +563,6 @@ export function PanelReporteTareasTarde({
                     De otros
                   </span>
                 )}
-                {/* Botón recargar — touch target 40x40 */}
                 <button
                   onClick={handleRecargarTareas}
                   disabled={isLoading}
@@ -635,8 +588,8 @@ export function PanelReporteTareasTarde({
               className={`text-xs p-3 rounded-xl mb-3 border ${
                 theme === "dark"
                   ? mostrandoReportesDeOtros
-                    ? "bg-orange-900/30 text-orange-200 border-orange-700/50"
-                    : "bg-blue-900/30 text-blue-200 border-blue-700/50"
+                    ? "bg-orange-900/25 text-orange-200 border-orange-700/40"
+                    : "bg-blue-950/50 text-blue-200 border-blue-800/40"
                   : mostrandoReportesDeOtros
                     ? "bg-orange-50 text-orange-800 border-orange-200"
                     : "bg-blue-50 text-blue-800 border-blue-200"
@@ -655,7 +608,13 @@ export function PanelReporteTareasTarde({
                 </strong>
                 {!mostrandoReportesDeOtros &&
                   estadisticas.totalNoReportadas > 0 && (
-                    <span className="ml-auto text-[10px] px-2 py-0.5 bg-amber-500/30 text-amber-900 dark:text-amber-200 rounded-full font-semibold flex-shrink-0">
+                    <span
+                      className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                        theme === "dark"
+                          ? "bg-amber-500/25 text-amber-300"
+                          : "bg-amber-500/20 text-amber-800"
+                      }`}
+                    >
                       Por reportar
                     </span>
                   )}
@@ -699,7 +658,6 @@ export function PanelReporteTareasTarde({
                       revision={revision}
                       actividad={actividad}
                       index={idx}
-                      theme={theme}
                       tareasSeleccionadas={tareasSeleccionadas}
                       onToggleTarea={toggleSeleccionTarea}
                       todosColaboradores={
@@ -735,7 +693,6 @@ export function PanelReporteTareasTarde({
             tareasReportadasPorMi={estadisticas.totalReportadasPorMi}
             tareasReportadasPorOtros={estadisticas.totalReportadasPorOtros}
             esHoraReporte={false}
-            theme={theme}
             onStartVoiceMode={onStartVoiceMode}
             tareasSeleccionadas={tareasSeleccionadas}
             onSeleccionarTodas={seleccionarTodasTareas}
@@ -755,7 +712,6 @@ export function PanelReporteTareasTarde({
         </div>
       ) : (
         <NoTasksMessage
-          theme={theme}
           onRecargar={handleRecargarTareas}
           currentUserEmail={currentUserEmail}
           mostrandoReportesDeOtros={mostrandoReportesDeOtros}
@@ -772,7 +728,6 @@ interface ActivityItemProps {
   revision: any;
   actividad: any;
   index: number;
-  theme: "light" | "dark";
   tareasSeleccionadas: Set<string>;
   onToggleTarea: (tarea: any) => void;
   todosColaboradores: string[];
@@ -785,7 +740,6 @@ function ActivityItem({
   revision,
   actividad,
   index,
-  theme,
   tareasSeleccionadas,
   onToggleTarea,
   todosColaboradores,
@@ -793,6 +747,8 @@ function ActivityItem({
   currentUserEmail,
   mostrandoReportesDeOtros = false,
 }: ActivityItemProps) {
+  const theme = useTheme();
+
   const badgeColor = useMemo(() => {
     const colors = [
       "bg-orange-500/30 text-orange-400 border-orange-500/50",
@@ -815,19 +771,16 @@ function ActivityItem({
           : "bg-white border-orange-100 shadow-sm"
       }`}
     >
-      {/* Header actividad */}
       <div
         className={`px-3 py-3 ${theme === "dark" ? "border-b border-orange-900/20" : "border-b border-orange-50"}`}
       >
         <div className="flex items-start gap-3">
-          {/* Número */}
           <div
             className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border flex-shrink-0 ${badgeColor}`}
           >
             {index + 1}
           </div>
 
-          {/* Info actividad */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-1">
               <h5
@@ -835,7 +788,6 @@ function ActivityItem({
               >
                 {actividad.titulo}
               </h5>
-              {/* Horario badge — siempre visible */}
               <span
                 className={`text-xs font-semibold flex items-center gap-1 flex-shrink-0 px-2 py-0.5 rounded-lg ${
                   theme === "dark"
@@ -848,22 +800,20 @@ function ActivityItem({
               </span>
             </div>
 
-            {/* Usuario + tipo trabajo en fila */}
             <div className="flex flex-wrap items-center gap-1.5 mt-1">
               {currentUserEmail && (
-                <span
-                  className={`text-xs font-semibold ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
-                >
-                  Tú: {currentUserEmail.split("@")[0]}
-                </span>
-              )}
-              {/* Separador */}
-              {currentUserEmail && (
-                <span
-                  className={`text-xs ${theme === "dark" ? "text-gray-600" : "text-gray-300"}`}
-                >
-                  ·
-                </span>
+                <>
+                  <span
+                    className={`text-xs font-semibold ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
+                  >
+                    Tú: {currentUserEmail.split("@")[0]}
+                  </span>
+                  <span
+                    className={`text-xs ${theme === "dark" ? "text-gray-600" : "text-gray-300"}`}
+                  >
+                    ·
+                  </span>
+                </>
               )}
 
               {esActividadIndividual ? (
@@ -902,9 +852,7 @@ function ActivityItem({
         </div>
       </div>
 
-      {/* Body con tareas */}
       <div className="p-3 space-y-3">
-        {/* Tareas reportadas */}
         {revision.tareasReportadas.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -929,7 +877,6 @@ function ActivityItem({
                   <TareaReportada
                     key={tarea.id}
                     tarea={tarea}
-                    theme={theme}
                     reporteInfo={reporteInfo}
                     esMiReporte={reporteInfo.esMiReporte || false}
                     currentUserEmail={currentUserEmail}
@@ -940,7 +887,6 @@ function ActivityItem({
           </div>
         )}
 
-        {/* Tareas pendientes */}
         {revision.tareasNoReportadas.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -956,7 +902,6 @@ function ActivityItem({
                 · Toca para seleccionar
               </span>
             </div>
-
             <div className="space-y-2">
               {revision.tareasNoReportadas.map((tarea: any) => {
                 const estaReportada = Array.from(
@@ -971,7 +916,6 @@ function ActivityItem({
                   <TareaPendiente
                     key={tarea.id}
                     tarea={tarea}
-                    theme={theme}
                     estaSeleccionada={
                       tareasSeleccionadas?.has?.(tarea.id) || false
                     }
@@ -994,7 +938,6 @@ function ActivityItem({
 
 interface TareaReportadaProps {
   tarea: any;
-  theme: "light" | "dark";
   reporteInfo?: any;
   esMiReporte: boolean;
   currentUserEmail: string;
@@ -1002,11 +945,11 @@ interface TareaReportadaProps {
 
 function TareaReportada({
   tarea,
-  theme,
   reporteInfo,
   esMiReporte,
   currentUserEmail,
 }: TareaReportadaProps) {
+  const theme = useTheme();
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
   if (!reporteInfo) return null;
 
@@ -1040,7 +983,6 @@ function TareaReportada({
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Ícono check */}
         <div
           className={`w-6 h-6 flex items-center justify-center rounded-full border flex-shrink-0 mt-0.5 ${
             esRealmenteMiReporte
@@ -1056,14 +998,12 @@ function TareaReportada({
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Nombre */}
           <p
             className={`text-sm font-semibold leading-tight mb-1.5 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             {tarea.nombre}
           </p>
 
-          {/* Badge + metadata en fila */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span
               className={`text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -1105,7 +1045,6 @@ function TareaReportada({
             )}
           </div>
 
-          {/* Toggle descripción — botón grande para toque */}
           {reporteInfo.texto && (
             <div className="mt-2">
               <button
@@ -1131,12 +1070,18 @@ function TareaReportada({
                       : "bg-white text-gray-700 border border-gray-200"
                   }`}
                 >
-                  <p className="font-semibold mb-1 text-xs">
+                  <p
+                    className={`font-semibold mb-1 text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     {esRealmenteMiReporte
                       ? "Mi explicación:"
                       : `Explicación de ${nombreFormateado}:`}
                   </p>
-                  <p className="italic">"{reporteInfo.texto}"</p>
+                  <p
+                    className={`italic ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+                  >
+                    "{reporteInfo.texto}"
+                  </p>
                   {reporteInfo.encontradoEn && (
                     <p
                       className={`mt-2 pt-2 border-t text-[11px] ${theme === "dark" ? "border-[#3a3a3a] text-gray-500" : "border-gray-200 text-gray-500"}`}
@@ -1158,7 +1103,6 @@ function TareaReportada({
 
 interface TareaPendienteProps {
   tarea: any;
-  theme: "light" | "dark";
   estaSeleccionada: boolean;
   onToggleSeleccion: () => void;
   esActividadIndividual: boolean;
@@ -1168,18 +1112,18 @@ interface TareaPendienteProps {
 
 function TareaPendiente({
   tarea,
-  theme,
   estaSeleccionada,
   onToggleSeleccion,
   esActividadIndividual,
   colaboradoresReales,
   currentUserEmail,
 }: TareaPendienteProps) {
+  const theme = useTheme();
+
   const emailDueñoMañana = tarea.explicacionVoz?.emailUsuario || null;
   const estaBloqueadaPorOtro = !!(
     emailDueñoMañana && emailDueñoMañana !== currentUserEmail
   );
-
   const tieneDescripcion = !!(
     tarea.descripcion &&
     typeof tarea.descripcion === "string" &&
@@ -1197,11 +1141,7 @@ function TareaPendiente({
     <div
       className={`p-3 rounded-xl border transition-all duration-150 ${
         estaBloqueada
-          ? `opacity-50 ${
-              theme === "dark"
-                ? "bg-gray-900/50 border-gray-700"
-                : "bg-gray-50 border-gray-200"
-            }`
+          ? `opacity-50 ${theme === "dark" ? "bg-gray-900/50 border-gray-700" : "bg-gray-50 border-gray-200"}`
           : estaSeleccionada
             ? `border-orange-500 shadow-md ${theme === "dark" ? "bg-orange-900/20" : "bg-orange-50"}`
             : theme === "dark"
@@ -1216,7 +1156,6 @@ function TareaPendiente({
       aria-disabled={estaBloqueada}
     >
       <div className="flex items-start gap-3">
-        {/* Checkbox — mínimo 24x24 para touch */}
         <div
           className={`w-6 h-6 flex items-center justify-center border-2 rounded-lg transition-all flex-shrink-0 mt-0.5 ${
             estaBloqueada
@@ -1232,13 +1171,12 @@ function TareaPendiente({
         >
           {estaBloqueada ? (
             <X className="w-3.5 h-3.5 text-red-500" />
-          ) : (
-            estaSeleccionada && <Check className="w-3.5 h-3.5 text-white" />
-          )}
+          ) : estaSeleccionada ? (
+            <Check className="w-3.5 h-3.5 text-white" />
+          ) : null}
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Nombre tarea */}
           <p
             className={`text-sm font-semibold leading-tight mb-2 ${
               estaBloqueada
@@ -1253,7 +1191,6 @@ function TareaPendiente({
             {tarea.nombre}
           </p>
 
-          {/* Badges en fila con wrap */}
           <div className="flex flex-wrap items-center gap-1.5 mb-2">
             {tarea.explicacionVoz?.emailUsuario &&
               (tarea.explicacionVoz.emailUsuario === currentUserEmail ? (
@@ -1267,6 +1204,7 @@ function TareaPendiente({
                   De {tarea.explicacionVoz.emailUsuario.split("@")[0]}
                 </span>
               ))}
+
             {estaBloqueadaPorOtro ? null : estaBloqueada ? (
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
                 <X className="w-3 h-3" />
@@ -1299,7 +1237,6 @@ function TareaPendiente({
             </span>
           </div>
 
-          {/* Descripción truncada */}
           {tieneDescripcion && (
             <p
               className={`text-xs mb-1.5 leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
@@ -1320,7 +1257,6 @@ function TareaPendiente({
             </p>
           )}
 
-          {/* Footer: colaboradores + tiempo */}
           <div className="flex items-center justify-between gap-2 mt-1.5">
             <div className="flex flex-wrap items-center gap-1.5">
               <span
@@ -1355,7 +1291,6 @@ function TareaPendiente({
                 </span>
               )}
             </div>
-
             <div className="flex items-center gap-2 flex-shrink-0">
               {tarea.duracionMin > 0 && (
                 <span
@@ -1387,7 +1322,6 @@ interface PiePanelReporteProps {
   tareasReportadasPorMi?: number;
   tareasReportadasPorOtros?: number;
   esHoraReporte: boolean;
-  theme: "light" | "dark";
   onOpenReport?: () => void;
   onStartVoiceMode?: () => void;
   todosColaboradores: string[];
@@ -1410,7 +1344,6 @@ function PiePanelReporte({
   tareasReportadasPorMi = 0,
   tareasReportadasPorOtros = 0,
   esHoraReporte,
-  theme,
   onOpenReport,
   onStartVoiceMode,
   todosColaboradores,
@@ -1426,6 +1359,7 @@ function PiePanelReporte({
   turno,
   onOpenReporteModal,
 }: PiePanelReporteProps) {
+  const theme = useTheme();
   const countSeleccionadas = tareasSeleccionadas?.size ?? 0;
   const todasSeleccionadas =
     countSeleccionadas === totalTareasPendientes && totalTareasPendientes > 0;
@@ -1438,25 +1372,20 @@ function PiePanelReporte({
   const handleMainAction = () => {
     if (esHoraReporte) {
       onOpenReport?.();
-    } else {
-      if (countSeleccionadas === 0) return;
-      if (esTurnoTarde && onOpenReporteModal) onOpenReporteModal();
-      else onExplicarTareasSeleccionadas();
+      return;
     }
+    if (countSeleccionadas === 0) return;
+    if (esTurnoTarde && onOpenReporteModal) onOpenReporteModal();
+    else onExplicarTareasSeleccionadas();
   };
 
   return (
     <div
-      className={`px-3 py-3 border-t ${
-        theme === "dark"
-          ? "border-orange-900/40 bg-[#1c1c1c]"
-          : "border-orange-100 bg-orange-50/50"
-      }`}
+      className={`px-3 py-3 border-t ${theme === "dark" ? "border-orange-900/40 bg-[#1c1c1c]" : "border-orange-100 bg-orange-50/50"}`}
     >
       <div className="flex flex-col gap-3">
-        {/* Stats + tipo trabajo */}
+        {/* Stats */}
         <div className="flex items-start justify-between gap-3">
-          {/* Izquierda: stats */}
           <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <span
@@ -1512,7 +1441,6 @@ function PiePanelReporte({
             )}
           </div>
 
-          {/* Derecha: badge tipo */}
           <div className="flex-shrink-0">
             {mostrandoReportesDeOtros ? (
               <span
@@ -1539,7 +1467,7 @@ function PiePanelReporte({
           </div>
         </div>
 
-        {/* Seleccionar todas — botón touch-friendly */}
+        {/* Seleccionar todas */}
         {!esHoraReporte && totalTareasPendientes > 0 && (
           <div className="flex gap-2">
             <button
@@ -1577,14 +1505,16 @@ function PiePanelReporte({
           </div>
         )}
 
-        {/* Botón principal — altura 48px (mínimo recomendado para móvil) */}
+        {/* Botón principal — sin gradiente */}
         <button
           onClick={handleMainAction}
           disabled={!esHoraReporte && countSeleccionadas === 0}
           className={`w-full h-12 flex items-center justify-center gap-2 text-sm font-bold text-white rounded-xl shadow-md transition-all active:scale-[0.98] ${
             countSeleccionadas === 0 && !esHoraReporte
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-gradient-to-r from-orange-500 to-amber-500 active:from-orange-600 active:to-amber-600 shadow-orange-500/30"
+              ? theme === "dark"
+                ? "bg-gray-700 cursor-not-allowed text-gray-500"
+                : "bg-gray-300 cursor-not-allowed text-gray-500"
+              : "bg-orange-500 hover:bg-orange-600 active:bg-orange-600 shadow-orange-500/30"
           }`}
         >
           {esHoraReporte ? (
@@ -1614,7 +1544,6 @@ function PiePanelReporte({
 // ========== NO TASKS MESSAGE ==========
 
 interface NoTasksMessageProps {
-  theme: "light" | "dark";
   onRecargar?: () => void;
   currentUserEmail?: string;
   mostrandoReportesDeOtros?: boolean;
@@ -1622,12 +1551,12 @@ interface NoTasksMessageProps {
 }
 
 export function NoTasksMessage({
-  theme,
   onRecargar,
   currentUserEmail,
   mostrandoReportesDeOtros = false,
   estadisticasServidor = null,
 }: NoTasksMessageProps) {
+  const theme = useTheme();
   const nombreUsuario = currentUserEmail?.includes("@")
     ? currentUserEmail.split("@")[0]
     : "Usuario";
@@ -1704,44 +1633,13 @@ export function NoTasksMessage({
   );
 }
 
-// ========== TYPING INDICATOR ==========
-
-interface TypingIndicatorProps {
-  theme: "light" | "dark";
-}
-
-export function TypingIndicator({ theme }: TypingIndicatorProps) {
-  return (
-    <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
-      <div
-        className={`rounded-xl px-4 py-3 flex items-center gap-2 shadow-md ${
-          theme === "dark"
-            ? "bg-gradient-to-r from-orange-900/50 to-amber-900/50 text-white"
-            : "bg-gradient-to-r from-orange-100 to-amber-100 text-gray-900"
-        }`}
-      >
-        <Sunset className="w-4 h-4 text-orange-500 flex-shrink-0" />
-        <div className="flex gap-1">
-          {[0, 150, 300].map((delay) => (
-            <div
-              key={delay}
-              className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
-              style={{ animationDelay: `${delay}ms` }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ========== TASKS PANEL ==========
+// ========== TASKS PANEL (legacy export) ==========
 
 export function TasksPanel({
   actividadesConTareasPendientes = [],
   totalTareasPendientes = 0,
   esHoraReporte = false,
-  theme = "light",
+  theme: _theme = "light",
   assistantAnalysis = null,
   onOpenReport,
   onStartVoiceMode,
@@ -1751,6 +1649,8 @@ export function TasksPanel({
   onDeseleccionarTodas = () => {},
   onExplicarTareasSeleccionadas = () => {},
 }: any) {
+  const theme = useTheme();
+
   const todosColaboradores = useMemo(() => {
     if (!assistantAnalysis?.colaboradoresInvolucrados) return [];
     return assistantAnalysis.colaboradoresInvolucrados;
@@ -1768,7 +1668,6 @@ export function TasksPanel({
         <PiePanelReporte
           totalTareasPendientes={totalTareasPendientes}
           esHoraReporte={esHoraReporte}
-          theme={theme}
           onOpenReport={onOpenReport}
           onStartVoiceMode={onStartVoiceMode}
           tareasSeleccionadas={tareasSeleccionadas}

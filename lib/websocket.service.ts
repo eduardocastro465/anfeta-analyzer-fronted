@@ -22,8 +22,6 @@ export class WebSocketService {
     const backendUrl =
       process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
 
-    console.log(`Conectando a WebSocket: ${backendUrl}`);
-
     this.socket = io(backendUrl, {
       withCredentials: true,
       transports: ["websocket", "polling"], // 👈 CAMBIADO: incluir polling como fallback
@@ -36,42 +34,33 @@ export class WebSocketService {
 
     // Evento de conexión exitosa
     this.socket.on("connect", () => {
-      console.log("WebSocket conectado, ID:", this.socket?.id);
       this.reconnectAttempts = 0;
 
       // Registrar usuario en su sala personal
       if (email) {
-        console.log(`Registrando usuario en sala: usuario:${email}`);
         this.socket?.emit("registrar", email);
       }
     });
 
     // Escuchar cambios en tareas
     this.socket.on("cambios-tareas", (data) => {
-      console.log("Evento recibido - cambios-tareas:", data);
       const listeners = this.listeners.get("cambios-tareas") || [];
       listeners.forEach((callback) => callback(data));
     });
 
     // Escuchar cambios globales
     this.socket.on("cambios-globales", (data) => {
-      console.log("Evento recibido - cambios-globales:", data);
       const listeners = this.listeners.get("cambios-globales") || [];
       listeners.forEach((callback) => callback(data));
     });
 
     // Manejar desconexión
     this.socket.on("disconnect", (reason) => {
-      console.log("WebSocket desconectado:", reason);
-
       if (reason === "io server disconnect") {
         // El servidor cerró la conexión, intentar reconectar manualmente
         setTimeout(() => {
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            console.log(
-              `Reintentando conexion (intento ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`,
-            );
             this.conectar(email);
           }
         }, this.reconnectDelay * this.reconnectAttempts);
@@ -128,7 +117,6 @@ export class WebSocketService {
       this.listeners.set(evento, []);
     }
     this.listeners.get(evento)!.push(callback);
-    console.log(`Listener registrado para evento: ${evento}`);
   }
 
   /**
@@ -142,11 +130,9 @@ export class WebSocketService {
       const index = listeners.indexOf(callback);
       if (index !== -1) {
         listeners.splice(index, 1);
-        console.log(`Listener eliminado para evento: ${evento}`);
       }
     } else {
       this.listeners.delete(evento);
-      console.log(`Todos los listeners eliminados para evento: ${evento}`);
     }
   }
 
@@ -158,7 +144,6 @@ export class WebSocketService {
   emit(evento: string, datos: any) {
     if (this.socket?.connected) {
       this.socket.emit(evento, datos);
-      console.log(`Evento emitido: ${evento}`, datos);
     } else {
       console.warn(`No se pudo emitir ${evento}: WebSocket no conectado`);
     }
@@ -174,7 +159,6 @@ export class WebSocketService {
       // this.anfetaSocket?.disconnect();
       this.listeners.clear();
       this.reconnectAttempts = 0;
-      console.log("WebSocket desconectado manualmente");
     }
   }
 

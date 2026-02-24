@@ -25,7 +25,7 @@ export const useReporteData = () => {
       
       setError(null);
       
-      console.log("🔄 Conectando a endpoint real...");
+      // console.log("🔄 Conectando a endpoint real...");
       const response = await fetch(
         `${BASE_URL_BACK}/admin/todas-explicaciones`,
         {
@@ -61,7 +61,7 @@ export const useReporteData = () => {
       });
 
     } catch (err) {
-      console.error("❌ Error cargando datos:", err);
+      // console.error("❌ Error cargando datos:", err);
       const errorMsg = err instanceof Error ? err.message : "Error desconocido";
       setError(errorMsg);
       

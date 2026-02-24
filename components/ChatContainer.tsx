@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ChatBot } from "./chat-bot";
 import { obtenerMensajesConversacion } from "@/lib/historial.service";
+import { applyThemeToDom, resolveTheme } from "@/util/theme";
 
 type ViewMode = "chat" | "reportes";
 
@@ -52,8 +53,12 @@ export function ChatContainer({
   actividades,
   onLogout,
   onViewReports,
+  preferencias,
+  onGuardarPreferencias,
 }: ChatContainerProps) {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    return resolveTheme(preferencias?.tema ?? "AUTO");
+  });
 
   // Inicializar sidebar cerrado en móvil
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -94,6 +99,10 @@ export function ChatContainer({
   const router = useRouter();
   const { toast } = useToast();
 
+  useEffect(() => {
+    applyThemeToDom(theme);
+  }, []);
+
   // Escuchar cambios de tamaño de ventana
   useEffect(() => {
     const handleResize = () => {
@@ -133,15 +142,16 @@ export function ChatContainer({
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
-    if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("dark", newTheme === "dark");
-    }
+    applyThemeToDom(newTheme);
+    onGuardarPreferencias?.({ ...preferencias, tema: newTheme });
   };
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.documentElement.classList.add("dark");
-  }, []);
+    if (!preferencias?.tema) return;
+    const resolved = resolveTheme(preferencias.tema);
+    setTheme(resolved);
+    applyThemeToDom(resolved);
+  }, [preferencias?.tema]);
 
   useEffect(() => {
     const init = async () => {
@@ -772,6 +782,8 @@ export function ChatContainer({
           onOpenSidebar={() => setSidebarOpen(true)}
           isMobile={isMobile}
           sidebarOpen={sidebarOpen}
+          preferencias={preferencias}
+          onGuardarPreferencias={onGuardarPreferencias}
         />
       </div>
 

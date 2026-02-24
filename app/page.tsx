@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LoginForm } from "@/components/login-form";
+import {
+  obtenerPreferenciasUsuario,
+  guardarPreferenciasUsuario,
+} from "@/lib/api";
+import { LoginForm } from "@/components/LoginForm";
 import { ChatContainer } from "@/components/ChatContainer";
 import type { Colaborador, Actividad } from "@/lib/types";
-import { logout,
-  //  getAnfetaToken 
-  } from "@/lib/api";
+import { logout } from "@/lib/api";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -15,6 +17,11 @@ export default function Home() {
   const [userActividades, setUserActividades] = useState<Actividad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [preferencias, setPreferencias] = useState({
+    tema: "AUTO",
+    velocidadVoz: 1,
+    idiomaVoz: "es-MX",
+  });
   // 🔹 Recuperar sesión
   useEffect(() => {
     try {
@@ -25,15 +32,12 @@ export default function Home() {
         setCurrentColaborador(JSON.parse(savedColaborador));
         setUserActividades(JSON.parse(savedActividades));
         setIsLoggedIn(true);
-
-        // if (!localStorage.getItem("anfetaToken")) {
-        //   getAnfetaToken()
-        //     .then((data) => {
-        //       if (data?.token) localStorage.setItem("anfetaToken", data.token);
-        //     })
-        //     .catch(() => {});
-        // }
       }
+      obtenerPreferenciasUsuario().then((res) => {
+        if (res.success && res.preferencias) {
+          setPreferencias(res.preferencias);
+        }
+      });
     } catch (error) {
       clearSession();
     } finally {
@@ -47,9 +51,15 @@ export default function Home() {
   };
 
   // 🔹 Login
-  const handleLogin = (colaborador: Colaborador, actividades: Actividad[]) => {
+  const handleLogin = async (
+    colaborador: Colaborador,
+    actividades: Actividad[],
+  ) => {
     localStorage.setItem("colaborador", JSON.stringify(colaborador));
     localStorage.setItem("actividades", JSON.stringify(actividades));
+
+    const prefs = await obtenerPreferenciasUsuario();
+    if (prefs.success) setPreferencias(prefs.preferencias);
 
     setCurrentColaborador(colaborador);
     setUserActividades(actividades);
@@ -96,6 +106,12 @@ export default function Home() {
       actividades={userActividades}
       onLogout={handleLogout}
       onViewReports={handleViewReports} // 🔹 Pasa la función al ChatContainer
+      preferencias={preferencias} // ← nuevo
+      onGuardarPreferencias={async (nuevasPrefs) => {
+        // ← nuevo
+        const result = await guardarPreferenciasUsuario(nuevasPrefs);
+        if (result.success) setPreferencias(nuevasPrefs);
+      }}
     />
   );
 }

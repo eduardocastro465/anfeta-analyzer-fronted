@@ -30,7 +30,7 @@ export interface HeaderProps {
   isInPiPWindow: boolean;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  theme: string;
+  theme: "light" | "dark" | "auto";
   toggleTheme: () => void;
   displayName: string;
   colaborador: { email: string };
@@ -330,6 +330,8 @@ export interface ChatBotProps {
   showLogoutDialog?: boolean;
   setShowLogoutDialog?: (show: boolean) => void;
   onViewReports?: () => void;
+  preferencias?: any;
+  onGuardarPreferencias?: (nuevasPrefs: any) => void;
 }
 
 export type ChatStep =
@@ -435,6 +437,8 @@ export interface ChatContainerProps {
   actividades: any[];
   onLogout: () => void;
   onViewReports?: () => void;
+  preferencias: any;
+  onGuardarPreferencias: (nuevasPrefs: any) => void;
 }
 
 export type ConversacionSidebar = {
@@ -544,7 +548,7 @@ export interface RevisionProcesada {
 
 export interface PanelReporteTareasTardeProps {
   assistantAnalysis: AssistantAnalysis;
-  theme: "light" | "dark";
+  theme?: "light" | "dark";
   userEmail: string;
   turno: "mañana" | "tarde";
   onStartVoiceMode: () => void;

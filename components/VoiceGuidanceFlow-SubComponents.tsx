@@ -43,32 +43,50 @@ export const ConfirmStartStep: React.FC<{
   theme: string;
   confirmStartVoiceMode: () => void;
   cancelVoiceMode: () => void;
-}> = ({ activitiesWithTasks, totalActivities, totalTasks, theme, confirmStartVoiceMode, cancelVoiceMode }) => (
+}> = ({
+  activitiesWithTasks,
+  totalActivities,
+  totalTasks,
+  theme,
+  confirmStartVoiceMode,
+  cancelVoiceMode,
+}) => (
   <div className="space-y-2 sm:space-y-4">
     {/* Métricas en 3 columnas para incluir tiempo total */}
     <div className="grid grid-cols-3 gap-1.5">
-      <div className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+      <div
+        className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+      >
         <div className="flex items-center gap-1 mb-0.5">
           <FolderOpen className="w-3 h-3 text-blue-500" />
           <span className="text-[10px] sm:text-xs text-gray-500">Act.</span>
         </div>
-        <div className="text-base sm:text-lg font-semibold leading-none">{totalActivities}</div>
+        <div className="text-base sm:text-lg font-semibold leading-none">
+          {totalActivities}
+        </div>
       </div>
-      <div className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+      <div
+        className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+      >
         <div className="flex items-center gap-1 mb-0.5">
           <ListChecks className="w-3 h-3 text-green-500" />
           <span className="text-[10px] sm:text-xs text-gray-500">Tareas</span>
         </div>
-        <div className="text-base sm:text-lg font-semibold leading-none">{totalTasks}</div>
+        <div className="text-base sm:text-lg font-semibold leading-none">
+          {totalTasks}
+        </div>
       </div>
-      <div className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+      <div
+        className={`p-2 rounded-md ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+      >
         <div className="flex items-center gap-1 mb-0.5">
           <Clock className="w-3 h-3 text-purple-500" />
           <span className="text-[10px] sm:text-xs text-gray-500">Min.</span>
         </div>
         <div className="text-base sm:text-lg font-semibold leading-none">
           {activitiesWithTasks.reduce(
-            (sum, act) => sum + act.tareas.reduce((s, t) => s + t.duracionMin, 0),
+            (sum, act) =>
+              sum + act.tareas.reduce((s, t) => s + t.duracionMin, 0),
             0,
           )}
         </div>
@@ -89,13 +107,17 @@ export const ConfirmStartStep: React.FC<{
           }`}
         >
           {/* Cabecera actividad */}
-          <div className={`px-2.5 py-1.5 sm:p-3 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+          <div
+            className={`px-2.5 py-1.5 sm:p-3 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+          >
             <div className="flex items-center gap-1.5">
               <FolderOpen className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500 shrink-0" />
               <span className="font-medium text-[11px] sm:text-sm truncate flex-1">
                 {activity.actividadTitulo}
               </span>
-              <span className="text-[10px] text-gray-500 shrink-0">{activity.actividadHorario}</span>
+              <span className="text-[10px] text-gray-500 shrink-0">
+                {activity.actividadHorario}
+              </span>
             </div>
           </div>
 
@@ -105,8 +127,12 @@ export const ConfirmStartStep: React.FC<{
               key={tarea.id}
               className={`px-2.5 py-1.5 sm:p-3 flex items-center justify-between gap-2 ${
                 tIdx % 2 === 0
-                  ? theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
-                  : theme === "dark" ? "bg-[#1f1f1f]" : "bg-gray-50/60"
+                  ? theme === "dark"
+                    ? "bg-[#1a1a1a]"
+                    : "bg-white"
+                  : theme === "dark"
+                    ? "bg-[#1f1f1f]"
+                    : "bg-gray-50/60"
               }`}
             >
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -121,13 +147,17 @@ export const ConfirmStartStep: React.FC<{
                 >
                   {tIdx + 1}
                 </div>
-                <span className="text-[11px] sm:text-sm truncate">{tarea.nombre}</span>
+                <span className="text-[11px] sm:text-sm truncate">
+                  {tarea.nombre}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-gray-400">
                 <Clock className="w-2.5 h-2.5" />
                 {tarea.duracionMin}m
                 {tarea.diasPendiente > 0 && (
-                  <span className="hidden sm:inline">{tarea.diasPendiente}d</span>
+                  <span className="hidden sm:inline">
+                    {tarea.diasPendiente}d
+                  </span>
                 )}
               </div>
             </div>
@@ -167,7 +197,14 @@ export const ActivityPresentationStep: React.FC<{
   theme: string;
   isSpeaking: boolean;
   speakTaskByIndices: (activityIndex: number, taskIndex: number) => void;
-}> = ({ currentActivity, currentActivityIndex, totalActivities, theme, isSpeaking, speakTaskByIndices }) => (
+}> = ({
+  currentActivity,
+  currentActivityIndex,
+  totalActivities,
+  theme,
+  isSpeaking,
+  speakTaskByIndices,
+}) => (
   <div className="space-y-3 sm:space-y-4">
     <div
       className={`p-3 sm:p-4 rounded-lg ${
@@ -194,20 +231,30 @@ export const ActivityPresentationStep: React.FC<{
         </div>
       </div>
 
-      <h3 className="font-bold text-sm sm:text-lg mb-2">{currentActivity.actividadTitulo}</h3>
+      <h3 className="font-bold text-sm sm:text-lg mb-2">
+        {currentActivity.actividadTitulo}
+      </h3>
 
       <div className="flex flex-wrap gap-1.5 text-xs">
-        <span className={`px-1.5 py-0.5 rounded text-[10px] sm:text-xs ${theme === "dark" ? "bg-blue-900/30" : "bg-blue-100"}`}>
-          {currentActivity.tareas.length} tarea{currentActivity.tareas.length !== 1 ? "s" : ""}
+        <span
+          className={`px-1.5 py-0.5 rounded text-[10px] sm:text-xs ${theme === "dark" ? "bg-blue-900/30" : "bg-blue-100"}`}
+        >
+          {currentActivity.tareas.length} tarea
+          {currentActivity.tareas.length !== 1 ? "s" : ""}
         </span>
-        <span className={`px-1.5 py-0.5 rounded text-[10px] sm:text-xs ${theme === "dark" ? "bg-purple-900/30" : "bg-purple-100"}`}>
-          {currentActivity.tareas.reduce((sum, t) => sum + t.duracionMin, 0)} min
+        <span
+          className={`px-1.5 py-0.5 rounded text-[10px] sm:text-xs ${theme === "dark" ? "bg-purple-900/30" : "bg-purple-100"}`}
+        >
+          {currentActivity.tareas.reduce((sum, t) => sum + t.duracionMin, 0)}{" "}
+          min
         </span>
       </div>
     </div>
 
     <div className="text-center">
-      <p className={`text-xs ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mb-3`}>
+      <p
+        className={`text-xs ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mb-3`}
+      >
         Esta actividad tiene {currentActivity.tareas.length} tarea
         {currentActivity.tareas.length !== 1 ? "s" : ""} pendiente
         {currentActivity.tareas.length !== 1 ? "s" : ""}.
@@ -249,12 +296,16 @@ export const TaskPresentationStep: React.FC<{
   startTaskExplanation,
   skipTask,
 }) => {
-  const hasExplanation = taskExplanations.find((exp) => exp.taskId === currentTask.id);
+  const hasExplanation = taskExplanations.find(
+    (exp) => exp.taskId === currentTask.id,
+  );
   const isSkipped = hasExplanation?.explanation === "[Tarea saltada]";
 
   return (
     <div className="space-y-2.5 sm:space-y-4">
-      <div className={`p-2.5 sm:p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+      <div
+        className={`p-2.5 sm:p-3 rounded-lg ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+      >
         {/* Actividad padre */}
         <div className="flex items-center gap-1.5 mb-2">
           <FolderOpen className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500 shrink-0" />
@@ -264,7 +315,9 @@ export const TaskPresentationStep: React.FC<{
         </div>
 
         {/* Tarjeta tarea */}
-        <div className={`p-2.5 sm:p-3 rounded ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}>
+        <div
+          className={`p-2.5 sm:p-3 rounded ${theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"}`}
+        >
           <div className="flex items-start justify-between gap-2 mb-2 sm:mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -279,7 +332,9 @@ export const TaskPresentationStep: React.FC<{
                 >
                   {currentTaskIndex + 1}
                 </div>
-                <h4 className="font-bold text-xs sm:text-base">{currentTask.nombre}</h4>
+                <h4 className="font-bold text-xs sm:text-base">
+                  {currentTask.nombre}
+                </h4>
               </div>
               <div className="flex flex-wrap gap-2 sm:gap-3 text-[10px] sm:text-sm text-gray-500 ml-6 sm:ml-8">
                 <span className="flex items-center gap-0.5">
@@ -297,7 +352,9 @@ export const TaskPresentationStep: React.FC<{
               </div>
             </div>
             <Badge
-              variant={currentTask.prioridad === "ALTA" ? "destructive" : "secondary"}
+              variant={
+                currentTask.prioridad === "ALTA" ? "destructive" : "secondary"
+              }
               className="text-[10px] px-1 sm:px-1.5 py-0.5 shrink-0 h-fit"
             >
               {currentTask.prioridad}
@@ -314,7 +371,9 @@ export const TaskPresentationStep: React.FC<{
             >
               <div className="flex items-center gap-1.5">
                 <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-500" />
-                <span className="text-[10px] sm:text-xs font-medium">Explicación guardada</span>
+                <span className="text-[10px] sm:text-xs font-medium">
+                  Explicación guardada
+                </span>
               </div>
             </div>
           )}
@@ -343,7 +402,8 @@ export const TaskPresentationStep: React.FC<{
 
       {voiceStep === "waiting-for-explanation" && (
         <p className="text-center text-[10px] sm:text-sm text-gray-500">
-          Presiona el botón para explicar esta tarea, o di "saltar" para omitirla.
+          Presiona el botón para explicar esta tarea, o di "saltar" para
+          omitirla.
         </p>
       )}
     </div>
@@ -412,7 +472,13 @@ export const ListeningExplanationStep: React.FC<{
       if (silenceTimer) clearTimeout(silenceTimer);
       if (countdownInterval) clearInterval(countdownInterval);
     };
-  }, [voiceTranscript, processVoiceExplanation, recognitionRef, setIsRecording, setIsListening]);
+  }, [
+    voiceTranscript,
+    processVoiceExplanation,
+    recognitionRef,
+    setIsRecording,
+    setIsListening,
+  ]);
 
   return (
     <div className="text-center space-y-2.5 sm:space-y-4">
@@ -420,13 +486,16 @@ export const ListeningExplanationStep: React.FC<{
       <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto">
         <div
           className={`w-full h-full rounded-full flex items-center justify-center ${
-            isValidating ? "bg-blue-500/20 animate-spin" : "bg-red-500/20 animate-pulse"
+            isValidating
+              ? "bg-blue-500/20 animate-spin"
+              : "bg-red-500/20 animate-pulse"
           }`}
         >
-          {isValidating
-            ? <Loader2 className="w-7 h-7 sm:w-10 sm:h-10 text-blue-500" />
-            : <Mic className="w-7 h-7 sm:w-10 sm:h-10 text-red-500" />
-          }
+          {isValidating ? (
+            <Loader2 className="w-7 h-7 sm:w-10 sm:h-10 text-blue-500" />
+          ) : (
+            <Mic className="w-7 h-7 sm:w-10 sm:h-10 text-red-500" />
+          )}
         </div>
         {!isValidating && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -475,7 +544,9 @@ export const ListeningExplanationStep: React.FC<{
         </div>
       )}
 
-      <p className={`text-[10px] sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+      <p
+        className={`text-[10px] sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+      >
         {isValidating
           ? "Validando tu explicación con el asistente..."
           : retryCount > 0
@@ -487,7 +558,9 @@ export const ListeningExplanationStep: React.FC<{
       {!voiceTranscript && !isValidating && (
         <div
           className={`p-2.5 sm:p-4 rounded-lg border-2 border-dashed ${
-            theme === "dark" ? "border-red-500/30 bg-red-900/10" : "border-red-300 bg-red-50"
+            theme === "dark"
+              ? "border-red-500/30 bg-red-900/10"
+              : "border-red-300 bg-red-50"
           }`}
         >
           <div className="flex items-center justify-center gap-2 mb-1">
@@ -504,7 +577,9 @@ export const ListeningExplanationStep: React.FC<{
                 />
               ))}
             </div>
-            <span className="text-xs font-medium text-red-500">Grabando...</span>
+            <span className="text-xs font-medium text-red-500">
+              Grabando...
+            </span>
           </div>
           <p className="text-[10px] text-center text-gray-500 hidden sm:block">
             Tu voz se está capturando. El texto aparecerá aquí en tiempo real.
@@ -516,7 +591,9 @@ export const ListeningExplanationStep: React.FC<{
       {countdown !== null && !isValidating && voiceTranscript && (
         <div
           className={`p-2.5 sm:p-4 rounded-lg border-2 ${
-            theme === "dark" ? "border-[#6841ea] bg-[#6841ea]/10" : "border-[#6841ea] bg-[#6841ea]/5"
+            theme === "dark"
+              ? "border-[#6841ea] bg-[#6841ea]/10"
+              : "border-[#6841ea] bg-[#6841ea]/5"
           }`}
         >
           <div className="flex items-center justify-center gap-1.5 sm:gap-3 mb-1.5">
@@ -526,7 +603,8 @@ export const ListeningExplanationStep: React.FC<{
             </span>
           </div>
           <p className="text-[10px] text-center text-gray-500 hidden sm:block">
-            Detecté silencio. Si no hablas más, enviaré automáticamente tu explicación.
+            Detecté silencio. Si no hablas más, enviaré automáticamente tu
+            explicación.
           </p>
           <div className="mt-1.5 sm:mt-3 w-full h-1 sm:h-2 bg-gray-300 dark:bg-gray-700 rounded-full overflow-hidden">
             <div
@@ -539,7 +617,9 @@ export const ListeningExplanationStep: React.FC<{
 
       {/* Transcript */}
       {voiceTranscript && (
-        <div className={`p-2 sm:p-3 rounded text-left ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}>
+        <div
+          className={`p-2 sm:p-3 rounded text-left ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
+        >
           <p className="text-xs sm:text-sm">{voiceTranscript}</p>
           <p className="text-[10px] text-gray-500 mt-1">
             {isValidating
@@ -590,7 +670,13 @@ export const ConfirmationStep: React.FC<{
   isSpeaking: boolean;
   isPaused: boolean;
   retryExplanation: () => void;
-}> = ({ currentTask, voiceConfirmationText, theme, isSpeaking, retryExplanation }) => (
+}> = ({
+  currentTask,
+  voiceConfirmationText,
+  theme,
+  isSpeaking,
+  retryExplanation,
+}) => (
   <div className="space-y-2.5 sm:space-y-4">
     <div
       className={`p-2.5 sm:p-4 rounded-lg ${
@@ -601,17 +687,27 @@ export const ConfirmationStep: React.FC<{
     >
       <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5">
         <Volume2 className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-blue-500" />
-        <span className="font-medium text-xs sm:text-base">Tu explicación para:</span>
+        <span className="font-medium text-xs sm:text-base">
+          Tu explicación para:
+        </span>
       </div>
-      <p className="text-[11px] sm:text-sm font-medium mb-1.5">{currentTask.nombre}</p>
-      <div className={`p-2 sm:p-3 rounded ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}>
-        <p className={`text-[11px] sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+      <p className="text-[11px] sm:text-sm font-medium mb-1.5">
+        {currentTask.nombre}
+      </p>
+      <div
+        className={`p-2 sm:p-3 rounded ${theme === "dark" ? "bg-[#2a2a2a]" : "bg-gray-100"}`}
+      >
+        <p
+          className={`text-[11px] sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+        >
           {voiceConfirmationText}
         </p>
       </div>
     </div>
 
-    <p className={`text-[10px] sm:text-sm text-center ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+    <p
+      className={`text-[10px] sm:text-sm text-center ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+    >
       ¿Confirmas esta explicación? Di "sí" para confirmar o "no" para corregir.
     </p>
 
@@ -649,7 +745,14 @@ export const SummaryStep: React.FC<{
   cancelVoiceMode: () => void;
   onEditTask: (activityIndex: number, taskIndex: number) => void;
   finishVoiceMode: () => void;
-}> = ({ activitiesWithTasks, taskExplanations, totalTasks, theme, isSpeaking, finishVoiceMode }) => {
+}> = ({
+  activitiesWithTasks,
+  taskExplanations,
+  totalTasks,
+  theme,
+  isSpeaking,
+  finishVoiceMode,
+}) => {
   const completedCount = taskExplanations.filter(
     (exp) => exp.explanation !== "[Tarea saltada]",
   ).length;
@@ -664,8 +767,12 @@ export const SummaryStep: React.FC<{
         >
           <Check className="w-6 h-6 sm:w-8 sm:h-8 text-green-500" />
         </div>
-        <h4 className="text-sm sm:text-lg font-bold mt-2">¡Todas las tareas explicadas!</h4>
-        <p className={`text-[10px] sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mt-0.5`}>
+        <h4 className="text-sm sm:text-lg font-bold mt-2">
+          ¡Todas las tareas explicadas!
+        </h4>
+        <p
+          className={`text-[10px] sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-600"} mt-0.5`}
+        >
           Has completado {completedCount} de {totalTasks} tareas.
         </p>
       </div>
@@ -689,7 +796,9 @@ export const SummaryStep: React.FC<{
               key={activity.actividadId}
               className={`border-b last:border-b-0 ${theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"}`}
             >
-              <div className={`px-2.5 py-1.5 sm:p-3 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}>
+              <div
+                className={`px-2.5 py-1.5 sm:p-3 ${theme === "dark" ? "bg-[#252527]" : "bg-gray-50"}`}
+              >
                 <div className="flex items-center gap-1.5">
                   <FolderOpen className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500 shrink-0" />
                   <span className="font-medium text-[11px] sm:text-sm truncate flex-1">
@@ -706,8 +815,12 @@ export const SummaryStep: React.FC<{
                   key={exp.taskId}
                   className={`px-2.5 py-1.5 sm:p-3 ${
                     tIdx % 2 === 0
-                      ? theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
-                      : theme === "dark" ? "bg-[#252527]" : "bg-gray-50/60"
+                      ? theme === "dark"
+                        ? "bg-[#1a1a1a]"
+                        : "bg-white"
+                      : theme === "dark"
+                        ? "bg-[#252527]"
+                        : "bg-gray-50/60"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -719,7 +832,10 @@ export const SummaryStep: React.FC<{
                     <span className="font-medium text-[10px] sm:text-sm truncate flex-1">
                       {exp.taskName}
                     </span>
-                    <Badge variant="outline" className="text-[10px] hidden sm:flex">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] hidden sm:flex"
+                    >
                       {exp.priority}
                     </Badge>
                   </div>
@@ -737,9 +853,11 @@ export const SummaryStep: React.FC<{
         })}
       </div>
       <Button
-        onClick={finishVoiceMode}
+        onClick={() => {
+          window.speechSynthesis?.cancel();
+          finishVoiceMode();
+        }}
         className="w-full bg-[#6841ea] hover:bg-[#5a36d4] h-8 sm:h-11 text-xs sm:text-sm"
-        disabled={isSpeaking}
       >
         Enviar y comenzar jornada
       </Button>

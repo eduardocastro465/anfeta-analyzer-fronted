@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { MessageItem } from "./MessageItem";
 import { MessageListProps } from "@/lib/types";
-import { TypingIndicator } from "./PanelReporteTareasTarde";
+import { TypingIndicator } from "@/components/ui/typingIndicator";
 
 interface ExtendedMessageListProps extends MessageListProps {
   onVoiceMessageClick?: (voiceText: string) => void;

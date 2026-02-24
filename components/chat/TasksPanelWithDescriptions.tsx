@@ -16,6 +16,7 @@ import { Badge as UIBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { AssistantAnalysis, TareaConTiempo } from "@/lib/types";
+import { useTheme } from "@/context/ThemeContext";
 
 interface RevisionConDescripcion {
   actividadId: string;
@@ -29,7 +30,6 @@ interface RevisionConDescripcion {
 
 interface TasksPanelWithDescriptionsProps {
   assistantAnalysis: AssistantAnalysis;
-  theme: "light" | "dark";
   userEmail: string;
   turno: "mañana" | "tarde";
   onStartVoiceModeWithTasks: (selectedTaskIds: string[]) => void;
@@ -41,7 +41,6 @@ interface TasksPanelWithDescriptionsProps {
 
 export function TasksPanelWithDescriptions({
   assistantAnalysis,
-  theme,
   turno,
   userEmail,
   onStartVoiceModeWithTasks,
@@ -50,7 +49,8 @@ export function TasksPanelWithDescriptions({
   isSpeaking = false,
   speakText = () => {},
 }: TasksPanelWithDescriptionsProps) {
-  // ========== ESTADOS ==========
+  const theme = useTheme();
+
   const [tareasSeleccionadas, setTareasSeleccionadas] = useState<Set<string>>(
     new Set(),
   );
@@ -81,13 +81,11 @@ export function TasksPanelWithDescriptions({
       assistantAnalysis?.data?.revisionesPorActividad || [],
     );
     const hasChanged = currentHash !== lastDataHashRef.current;
-
     if (hasChanged) {
       lastDataHashRef.current = currentHash;
     }
   });
 
-  // Función para mostrar alerta
   const mostrarAlertaMensaje = useCallback((mensaje: string) => {
     setMensajeAlerta(mensaje);
     setMostrarAlerta(true);
@@ -96,8 +94,7 @@ export function TasksPanelWithDescriptions({
 
   const dataHash = useMemo(() => {
     if (!assistantAnalysis?.data?.revisionesPorActividad) return "";
-
-    const hash = assistantAnalysis.data.revisionesPorActividad
+    return assistantAnalysis.data.revisionesPorActividad
       .flatMap((rev) => rev.tareasConTiempo || [])
       .map(
         (t) =>
@@ -105,18 +102,13 @@ export function TasksPanelWithDescriptions({
       )
       .sort()
       .join("|");
-
-    return hash;
   }, [assistantAnalysis]);
 
-  // ✅ CRÍTICO: Agregar dataHash como dependencia para forzar recálculo
   const actividadesConDescripcion = useMemo(() => {
-    if (!assistantAnalysis?.data?.revisionesPorActividad) {
-      return [];
-    }
+    if (!assistantAnalysis?.data?.revisionesPorActividad) return [];
 
-    const resultado = assistantAnalysis.data.revisionesPorActividad
-      .map((revision, idx) => {
+    return assistantAnalysis.data.revisionesPorActividad
+      .map((revision) => {
         const colaboradoresReales =
           revision.colaboradores ||
           assistantAnalysis.colaboradoresInvolucrados ||
@@ -125,7 +117,6 @@ export function TasksPanelWithDescriptions({
         const todasLasTareas = revision.tareasConTiempo.map((tarea) => {
           const tieneDescripcion =
             tarea.descripcion && tarea.descripcion.trim().length > 0;
-
           return {
             ...tarea,
             pendienteId: tarea.id,
@@ -137,58 +128,48 @@ export function TasksPanelWithDescriptions({
           };
         });
 
-        const tareasSinDescripcion = todasLasTareas.filter(
-          (t) => !t.tieneDescripcion,
-        );
-        const tareasConDescripcionCount = todasLasTareas.filter(
-          (t) => t.tieneDescripcion,
-        );
-
         return {
           ...revision,
           colaboradoresReales,
           esActividadIndividual: colaboradoresReales.length <= 1,
           tareasConDescripcion: todasLasTareas,
           tareasNoReportadas: todasLasTareas,
-          tareasSinDescripcion: tareasSinDescripcion.length,
-          tareasConDescripcionCount: tareasConDescripcionCount.length,
+          tareasSinDescripcion: todasLasTareas.filter(
+            (t) => !t.tieneDescripcion,
+          ).length,
+          tareasConDescripcionCount: todasLasTareas.filter(
+            (t) => t.tieneDescripcion,
+          ).length,
         } as RevisionConDescripcion;
       })
       .filter((revision) => revision.tareasConDescripcion.length > 0);
-
-    return resultado;
   }, [assistantAnalysis, dataHash]);
 
   useEffect(() => {
     if (!actividadesConDescripcion.length) return;
-
     const tareasPendientesIds = actividadesConDescripcion.flatMap((actividad) =>
       actividad.tareasConDescripcion
         .filter((t: any) => !t.tieneDescripcion)
         .map((t: any) => t.id),
     );
-
     if (tareasPendientesIds.length > 0) {
       setTareasSeleccionadas(new Set(tareasPendientesIds));
     }
   }, [actividadesConDescripcion]);
-  // Calcular estadísticas
+
   const estadisticas = useMemo(() => {
     const totalTareas = actividadesConDescripcion.reduce(
-      (sum, actividad) => sum + actividad.tareasConDescripcion.length,
+      (sum, a) => sum + a.tareasConDescripcion.length,
       0,
     );
-
     const tareasSinDescripcion = actividadesConDescripcion.reduce(
-      (sum, actividad) => sum + (actividad.tareasSinDescripcion || 0),
+      (sum, a) => sum + (a.tareasSinDescripcion || 0),
       0,
     );
-
     const tareasBloqueadas = actividadesConDescripcion.reduce(
-      (sum, actividad) => sum + (actividad.tareasConDescripcionCount || 0),
+      (sum, a) => sum + (a.tareasConDescripcionCount || 0),
       0,
     );
-
     return {
       totalTareas,
       tareasSinDescripcion,
@@ -199,43 +180,33 @@ export function TasksPanelWithDescriptions({
 
   const hayTareas = actividadesConDescripcion.length > 0;
 
-  // Toggle selección de tarea
   const toggleSeleccionTarea = useCallback((tareaId: string) => {
     setTareasSeleccionadas((prev) => {
-      const nuevasSeleccionadas = new Set(prev);
-      if (nuevasSeleccionadas.has(tareaId)) {
-        nuevasSeleccionadas.delete(tareaId);
-      } else {
-        nuevasSeleccionadas.add(tareaId);
-      }
-      return nuevasSeleccionadas;
+      const next = new Set(prev);
+      next.has(tareaId) ? next.delete(tareaId) : next.add(tareaId);
+      return next;
     });
   }, []);
 
-  // ✅ Seleccionar todas las tareas SIN descripción
   const seleccionarTodasTareas = useCallback(() => {
-    const todasTareasIds = actividadesConDescripcion.flatMap((actividad) =>
-      actividad.tareasConDescripcion
+    const ids = actividadesConDescripcion.flatMap((a) =>
+      a.tareasConDescripcion
         .filter((t: any) => !t.tieneDescripcion)
         .map((t: any) => t.id),
     );
-
-    if (todasTareasIds.length === 0) {
+    if (ids.length === 0) {
       mostrarAlertaMensaje("No hay tareas pendientes para seleccionar");
       return;
     }
-
-    setTareasSeleccionadas(new Set(todasTareasIds));
-    mostrarAlertaMensaje(`${todasTareasIds.length} tareas seleccionadas`);
+    setTareasSeleccionadas(new Set(ids));
+    mostrarAlertaMensaje(`${ids.length} tareas seleccionadas`);
   }, [actividadesConDescripcion, mostrarAlertaMensaje]);
 
-  // Deseleccionar todas
   const deseleccionarTodasTareas = useCallback(() => {
     setTareasSeleccionadas(new Set());
     mostrarAlertaMensaje("Todas las tareas deseleccionadas");
   }, [mostrarAlertaMensaje]);
 
-  // ✅ Iniciar modo voz con tareas seleccionadas
   const handleIniciarModoVoz = useCallback(() => {
     if (tareasSeleccionadas.size === 0) {
       mostrarAlertaMensaje(
@@ -244,7 +215,6 @@ export function TasksPanelWithDescriptions({
       speakText("Por favor selecciona al menos una tarea para explicar");
       return;
     }
-
     onStartVoiceModeWithTasks(Array.from(tareasSeleccionadas));
     setTareasSeleccionadas(new Set());
   }, [
@@ -254,7 +224,6 @@ export function TasksPanelWithDescriptions({
     speakText,
   ]);
 
-  // ✅ NUEVO: Editar una tarea via modo voz (re-dictar la descripción)
   const handleEditarConVoz = useCallback(
     (tareaId: string) => {
       onStartVoiceModeWithTasks([tareaId]);
@@ -262,7 +231,6 @@ export function TasksPanelWithDescriptions({
     [onStartVoiceModeWithTasks],
   );
 
-  // ========== RENDER ==========
   return (
     <div className="w-full animate-in slide-in-from-bottom-2 duration-300">
       {/* Alerta flotante */}
@@ -272,7 +240,7 @@ export function TasksPanelWithDescriptions({
             className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
               theme === "dark"
                 ? "bg-gray-800 text-white border border-gray-700"
-                : "bg-white text-gray-800 border border-gray-200"
+                : "bg-white text-gray-800 border border-gray-200 shadow-md"
             }`}
           >
             <AlertCircle className="w-5 h-5 text-[#6841ea]" />
@@ -280,7 +248,11 @@ export function TasksPanelWithDescriptions({
             <Button
               variant="ghost"
               size="sm"
-              className="ml-2 p-1 h-auto"
+              className={`ml-2 p-1 h-auto ${
+                theme === "dark"
+                  ? "text-gray-400 hover:text-white hover:bg-gray-700"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+              }`}
               onClick={() => setMostrarAlerta(false)}
             >
               ×
@@ -289,22 +261,22 @@ export function TasksPanelWithDescriptions({
         </div>
       )}
 
-      {/* Panel de tareas */}
       {hayTareas ? (
         <div
           className={`w-full max-w-xl rounded-lg border overflow-hidden ${
             theme === "dark"
               ? "bg-[#1a1a1a] border-[#2a2a2a]"
-              : "bg-white border-gray-200"
+              : "bg-white border-gray-200 shadow-sm"
           }`}
         >
-          {/* Header — en móvil apilamos la fila de badges debajo del título */}
+          {/* Header */}
           <div
-            className={`px-3 py-2 border-b bg-[#6841ea]/10 ${
-              theme === "dark" ? "border-[#2a2a2a]" : "border-gray-200"
+            className={`px-3 py-2 border-b ${
+              theme === "dark"
+                ? "bg-[#6841ea]/20 border-[#2a2a2a]"
+                : "bg-[#6841ea]/8 border-gray-200"
             }`}
           >
-            {/* Fila superior: título + timestamp */}
             <div className="flex justify-between items-center">
               <h4
                 className={`font-medium text-xs flex items-center gap-2 uppercase tracking-wide ${
@@ -315,21 +287,24 @@ export function TasksPanelWithDescriptions({
                 Tareas del Día ({estadisticas.totalTareas})
               </h4>
               {ultimaActualizacion && (
-                <span className="text-[10px] text-gray-500 hidden sm:inline">
+                <span
+                  className={`text-[10px] hidden sm:inline ${
+                    theme === "dark" ? "text-gray-500" : "text-gray-400"
+                  }`}
+                >
                   Actualizado: {ultimaActualizacion.toLocaleTimeString()}
                 </span>
               )}
             </div>
 
-            {/* Badges — fila separada en móvil para que no se solapen */}
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {estadisticas.tareasBloqueadas > 0 && (
                 <UIBadge
                   variant="secondary"
                   className={`text-[10px] ${
                     theme === "dark"
-                      ? "bg-green-500/20 text-green-300 border-green-500/30"
-                      : "bg-green-100 text-green-700 border-green-300"
+                      ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                      : "bg-green-100 text-green-700 border border-green-300"
                   }`}
                 >
                   <Check className="w-3 h-3 mr-1" />
@@ -344,9 +319,12 @@ export function TasksPanelWithDescriptions({
                 {estadisticas.tareasSinDescripcion} Pendientes
               </UIBadge>
 
-              {/* Timestamp visible solo en móvil (debajo de los badges) */}
               {ultimaActualizacion && (
-                <span className="text-[10px] text-gray-500 sm:hidden">
+                <span
+                  className={`text-[10px] sm:hidden ${
+                    theme === "dark" ? "text-gray-500" : "text-gray-400"
+                  }`}
+                >
                   {ultimaActualizacion.toLocaleTimeString()}
                 </span>
               )}
@@ -355,11 +333,12 @@ export function TasksPanelWithDescriptions({
 
           {/* Contenido */}
           <div className="p-3">
+            {/* Banner informativo */}
             <div
               className={`text-sm p-3 rounded mb-3 ${
                 theme === "dark"
-                  ? "bg-blue-900/30 text-blue-300"
-                  : "bg-blue-50 text-blue-700"
+                  ? "bg-blue-950/60 text-blue-300 border border-blue-800/40"
+                  : "bg-blue-50 text-blue-700 border border-blue-200"
               }`}
             >
               <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -368,7 +347,13 @@ export function TasksPanelWithDescriptions({
                   {estadisticas.tareasSinDescripcion} tareas necesitan
                   descripción
                 </strong>
-                <span className="text-xs px-1.5 py-0.5 bg-amber-500/20 text-amber-700 rounded">
+                <span
+                  className={`text-xs px-1.5 py-0.5 rounded ${
+                    theme === "dark"
+                      ? "bg-amber-500/20 text-amber-300"
+                      : "bg-amber-500/15 text-amber-700"
+                  }`}
+                >
                   Modo Voz
                 </span>
               </div>
@@ -378,8 +363,12 @@ export function TasksPanelWithDescriptions({
                 <br />
                 <strong>Tú:</strong> {currentUserEmail.split("@")[0]}
                 {estadisticas.tareasBloqueadas > 0 && (
-                  <span className="ml-2 text-green-600 dark:text-green-400">
-                    • {estadisticas.tareasBloqueadas} ya completadas ✓
+                  <span
+                    className={`ml-2 ${
+                      theme === "dark" ? "text-green-400" : "text-green-600"
+                    }`}
+                  >
+                    {estadisticas.tareasBloqueadas} ya completadas
                   </span>
                 )}
               </span>
@@ -392,7 +381,6 @@ export function TasksPanelWithDescriptions({
                   const actividad = assistantAnalysis.data.actividades.find(
                     (act) => act.id === revision.actividadId,
                   );
-
                   if (!actividad) return null;
 
                   return (
@@ -401,7 +389,6 @@ export function TasksPanelWithDescriptions({
                       revision={revision}
                       actividad={actividad}
                       index={idx}
-                      theme={theme}
                       tareasSeleccionadas={tareasSeleccionadas}
                       onToggleTarea={toggleSeleccionTarea}
                       currentUserEmail={currentUserEmail}
@@ -413,10 +400,9 @@ export function TasksPanelWithDescriptions({
             </div>
           </div>
 
-          {/* Footer con acciones */}
+          {/* Footer */}
           <DescriptionTasksFooter
             totalTareas={estadisticas.tareasSinDescripcion}
-            theme={theme}
             tareasSeleccionadas={tareasSeleccionadas}
             onSeleccionarTodas={seleccionarTodasTareas}
             onDeseleccionarTodas={deseleccionarTodasTareas}
@@ -427,10 +413,7 @@ export function TasksPanelWithDescriptions({
           />
         </div>
       ) : (
-        <NoDescriptionTasksMessage
-          theme={theme}
-          currentUserEmail={currentUserEmail}
-        />
+        <NoDescriptionTasksMessage currentUserEmail={currentUserEmail} />
       )}
     </div>
   );
@@ -442,11 +425,9 @@ interface ActivityWithDescriptionItemProps {
   revision: RevisionConDescripcion;
   actividad: any;
   index: number;
-  theme: "light" | "dark";
   tareasSeleccionadas: Set<string>;
   onToggleTarea: (tareaId: string) => void;
   currentUserEmail: string;
-  // ✅ NUEVO: callback para editar via voz
   onEditarConVoz: (tareaId: string) => void;
 }
 
@@ -454,12 +435,13 @@ function ActivityWithDescriptionItem({
   revision,
   actividad,
   index,
-  theme,
   tareasSeleccionadas,
   onToggleTarea,
   currentUserEmail,
   onEditarConVoz,
 }: ActivityWithDescriptionItemProps) {
+  const theme = useTheme();
+
   const badgeColor = useMemo(() => {
     const colors = [
       "bg-blue-500/20 text-blue-500",
@@ -474,11 +456,13 @@ function ActivityWithDescriptionItem({
 
   return (
     <div
-      className={`p-3 rounded-lg ${
-        theme === "dark" ? "bg-[#252527]" : "bg-gray-50"
+      className={`p-3 rounded-lg border ${
+        theme === "dark"
+          ? "bg-[#252527] border-[#333335]"
+          : "bg-gray-50 border-gray-200"
       }`}
     >
-      {/* Header de actividad — en móvil el badge de horario baja a su propia línea */}
+      {/* Header de actividad */}
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div
@@ -495,7 +479,9 @@ function ActivityWithDescriptionItem({
               {actividad.titulo}
             </h5>
             <span
-              className={`text-[10px] ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
+              className={`text-[10px] ${
+                theme === "dark" ? "text-blue-400" : "text-blue-600"
+              }`}
             >
               Tú: {currentUserEmail.split("@")[0]}
             </span>
@@ -505,56 +491,56 @@ function ActivityWithDescriptionItem({
           variant="outline"
           className={`text-xs shrink-0 ${
             theme === "dark"
-              ? "border-[#2a2a2a] text-gray-400"
-              : "border-gray-300 text-gray-600"
+              ? "border-[#3a3a3a] text-gray-400 bg-[#1a1a1a]"
+              : "border-gray-300 text-gray-600 bg-white"
           }`}
         >
           {actividad.horario}
         </UIBadge>
       </div>
 
-      {/* Indicador de tipo de trabajo */}
+      {/* Indicador tipo de trabajo */}
       <div className="ml-8 mb-3">
-        <div className="flex items-center gap-2">
-          {esActividadIndividual ? (
-            <UIBadge
-              variant="secondary"
-              className={`text-[10px] px-2 py-0.5 flex items-center gap-1 ${
-                theme === "dark"
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "bg-blue-100 text-blue-700"
-              }`}
-            >
-              <UserIcon className="w-3 h-3" />
-              Individual
-            </UIBadge>
-          ) : (
-            <UIBadge
-              variant="secondary"
-              className={`text-[10px] px-2 py-0.5 flex items-center gap-1 ${
-                theme === "dark"
-                  ? "bg-green-500/20 text-green-300"
-                  : "bg-green-100 text-green-700"
-              }`}
-            >
-              <UsersIcon className="w-3 h-3" />
-              Equipo ({colaboradoresReales.length})
-            </UIBadge>
-          )}
-        </div>
+        {esActividadIndividual ? (
+          <UIBadge
+            variant="secondary"
+            className={`text-[10px] px-2 py-0.5 flex items-center gap-1 w-fit ${
+              theme === "dark"
+                ? "bg-blue-500/20 text-blue-300 border border-blue-500/20"
+                : "bg-blue-100 text-blue-700 border border-blue-200"
+            }`}
+          >
+            <UserIcon className="w-3 h-3" />
+            Individual
+          </UIBadge>
+        ) : (
+          <UIBadge
+            variant="secondary"
+            className={`text-[10px] px-2 py-0.5 flex items-center gap-1 w-fit ${
+              theme === "dark"
+                ? "bg-green-500/20 text-green-300 border border-green-500/20"
+                : "bg-green-100 text-green-700 border border-green-200"
+            }`}
+          >
+            <UsersIcon className="w-3 h-3" />
+            Equipo ({colaboradoresReales.length})
+          </UIBadge>
+        )}
       </div>
 
       {/* Tareas */}
       <div className="space-y-3">
-        {/* Tareas SIN descripción (pendientes) */}
+        {/* Tareas SIN descripción */}
         {revision.tareasConDescripcion.filter((t: any) => !t.tieneDescripcion)
           .length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
               <UIBadge
                 variant="outline"
-                className={`text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30 ${
-                  theme === "dark" ? "bg-amber-500/20" : "bg-amber-500/10"
+                className={`text-[10px] ${
+                  theme === "dark"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                    : "bg-amber-50 text-amber-700 border-amber-300"
                 }`}
               >
                 <FileText className="w-3 h-3 mr-1" />
@@ -567,7 +553,6 @@ function ActivityWithDescriptionItem({
                 )
               </UIBadge>
             </div>
-
             <div className="ml-8 space-y-2">
               {revision.tareasConDescripcion
                 .filter((t: any) => !t.tieneDescripcion)
@@ -575,7 +560,6 @@ function ActivityWithDescriptionItem({
                   <TaskWithDescriptionItem
                     key={tarea.id}
                     tarea={tarea}
-                    theme={theme}
                     estaSeleccionada={tareasSeleccionadas.has(tarea.id)}
                     onToggleSeleccion={() => onToggleTarea(tarea.id)}
                     esActividadIndividual={esActividadIndividual}
@@ -588,7 +572,7 @@ function ActivityWithDescriptionItem({
           </div>
         )}
 
-        {/* Tareas CON descripción (completadas) */}
+        {/* Tareas CON descripción */}
         {revision.tareasConDescripcion.filter((t: any) => t.tieneDescripcion)
           .length > 0 && (
           <div>
@@ -598,7 +582,7 @@ function ActivityWithDescriptionItem({
                 className={`text-[10px] ${
                   theme === "dark"
                     ? "bg-green-500/20 text-green-300 border-green-500/30"
-                    : "bg-green-100 text-green-700 border-green-300"
+                    : "bg-green-50 text-green-700 border-green-300"
                 }`}
               >
                 <Check className="w-3 h-3 mr-1" />
@@ -611,7 +595,6 @@ function ActivityWithDescriptionItem({
                 )
               </UIBadge>
             </div>
-
             <div className="ml-8 space-y-2">
               {revision.tareasConDescripcion
                 .filter((t: any) => t.tieneDescripcion)
@@ -619,7 +602,6 @@ function ActivityWithDescriptionItem({
                   <TaskWithDescriptionItem
                     key={tarea.id}
                     tarea={tarea}
-                    theme={theme}
                     estaSeleccionada={false}
                     onToggleSeleccion={() => {}}
                     esActividadIndividual={esActividadIndividual}
@@ -638,7 +620,6 @@ function ActivityWithDescriptionItem({
 
 interface TaskWithDescriptionItemProps {
   tarea: any;
-  theme: "light" | "dark";
   estaSeleccionada: boolean;
   onToggleSeleccion: () => void;
   esActividadIndividual: boolean;
@@ -649,7 +630,6 @@ interface TaskWithDescriptionItemProps {
 
 function TaskWithDescriptionItem({
   tarea,
-  theme,
   estaSeleccionada,
   onToggleSeleccion,
   esActividadIndividual,
@@ -657,7 +637,9 @@ function TaskWithDescriptionItem({
   onEditarConVoz,
   currentUserEmail,
 }: TaskWithDescriptionItemProps) {
+  const theme = useTheme();
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
+
   const reportadoPorMi =
     tarea.explicacionVoz?.emailUsuario === currentUserEmail;
   const reportadoPorCompañero =
@@ -669,42 +651,43 @@ function TaskWithDescriptionItem({
       className={`p-3 rounded border transition-all ${
         reportadoPorMi
           ? theme === "dark"
-            ? "bg-blue-900/15 border-blue-500/30"
+            ? "bg-blue-950/40 border-blue-500/40"
             : "bg-blue-50 border-blue-300"
           : reportadoPorCompañero
             ? theme === "dark"
-              ? "bg-purple-900/15 border-purple-500/30"
+              ? "bg-purple-950/40 border-purple-500/40"
               : "bg-purple-50 border-purple-300"
             : estaSeleccionada
-              ? "border-[#6841ea] bg-[#6841ea]/10"
+              ? theme === "dark"
+                ? "border-[#6841ea] bg-[#6841ea]/15"
+                : "border-[#6841ea] bg-[#6841ea]/8"
               : theme === "dark"
-                ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#2a2a2a]"
-                : "bg-white border-gray-200 hover:bg-gray-50"
+                ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#222224] hover:border-[#333335]"
+                : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300"
       }`}
     >
       <div className="flex items-start gap-3">
+        {/* Checkbox */}
         <div
           className={`flex items-center mt-0.5 ${
             tarea.bloqueada ? "cursor-not-allowed" : "cursor-pointer"
           }`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!tarea.bloqueada) {
-              onToggleSeleccion();
-            }
+            if (!tarea.bloqueada) onToggleSeleccion();
           }}
         >
           <div
             className={`w-5 h-5 flex items-center justify-center border rounded transition-all ${
               tarea.bloqueada
                 ? theme === "dark"
-                  ? "bg-green-500/20 border-green-500/30"
-                  : "bg-green-100 border-green-300"
+                  ? "bg-green-500/20 border-green-500/40"
+                  : "bg-green-100 border-green-400"
                 : estaSeleccionada
                   ? "bg-[#6841ea] border-[#6841ea]"
                   : theme === "dark"
-                    ? "border-gray-500 hover:border-[#6841ea]"
-                    : "border-gray-400 hover:border-[#6841ea]"
+                    ? "border-gray-600 hover:border-[#6841ea] hover:bg-[#6841ea]/10"
+                    : "border-gray-400 hover:border-[#6841ea] hover:bg-[#6841ea]/5"
             }`}
           >
             {tarea.bloqueada ? (
@@ -717,7 +700,7 @@ function TaskWithDescriptionItem({
 
         <div className="flex-1 min-w-0">
           <div className="flex flex-col gap-1.5">
-            {/* Nombre + badge prioridad — en móvil la prioridad baja si no cabe */}
+            {/* Nombre + prioridad */}
             <div className="flex items-start justify-between gap-2">
               <span
                 className={`text-sm line-clamp-2 ${
@@ -726,8 +709,8 @@ function TaskWithDescriptionItem({
                       ? "text-green-300"
                       : "text-green-700"
                     : theme === "dark"
-                      ? "text-gray-300"
-                      : "text-gray-700"
+                      ? "text-gray-200"
+                      : "text-gray-800"
                 }`}
               >
                 {tarea.nombre}
@@ -738,20 +721,23 @@ function TaskWithDescriptionItem({
                 }
                 className={`text-[10px] shrink-0 ${
                   tarea.prioridad === "ALTA"
-                    ? "bg-red-500/20 text-red-500 border-red-500/30"
+                    ? theme === "dark"
+                      ? "bg-red-500/25 text-red-400 border border-red-500/30"
+                      : "bg-red-50 text-red-600 border border-red-300"
                     : theme === "dark"
-                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                      : "bg-amber-500/20 text-amber-700 border-amber-500/30"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "bg-amber-50 text-amber-700 border border-amber-300"
                 }`}
               >
                 {tarea.prioridad}
               </UIBadge>
             </div>
 
+            {/* Colaboración */}
             <div className="flex items-center gap-2 text-xs">
               <span
                 className={`flex-shrink-0 ${
-                  theme === "dark" ? "text-gray-400" : "text-gray-600"
+                  theme === "dark" ? "text-gray-400" : "text-gray-500"
                 }`}
               >
                 {esActividadIndividual ? (
@@ -768,21 +754,21 @@ function TaskWithDescriptionItem({
               </span>
             </div>
 
-            {/* Duración + días + estado — en móvil se envuelven si no caben */}
+            {/* Duración + estado */}
             <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
               <div className="flex items-center gap-3">
                 <span
-                  className={`${
-                    theme === "dark" ? "text-gray-400" : "text-gray-600"
-                  }`}
+                  className={
+                    theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  }
                 >
                   {tarea.duracionMin} min
                 </span>
                 {tarea.diasPendiente > 0 && (
                   <span
-                    className={`${
+                    className={
                       theme === "dark" ? "text-amber-300" : "text-amber-600"
-                    }`}
+                    }
                   >
                     {tarea.diasPendiente}d pendiente
                   </span>
@@ -790,30 +776,34 @@ function TaskWithDescriptionItem({
               </div>
 
               {tarea.bloqueada ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <UIBadge
-                    className={`text-[10px] px-1.5 py-0.5 ${
-                      reportadoPorMi
-                        ? "bg-blue-500/30 text-blue-300"
-                        : reportadoPorCompañero
-                          ? "bg-purple-500/30 text-purple-300"
-                          : "bg-green-500/30 text-green-300"
-                    }`}
-                  >
-                    <Check className="w-3 h-3 inline mr-1" />
-                    {reportadoPorMi
-                      ? "TÚ LO REPORTASTE"
+                <UIBadge
+                  className={`text-[10px] px-1.5 py-0.5 ${
+                    reportadoPorMi
+                      ? theme === "dark"
+                        ? "bg-blue-500/30 text-blue-300 border border-blue-500/30"
+                        : "bg-blue-100 text-blue-700 border border-blue-300"
                       : reportadoPorCompañero
-                        ? `REPORTADO POR ${nombreReportador?.toUpperCase()}`
-                        : "COMPLETADA"}
-                  </UIBadge>
-                </div>
+                        ? theme === "dark"
+                          ? "bg-purple-500/30 text-purple-300 border border-purple-500/30"
+                          : "bg-purple-100 text-purple-700 border border-purple-300"
+                        : theme === "dark"
+                          ? "bg-green-500/25 text-green-300 border border-green-500/30"
+                          : "bg-green-100 text-green-700 border border-green-300"
+                  }`}
+                >
+                  <Check className="w-3 h-3 inline mr-1" />
+                  {reportadoPorMi
+                    ? "TÚ LO REPORTASTE"
+                    : reportadoPorCompañero
+                      ? `REPORTADO POR ${nombreReportador?.toUpperCase()}`
+                      : "COMPLETADA"}
+                </UIBadge>
               ) : (
                 <UIBadge
                   className={`text-[10px] px-1.5 py-0.5 ${
                     theme === "dark"
-                      ? "bg-amber-500/30 text-amber-300"
-                      : "bg-amber-500/20 text-amber-700"
+                      ? "bg-amber-500/25 text-amber-300 border border-amber-500/30"
+                      : "bg-amber-50 text-amber-700 border border-amber-300"
                   }`}
                 >
                   <FileText className="w-3 h-3 inline mr-1" />
@@ -822,10 +812,9 @@ function TaskWithDescriptionItem({
               )}
             </div>
 
-            {/* Descripción (solo si existe) — con botón Editar que abre modo voz */}
+            {/* Descripción expandible */}
             {tarea.descripcion && (
               <div className="mt-2">
-                {/* Botones Ver/Re-dictar — se envuelven en móvil si no caben */}
                 <div className="flex gap-2 flex-wrap">
                   <Button
                     size="sm"
@@ -836,15 +825,14 @@ function TaskWithDescriptionItem({
                     }}
                     className={`text-xs h-6 px-2 py-1 ${
                       theme === "dark"
-                        ? "text-gray-400 hover:text-gray-300 hover:bg-[#2a2a2a]"
-                        : "text-gray-600 hover:text-gray-800 hover:bg-gray-200"
+                        ? "text-gray-400 hover:text-gray-200 hover:bg-[#2a2a2a]"
+                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-200"
                     }`}
                   >
                     <FileText className="w-3 h-3 mr-1" />
                     {mostrarDescripcion ? "Ocultar" : "Ver"} descripción
                   </Button>
 
-                  {/* ✅ CAMBIADO: Editar ahora abre el modal de voz */}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -885,7 +873,6 @@ function TaskWithDescriptionItem({
 
 interface DescriptionTasksFooterProps {
   totalTareas: number;
-  theme: "light" | "dark";
   tareasSeleccionadas: Set<string>;
   onSeleccionarTodas: () => void;
   onDeseleccionarTodas: () => void;
@@ -897,7 +884,6 @@ interface DescriptionTasksFooterProps {
 
 function DescriptionTasksFooter({
   totalTareas,
-  theme,
   tareasSeleccionadas,
   onSeleccionarTodas,
   onDeseleccionarTodas,
@@ -906,36 +892,32 @@ function DescriptionTasksFooter({
   currentUserEmail,
   turno,
 }: DescriptionTasksFooterProps) {
+  const theme = useTheme();
   const countSeleccionadas = tareasSeleccionadas.size;
-  const todasSeleccionadas = countSeleccionadas === totalTareas;
+  const todasSeleccionadas =
+    countSeleccionadas === totalTareas && totalTareas > 0;
   const nombreUsuario = currentUserEmail.split("@")[0];
 
   return (
     <div
       className={`p-3 border-t ${
         theme === "dark"
-          ? "border-[#2a2a2a] bg-[#252527]"
+          ? "border-[#2a2a2a] bg-[#202022]"
           : "border-gray-200 bg-gray-50"
       }`}
     >
       <div className="flex flex-col gap-3">
         <div className="flex justify-between items-center text-xs">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span
-                className={theme === "dark" ? "text-gray-500" : "text-gray-600"}
-              >
-                {totalTareas} tarea{totalTareas !== 1 ? "s" : ""} pendiente
-                {totalTareas !== 1 ? "s" : ""}
-              </span>
-            </div>
+          <div className="flex flex-col gap-0.5">
+            <span
+              className={theme === "dark" ? "text-gray-400" : "text-gray-600"}
+            >
+              {totalTareas} tarea{totalTareas !== 1 ? "s" : ""} pendiente
+              {totalTareas !== 1 ? "s" : ""}
+            </span>
 
             {countSeleccionadas > 0 && (
-              <span
-                className={`text-[10px] mt-1 flex items-center gap-1 ${
-                  theme === "dark" ? "text-[#6841ea]" : "text-[#6841ea]"
-                }`}
-              >
+              <span className="text-[10px] flex items-center gap-1 text-[#6841ea]">
                 <CheckSquare className="w-3 h-3" />
                 {countSeleccionadas} seleccionada
                 {countSeleccionadas !== 1 ? "s" : ""}
@@ -943,7 +925,7 @@ function DescriptionTasksFooter({
             )}
 
             <span
-              className={`text-[10px] mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+              className={`text-[10px] ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
             >
               {nombreUsuario}
             </span>
@@ -953,8 +935,8 @@ function DescriptionTasksFooter({
             variant="outline"
             className={`text-[10px] px-2 py-0.5 flex items-center gap-1 ${
               theme === "dark"
-                ? "bg-purple-500/10 text-purple-300 border-purple-500/30"
-                : "bg-purple-100 text-purple-700 border-purple-300"
+                ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
+                : "bg-purple-50 text-purple-700 border-purple-300"
             }`}
           >
             <Mic className="w-3 h-3" />
@@ -963,82 +945,87 @@ function DescriptionTasksFooter({
         </div>
 
         {totalTareas > 0 && (
-          <div className="flex gap-2">
-            <Button
-              onClick={
-                todasSeleccionadas ? onDeseleccionarTodas : onSeleccionarTodas
-              }
-              size="sm"
-              variant="outline"
-              className="flex-1 text-xs h-7 bg-transparent"
-            >
-              <CheckSquare className="w-3.5 h-3.5 mr-2" />
-              {todasSeleccionadas ? "Deseleccionar todas" : "Seleccionar todas"}
-            </Button>
-          </div>
+          <Button
+            onClick={
+              todasSeleccionadas ? onDeseleccionarTodas : onSeleccionarTodas
+            }
+            size="sm"
+            variant="outline"
+            className={`w-full text-xs h-7 ${
+              theme === "dark"
+                ? "border-[#3a3a3a] text-gray-300 hover:bg-[#2a2a2a] hover:text-white bg-transparent"
+                : "border-gray-300 text-gray-700 hover:bg-gray-100 bg-white"
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5 mr-2" />
+            {todasSeleccionadas ? "Deseleccionar todas" : "Seleccionar todas"}
+          </Button>
         )}
 
-        <div className="flex gap-2">
-          <Button
-            onClick={onIniciarModoVoz}
-            size="sm"
-            className={`flex-1 text-white text-xs h-8 ${
-              countSeleccionadas === 0
-                ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
-                : "bg-[#6841ea] hover:bg-[#5a36d4]"
-            }`}
-            disabled={countSeleccionadas === 0 || isLoading}
-          >
-            {isLoading ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
-                Iniciando...
-              </>
-            ) : (
-              <>
-                <Mic className="w-3.5 h-3.5 mr-2" />
-                Explicar con Voz{" "}
-                {countSeleccionadas > 0 && `(${countSeleccionadas})`}
-              </>
-            )}
-          </Button>
-        </div>
+        <Button
+          onClick={onIniciarModoVoz}
+          size="sm"
+          className={`w-full text-white text-xs h-8 transition-colors ${
+            countSeleccionadas === 0
+              ? theme === "dark"
+                ? "bg-gray-700 hover:bg-gray-700 cursor-not-allowed text-gray-500"
+                : "bg-gray-300 hover:bg-gray-300 cursor-not-allowed text-gray-500"
+              : "bg-[#6841ea] hover:bg-[#5a36d4] active:bg-[#4f2fc4]"
+          }`}
+          disabled={countSeleccionadas === 0 || isLoading}
+        >
+          {isLoading ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
+              Iniciando...
+            </>
+          ) : (
+            <>
+              <Mic className="w-3.5 h-3.5 mr-2" />
+              Explicar con Voz
+              {countSeleccionadas > 0 && ` (${countSeleccionadas})`}
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );
 }
 
-interface NoDescriptionTasksMessageProps {
-  theme: "light" | "dark";
-  currentUserEmail: string;
-}
-
 function NoDescriptionTasksMessage({
-  theme,
   currentUserEmail,
-}: NoDescriptionTasksMessageProps) {
+}: {
+  currentUserEmail: string;
+}) {
+  const theme = useTheme();
   const nombreUsuario = currentUserEmail.split("@")[0];
 
   return (
     <div className="animate-in slide-in-from-bottom-2 duration-300 flex justify-center">
       <div
-        className={`p-4 rounded-lg border text-center ${
+        className={`p-5 rounded-lg border text-center ${
           theme === "dark"
             ? "bg-[#1a1a1a] border-[#2a2a2a]"
-            : "bg-gray-50 border-gray-200"
+            : "bg-white border-gray-200 shadow-sm"
         }`}
       >
-        <Check className="w-8 h-8 text-green-500 mx-auto mb-2" />
+        <div
+          className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${
+            theme === "dark" ? "bg-green-500/15" : "bg-green-100"
+          }`}
+        >
+          <Check className="w-6 h-6 text-green-500" />
+        </div>
         <h4
           className={`font-semibold mb-1 text-sm ${
             theme === "dark" ? "text-gray-200" : "text-gray-800"
           }`}
         >
-          ¡Todo listo! 🎉
+          ¡Todo listo!
         </h4>
         <p
-          className={`text-xs mb-3 ${
-            theme === "dark" ? "text-gray-500" : "text-gray-600"
+          className={`text-xs ${
+            theme === "dark" ? "text-gray-500" : "text-gray-500"
           }`}
         >
           {nombreUsuario}, todas tus tareas ya tienen descripción. ¡Buen

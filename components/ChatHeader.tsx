@@ -9,9 +9,8 @@ import {
   LogOut,
   BarChart3,
 } from "lucide-react";
-import { SpeedControlHeader } from "./voice-controls";
+import { SpeedControlHeader } from "./SpeedControlHeader";
 import { HeaderProps } from "@/lib/types";
-import { useRouter } from "next/navigation";
 
 export const ChatHeader: React.FC<HeaderProps> = ({
   isInPiPWindow,
@@ -32,7 +31,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
   onViewReports,
 }) => {
   const isAdminJohn = colaborador.email === "jjohn@pprin.com";
-  const router = useRouter();
 
   // ── PiP MODE ──────────────────────────────────────────────────────────────
   if (isInPiPWindow) {
@@ -44,7 +42,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
       >
         <div className="px-3 py-2">
           <div className="flex items-center justify-between">
-            {/* Logo + name */}
             <div className="flex items-center gap-2 min-w-0">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -62,7 +59,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               <h2 className="text-sm font-bold truncate">Anfeta Asistente</h2>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={toggleTheme}
@@ -98,7 +94,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
   // ── NORMAL MODE ───────────────────────────────────────────────────────────
   return (
     <div className="relative top-0 left-0 right-0 z-20">
-      {/* Gradient backdrop */}
       <div
         className={`absolute top-0 left-0 right-0 h-24 pointer-events-none bg-gradient-to-b ${
           theme === "dark"
@@ -109,9 +104,8 @@ export const ChatHeader: React.FC<HeaderProps> = ({
 
       <div className="relative max-w-4xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
         <div className="flex items-center justify-between gap-2">
-          {/* ── LEFT: Hamburger + Logo/Identity ─────────────────────────── */}
+          {/* ── LEFT ─────────────────────────────────────────────────────── */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            {/* Hamburger — mobile only, when sidebar is closed */}
             {isMobile && !isSidebarOpen && onOpenSidebar && (
               <button
                 onClick={onOpenSidebar}
@@ -126,7 +120,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Avatar */}
             <div className="flex-shrink-0 animate-tilt">
               <Image
                 src="/icono.webp"
@@ -137,7 +130,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               />
             </div>
 
-            {/* Title + user info */}
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold leading-tight">
                 Asistente
@@ -147,7 +139,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
                   theme === "dark" ? "text-gray-400" : "text-gray-600"
                 }`}
               >
-                {/* On very small screens only show displayName; show email on sm+ */}
                 <span>{displayName}</span>
                 <span className="hidden sm:inline"> • {colaborador.email}</span>
                 {isAdminJohn && (
@@ -159,25 +150,18 @@ export const ChatHeader: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* ── RIGHT: Actions ───────────────────────────────────────────── */}
+          {/* ── RIGHT ────────────────────────────────────────────────────── */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-            {/* Speed control — hidden on xs, visible sm+ */}
-            <div className="hidden sm:flex">
-              <SpeedControlHeader
-                rate={rate}
-                changeRate={changeRate}
-                isSpeaking={isSpeaking}
-                theme={theme}
-              />
-            </div>
+            <SpeedControlHeader
+              rate={rate}
+              changeRate={changeRate}
+              isSpeaking={isSpeaking}
+              theme={theme}
+            />
 
-            {/* Reports button — admin only */}
             {isAdminJohn && (
               <button
-                onClick={() => {
-                  if (onViewReports) onViewReports();
-                  window.location.href = "/reporte-del-dia";
-                }}
+                onClick={() => onViewReports?.()}
                 className={`h-9 rounded-lg text-sm font-medium flex items-center gap-1.5 px-2 sm:px-3 transition-colors ${
                   theme === "dark"
                     ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]"
@@ -185,12 +169,10 @@ export const ChatHeader: React.FC<HeaderProps> = ({
                 }`}
               >
                 <BarChart3 className="w-4 h-4 flex-shrink-0" />
-                {/* Label hidden on mobile */}
                 <span className="hidden sm:inline">Reportes</span>
               </button>
             )}
 
-            {/* PiP toggle */}
             <button
               onClick={isPiPMode ? closePiPWindow : openPiPWindow}
               aria-label={isPiPMode ? "Exit PiP" : "Enter PiP"}
@@ -209,7 +191,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Theme toggle */}
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
@@ -226,7 +207,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Logout */}
             <button
               onClick={() => setShowLogoutDialog(true)}
               aria-label="Logout"
@@ -241,18 +221,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Speed control row — mobile only, below main bar */}
-        {isMobile && (
-          <div className="flex sm:hidden mt-1.5 justify-end">
-            <SpeedControlHeader
-              rate={rate}
-              changeRate={changeRate}
-              isSpeaking={isSpeaking}
-              theme={theme}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

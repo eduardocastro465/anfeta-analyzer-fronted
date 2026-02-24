@@ -37,12 +37,17 @@ interface ReporteActividadesModalProps {
   tareasReportadasMap?: Map<string, any>;
 }
 
-// ✅ TIPOS SIMPLIFICADOS - Eliminados pasos de motivo
 type PasoModal =
   | "inicial"
   | "preguntando-que-hizo"
   | "escuchando-que-hizo"
   | "guardando-que-hizo"
+  | "preguntando-aclaracion"
+  | "escuchando-aclaracion"
+  | "guardando-aclaracion"
+  | "preguntando-motivo"
+  | "escuchando-motivo"
+  | "guardando-motivo"
   | "completado";
 
 type EstadoTarea = "pendiente" | "completada" | "no-completada";
@@ -63,9 +68,18 @@ export function ReporteActividadesModal({
   const [paso, setPaso] = useState<PasoModal>("inicial");
   const [indiceActual, setIndiceActual] = useState(0);
   const [errorValidacion, setErrorValidacion] = useState<string | null>(null);
+  const [preguntaAclaracion, setPreguntaAclaracion] = useState<string | null>(
+    null,
+  );
   const [estadoTareas, setEstadoTareas] = useState<Map<string, EstadoTarea>>(
     new Map(),
   );
+  const [indiceNoCompletada, setIndiceNoCompletada] = useState<number | null>(
+    null,
+  );
+  const [transcriptNoCompletada, setTranscriptNoCompletada] = useState<
+    string | null
+  >(null);
 
   // ==================== REFS ====================
   const isProcessingRef = useRef(false);
@@ -80,7 +94,6 @@ export function ReporteActividadesModal({
   const audioRecorder = useAudioRecorder();
   const { speak: speakText, stop: stopVoice, isSpeaking } = useVoiceSynthesis();
 
-  // Mantener refs actualizadas
   useEffect(() => {
     pasoActualRef.current = paso;
   }, [paso]);
@@ -100,6 +113,9 @@ export function ReporteActividadesModal({
       setEstadoTareas(new Map());
       setPaso("inicial");
       setIndiceActual(0);
+      setPreguntaAclaracion(null);
+      setIndiceNoCompletada(null);
+      setTranscriptNoCompletada(null);
     }
   }, [isOpen]);
 
@@ -171,7 +187,11 @@ export function ReporteActividadesModal({
     stopRecording: audioRecorder.stopRecording,
     startRecording: audioRecorder.startRecording,
     onTranscriptionComplete: async (transcript) => {
-      await procesarRespuesta(transcript, pasoActualRef.current);
+      if (pasoActualRef.current === "escuchando-motivo") {
+        await procesarMotivo(transcript);
+      } else {
+        await procesarRespuesta(transcript, pasoActualRef.current);
+      }
     },
     onError: (error) => {
       setErrorValidacion(error.message || "Error al procesar el audio");
@@ -182,7 +202,6 @@ export function ReporteActividadesModal({
     },
   });
 
-  // Mantener refs de grabación actualizadas
   useEffect(() => {
     startRecordingRef.current = startVoiceRecording;
   }, [startVoiceRecording]);
@@ -215,28 +234,51 @@ export function ReporteActividadesModal({
     }
   }, []);
 
-  // ==================== ✅ PROCESAR RESPUESTA SIMPLIFICADO ====================
+  // ==================== PROCESAR RESPUESTA ====================
   const procesarRespuesta = async (
     transcript: string,
     pasoCapturado: PasoModal,
   ) => {
     if (isProcessingRef.current) return;
 
-    if (transcript.length < 3) {
-      setErrorValidacion("La respuesta es muy corta.");
+    const trimmed = transcript.trim();
+
+    if (trimmed.length < 10) {
+      setErrorValidacion("¿Puedes dar más detalles sobre qué hiciste?");
       setTimeout(() => {
         setErrorValidacion(null);
-        setPaso("preguntando-que-hizo");
+        setPaso("escuchando-que-hizo");
+        setTimeout(() => startRecordingRef.current(), 500);
       }, 2000);
+      return;
+    }
+
+    const frasesInvalidas = [
+      "gracias",
+      "ok",
+      "sí",
+      "no",
+      "bien",
+      "listo",
+      "perfecto",
+    ];
+    if (frasesInvalidas.includes(trimmed.toLowerCase())) {
+      setErrorValidacion("¿Puedes dar más detalles sobre qué hiciste?");
+      setTimeout(() => {
+        setErrorValidacion(null);
+        setPaso("escuchando-que-hizo");
+        setTimeout(() => startRecordingRef.current(), 500);
+      }, 2500);
       return;
     }
 
     isProcessingRef.current = true;
     const indiceCapturado = indiceRef.current;
     const tareaCapturada = tareasRef.current[indiceCapturado];
+    const esAclaracion = pasoCapturado === "escuchando-aclaracion";
 
     try {
-      setPaso("guardando-que-hizo");
+      setPaso(esAclaracion ? "guardando-aclaracion" : "guardando-que-hizo");
 
       const data = await guardarReporteTarde({
         actividadId: tareaCapturada.actividadId,
@@ -245,22 +287,35 @@ export function ReporteActividadesModal({
       });
 
       if (data.success) {
+        if (data.requiereMejora && !esAclaracion) {
+          setPreguntaAclaracion(
+            data.preguntaAclaracion ||
+              "¿Puedes dar más detalles sobre qué resultado obtuviste?",
+          );
+          setPaso("preguntando-aclaracion");
+          return;
+        }
+
         if (data.completada) {
-          // ✅ Completada
           actualizarEstadoTarea(tareaCapturada.pendienteId, "completada");
           speakRef.current("Perfecto, tarea completada.").catch(() => {});
           setTimeout(() => avanzarSiguienteTarea(indiceCapturado), 1500);
         } else {
-          // ❌ No completada - LA IA YA GUARDÓ EL MOTIVO
-          actualizarEstadoTarea(tareaCapturada.pendienteId, "no-completada");
-
-          // Mensaje confirmando que se registró
-          const mensaje = data.motivoNoCompletado
-            ? "Entendido. Siguiente tarea."
-            : "Registrado. Siguiente tarea.";
-
-          speakRef.current(mensaje).catch(() => {});
-          setTimeout(() => avanzarSiguienteTarea(indiceCapturado), 1500);
+          // ← Va directo a pedir motivo, sin pantalla intermedia
+          stopVoiceRef.current();
+          setIndiceNoCompletada(indiceCapturado);
+          setTranscriptNoCompletada(transcript);
+          setPaso("preguntando-motivo");
+          const texto =
+            "Entendido. ¿Cuál fue el motivo por el que no pudiste completar la tarea?";
+          speakRef.current(texto).catch(() => {});
+          const estimatedMs = Math.max(3000, texto.length * 55);
+          setTimeout(() => {
+            if (pasoActualRef.current === "preguntando-motivo") {
+              setPaso("escuchando-motivo");
+              setTimeout(() => startRecordingRef.current(), 500);
+            }
+          }, estimatedMs);
         }
       } else {
         throw new Error(data.error || "Error al guardar");
@@ -271,6 +326,53 @@ export function ReporteActividadesModal({
       setTimeout(() => {
         setErrorValidacion(null);
         setPaso("preguntando-que-hizo");
+      }, 3000);
+    } finally {
+      isProcessingRef.current = false;
+    }
+  };
+
+  // ==================== REINTENTAR EXPLICACIÓN ====================
+  const reintentarExplicacion = () => {
+    cancelVoiceRecording();
+    stopVoiceRef.current();
+    setIndiceNoCompletada(null);
+    setTranscriptNoCompletada(null);
+    setPaso("preguntando-que-hizo");
+  };
+
+  // ==================== PROCESAR MOTIVO ====================
+  const procesarMotivo = async (motivoTranscript: string) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
+    const indiceCapturado = indiceNoCompletada ?? indiceRef.current;
+    const tareaCapturada = tareasRef.current[indiceCapturado];
+
+    try {
+      setPaso("guardando-motivo");
+
+      await guardarReporteTarde({
+        actividadId: tareaCapturada.actividadId,
+        pendienteId: tareaCapturada.pendienteId,
+        queHizo: transcriptNoCompletada || "",
+        motivoNoCompletado: motivoTranscript.trim(),
+      });
+
+      actualizarEstadoTarea(tareaCapturada.pendienteId, "no-completada");
+      speakRef
+        .current("Entendido, registrado. Pasamos a la siguiente tarea.")
+        .catch(() => {});
+      setIndiceNoCompletada(null);
+      setTranscriptNoCompletada(null);
+      setTimeout(() => avanzarSiguienteTarea(indiceCapturado), 1500);
+    } catch (error) {
+      console.error("❌ Error guardando motivo:", error);
+      setErrorValidacion("Hubo un problema al guardar. Intenta de nuevo.");
+      setTimeout(() => {
+        setErrorValidacion(null);
+        setPaso("escuchando-motivo");
+        setTimeout(() => startRecordingRef.current(), 500);
       }, 3000);
     } finally {
       isProcessingRef.current = false;
@@ -288,7 +390,7 @@ export function ReporteActividadesModal({
     setPaso("preguntando-que-hizo");
   };
 
-  // ==================== 🔥 EFECTO: PREGUNTAR QUÉ HIZO ====================
+  // ==================== EFECTO: PREGUNTAR QUÉ HIZO ====================
   useEffect(() => {
     if (paso !== "preguntando-que-hizo" || !isOpen) return;
 
@@ -319,6 +421,32 @@ export function ReporteActividadesModal({
     };
   }, [paso, isOpen]);
 
+  // ==================== EFECTO: PREGUNTAR ACLARACIÓN ====================
+  useEffect(() => {
+    if (paso !== "preguntando-aclaracion" || !isOpen) return;
+    if (!preguntaAclaracion) return;
+
+    stopVoiceRef.current();
+    speakRef.current(preguntaAclaracion).catch(() => {});
+
+    const estimatedSpeechMs = Math.max(3000, preguntaAclaracion.length * 55);
+    const timer = setTimeout(() => {
+      if (pasoActualRef.current === "preguntando-aclaracion") {
+        setPaso("escuchando-aclaracion");
+        setTimeout(() => {
+          if (pasoActualRef.current === "escuchando-aclaracion") {
+            startRecordingRef.current();
+          }
+        }, 500);
+      }
+    }, estimatedSpeechMs);
+
+    return () => {
+      clearTimeout(timer);
+      stopVoiceRef.current();
+    };
+  }, [paso, isOpen, preguntaAclaracion]);
+
   // ==================== LIMPIAR AL CERRAR ====================
   useEffect(() => {
     if (!isOpen) {
@@ -338,6 +466,9 @@ export function ReporteActividadesModal({
     onOpenChange(false);
     setPaso("inicial");
     setEstadoTareas(new Map());
+    setPreguntaAclaracion(null);
+    setIndiceNoCompletada(null);
+    setTranscriptNoCompletada(null);
   };
 
   // ==================== BADGE DE ESTADO ====================
@@ -604,7 +735,7 @@ export function ReporteActividadesModal({
             </div>
           )}
 
-          {/* ========== GUARDANDO ========== */}
+          {/* ========== GUARDANDO QUÉ HIZO ========== */}
           {paso === "guardando-que-hizo" && (
             <div className="text-center space-y-3 py-6">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500/20 to-amber-500/20 flex items-center justify-center border border-orange-500/30 mx-auto">
@@ -612,6 +743,139 @@ export function ReporteActividadesModal({
               </div>
               <p className="text-xs text-gray-500 font-medium">
                 Analizando tu respuesta con IA...
+              </p>
+            </div>
+          )}
+
+          {/* ========== PREGUNTANDO ACLARACIÓN ========== */}
+          {paso === "preguntando-aclaracion" && (
+            <div className="text-center space-y-3">
+              <div className="w-14 h-14 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/30 mx-auto">
+                <AlertCircle className="w-7 h-7 text-yellow-500" />
+              </div>
+              <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                Necesitamos un poco más de detalle
+              </p>
+              {preguntaAclaracion && (
+                <p className="text-xs text-gray-500 italic px-4">
+                  "{preguntaAclaracion}"
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ========== ESCUCHANDO ACLARACIÓN ========== */}
+          {paso === "escuchando-aclaracion" && (
+            <div className="text-center space-y-3">
+              <div className="relative w-16 h-16 mx-auto">
+                <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center animate-pulse border border-yellow-500/40">
+                  <Mic className="w-8 h-8 text-yellow-500" />
+                </div>
+                <div
+                  className="absolute inset-0 rounded-full border-2 border-yellow-500 transition-all"
+                  style={{
+                    transform: `scale(${1 + audioLevel / 200})`,
+                    opacity: audioLevel / 100,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 font-medium">
+                {isRecording
+                  ? "Escuchando tu aclaración..."
+                  : isTranscribing
+                    ? "Procesando audio..."
+                    : "Preparando micrófono..."}
+              </p>
+            </div>
+          )}
+
+          {/* ========== GUARDANDO ACLARACIÓN ========== */}
+          {paso === "guardando-aclaracion" && (
+            <div className="text-center space-y-3 py-6">
+              <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/30 mx-auto">
+                <Loader2 className="w-6 h-6 text-yellow-500 animate-spin" />
+              </div>
+              <p className="text-xs text-gray-500 font-medium">
+                Analizando tu aclaración...
+              </p>
+            </div>
+          )}
+
+          {/* ========== PREGUNTANDO MOTIVO ========== */}
+          {paso === "preguntando-motivo" && (
+            <div className="text-center space-y-3">
+              <div
+                className={`p-3 rounded-lg border ${
+                  theme === "dark"
+                    ? "bg-red-900/20 border-red-700/50"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
+                <XCircle className="w-5 h-5 text-red-500 mx-auto mb-1" />
+                <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                  Tarea no completada
+                </p>
+              </div>
+              <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30 mx-auto">
+                <Loader2 className="w-7 h-7 text-red-500 animate-spin" />
+              </div>
+              <p className="text-xs text-gray-500 font-medium">
+                El asistente está preguntando el motivo...
+              </p>
+            </div>
+          )}
+
+          {/* ========== ESCUCHANDO MOTIVO ========== */}
+          {paso === "escuchando-motivo" && (
+            <div className="text-center space-y-3">
+              <div
+                className={`p-3 rounded-lg border ${
+                  theme === "dark"
+                    ? "bg-red-900/20 border-red-700/50"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
+                <XCircle className="w-5 h-5 text-red-500 mx-auto mb-1" />
+                <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                  Tarea no completada — explica el motivo
+                </p>
+              </div>
+              <div className="relative w-16 h-16 mx-auto">
+                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center animate-pulse border border-red-500/40">
+                  <Mic className="w-8 h-8 text-red-500" />
+                </div>
+                <div
+                  className="absolute inset-0 rounded-full border-2 border-red-500 transition-all"
+                  style={{
+                    transform: `scale(${1 + audioLevel / 200})`,
+                    opacity: audioLevel / 100,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 font-medium">
+                {isRecording
+                  ? "Explica por qué no pudiste completarla..."
+                  : isTranscribing
+                    ? "Procesando..."
+                    : "Preparando micrófono..."}
+              </p>
+              <button
+                onClick={reintentarExplicacion}
+                className="text-[10px] text-orange-500 hover:underline font-medium"
+              >
+                ¿Sí la completaste? Volver a explicar
+              </button>
+            </div>
+          )}
+
+          {/* ========== GUARDANDO MOTIVO ========== */}
+          {paso === "guardando-motivo" && (
+            <div className="text-center space-y-3 py-6">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30 mx-auto">
+                <Loader2 className="w-6 h-6 text-red-500 animate-spin" />
+              </div>
+              <p className="text-xs text-gray-500 font-medium">
+                Guardando motivo...
               </p>
             </div>
           )}

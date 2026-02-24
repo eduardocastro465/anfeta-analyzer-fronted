@@ -12,15 +12,20 @@ import {
   Users,
 } from "lucide-react";
 import type { AssistantAnalysis } from "@/lib/types";
+import { useTheme } from "@/context/ThemeContext";
 
-interface MessageTemplateProps {
-  theme: "light" | "dark";
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTA DE ARQUITECTURA
+// Todos los templates son componentes React que obtienen el tema via useTheme().
+// NO reciben `theme` como prop — eso generaba closures congelados cuando los
+// mensajes se guardaban en el array de estado de ChatBot.
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ========== MENSAJES DE SISTEMA ==========
 
-export const systemTemplates = {
-  modeIA: ({ theme }: MessageTemplateProps) => (
+function ModeIA() {
+  const theme = useTheme();
+  return (
     <div
       className={`p-3 rounded-lg border ${
         theme === "dark"
@@ -34,24 +39,33 @@ export const systemTemplates = {
           Modo Asistente IA activado
         </span>
       </div>
-      <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">
+      <p
+        className={`text-xs mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+      >
         Ahora puedes hacer preguntas sobre tus tareas y recibir ayuda
         personalizada.
       </p>
     </div>
-  ),
+  );
+}
 
-  modeNormal: ({ theme }: MessageTemplateProps) => (
-    <div className="text-xs text-gray-500 dark:text-gray-400">
+function ModeNormal() {
+  const theme = useTheme();
+  return (
+    <div
+      className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+    >
       Modo normal activado
     </div>
-  ),
+  );
+}
 
-  loadingActivities: ({
-    theme,
-    showAll,
-  }: MessageTemplateProps & { showAll?: boolean }) => (
-    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+function LoadingActivities({ showAll }: { showAll?: boolean }) {
+  const theme = useTheme();
+  return (
+    <div
+      className={`flex items-center gap-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+    >
       <Brain className="w-4 h-4 text-[#6841ea] flex-shrink-0" />
       <span className="text-sm">
         {showAll
@@ -59,30 +73,43 @@ export const systemTemplates = {
           : "Obteniendo análisis de tus actividades..."}
       </span>
     </div>
+  );
+}
+
+export const systemTemplates = {
+  modeIA: () => <ModeIA />,
+  modeNormal: () => <ModeNormal />,
+  loadingActivities: ({ showAll }: { showAll?: boolean }) => (
+    <LoadingActivities showAll={showAll} />
   ),
 };
 
 // ========== MENSAJES DE BIENVENIDA ==========
 
-export const welcomeTemplates = {
-  userInfo: ({
-    theme,
-    displayName,
-    email,
-  }: MessageTemplateProps & { displayName: string; email: string }) => (
+function UserInfo({
+  displayName,
+  email,
+}: {
+  displayName: string;
+  email: string;
+}) {
+  const theme = useTheme();
+  return (
     <div className="flex flex-col gap-3 w-full">
       {/* Card Usuario */}
       <div className="flex items-start gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10 w-full max-w-full">
         <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
           <User className="w-5 h-5 text-[#6841ea]" />
         </div>
-
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm break-words leading-tight">
+          <p
+            className={`font-medium text-sm break-words leading-tight ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
             Hola, {displayName}!
           </p>
-
-          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+          <div
+            className={`flex items-center gap-1 text-xs min-w-0 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+          >
             <Mail className="w-3 h-3 shrink-0" />
             <span className="break-all leading-tight">{email}</span>
           </div>
@@ -94,11 +121,15 @@ export const welcomeTemplates = {
         <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
           <Brain className="w-5 h-5 text-[#6841ea]" />
         </div>
-
         <div className="min-w-0 flex-1">
-          <h3 className="font-bold text-sm sm:text-base">Resumen de tu día</h3>
-
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <h3
+            className={`font-bold text-sm sm:text-base ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            Resumen de tu día
+          </h3>
+          <p
+            className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+          >
             {new Date().toLocaleDateString("es-MX", {
               weekday: "short",
               month: "short",
@@ -108,19 +139,27 @@ export const welcomeTemplates = {
         </div>
       </div>
     </div>
-  ),
+  );
+}
+
+export const welcomeTemplates = {
+  userInfo: ({
+    displayName,
+    email,
+  }: {
+    displayName: string;
+    email: string;
+  }) => <UserInfo displayName={displayName} email={email} />,
 };
 
 // ========== MENSAJES DE ANÁLISIS ==========
 
-export const analysisTemplates = {
-  metrics: ({
-    theme,
-    analysis,
-  }: MessageTemplateProps & { analysis: AssistantAnalysis }) => (
-   <div className="space-y-4">
+function AnalysisMetrics({ analysis }: { analysis: AssistantAnalysis }) {
+  const theme = useTheme();
+  return (
+    <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 mt-3">
-        {/* ── Alta prioridad ── */}
+        {/* Alta prioridad */}
         <div
           className={`p-2 sm:p-3 rounded-lg border ${
             theme === "dark"
@@ -131,9 +170,7 @@ export const analysisTemplates = {
           <div className="flex items-center gap-1 sm:gap-2 mb-1">
             <Target className="w-3 h-3 text-red-500 flex-shrink-0" />
             <span
-              className={`text-[10px] sm:text-xs font-medium truncate ${
-                theme === "dark" ? "text-red-300" : "text-red-700"
-              }`}
+              className={`text-[10px] sm:text-xs font-medium truncate ${theme === "dark" ? "text-red-300" : "text-red-700"}`}
             >
               Alta
             </span>
@@ -143,7 +180,7 @@ export const analysisTemplates = {
           </div>
         </div>
 
-        {/* ── Total ── */}
+        {/* Total */}
         <div
           className={`p-2 sm:p-3 rounded-lg border ${
             theme === "dark"
@@ -154,23 +191,19 @@ export const analysisTemplates = {
           <div className="flex items-center gap-1 sm:gap-2 mb-1">
             <FileText className="w-3 h-3 text-green-500 flex-shrink-0" />
             <span
-              className={`text-[10px] sm:text-xs font-medium truncate ${
-                theme === "dark" ? "text-green-300" : "text-green-700"
-              }`}
+              className={`text-[10px] sm:text-xs font-medium truncate ${theme === "dark" ? "text-green-300" : "text-green-700"}`}
             >
               Total
             </span>
           </div>
           <div
-            className={`text-lg sm:text-xl font-bold truncate ${
-              theme === "dark" ? "text-green-400" : "text-green-600"
-            }`}
+            className={`text-lg sm:text-xl font-bold truncate ${theme === "dark" ? "text-green-400" : "text-green-600"}`}
           >
             {analysis.metrics.tareasConTiempo || 0}
           </div>
         </div>
 
-        {/* ── Tiempo ── */}
+        {/* Tiempo */}
         <div
           className={`p-2 sm:p-3 rounded-lg border ${
             theme === "dark"
@@ -181,21 +214,18 @@ export const analysisTemplates = {
           <div className="flex items-center gap-1 sm:gap-2 mb-1">
             <Clock className="w-3 h-3 text-yellow-500 flex-shrink-0" />
             <span
-              className={`text-[10px] sm:text-xs font-medium truncate ${
-                theme === "dark" ? "text-yellow-300" : "text-yellow-700"
-              }`}
+              className={`text-[10px] sm:text-xs font-medium truncate ${theme === "dark" ? "text-yellow-300" : "text-yellow-700"}`}
             >
               Tiempo
             </span>
           </div>
-          {/* Tiempo puede ser "2h 30m" — usamos text-sm en xs para que quepa */}
           <div className="text-sm sm:text-xl font-bold text-yellow-500 truncate">
             {analysis.metrics.tiempoEstimadoTotal || "0h 0m"}
           </div>
         </div>
       </div>
 
-      {/* ── Texto descriptivo ── */}
+      {/* Texto descriptivo */}
       {analysis.answer && (
         <div
           className={`p-3 rounded-lg border ${
@@ -233,22 +263,28 @@ export const analysisTemplates = {
         </div>
       )}
     </div>
+  );
+}
+
+export const analysisTemplates = {
+  metrics: ({ analysis }: { analysis: AssistantAnalysis }) => (
+    <AnalysisMetrics analysis={analysis} />
   ),
 };
 
 // ========== MENSAJES DE TAREAS ==========
 
-export const tasksTemplates = {
-  tasksLoaded: ({
-    theme,
-    total,
-    reportadas,
-    pendientes,
-  }: MessageTemplateProps & {
-    total: number;
-    reportadas: number;
-    pendientes: number;
-  }) => (
+function TasksLoaded({
+  total,
+  reportadas,
+  pendientes,
+}: {
+  total: number;
+  reportadas: number;
+  pendientes: number;
+}) {
+  const theme = useTheme();
+  return (
     <div
       className={`p-3 rounded-lg border ${
         theme === "dark"
@@ -259,40 +295,30 @@ export const tasksTemplates = {
       <div className="flex items-start gap-3">
         <Target className="w-5 h-5 text-[#6841ea] mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm mb-2">Tareas encontradas</p>
+          <p
+            className={`font-medium text-sm mb-2 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            Tareas encontradas
+          </p>
           <div className="flex gap-2 text-xs flex-wrap">
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${
-                theme === "dark"
-                  ? "bg-gray-700 text-gray-300"
-                  : "bg-gray-100 text-gray-700"
-              }`}
+              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}
             >
               Total: {total}
             </span>
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${
-                theme === "dark"
-                  ? "bg-green-500/20 text-green-300"
-                  : "bg-green-100 text-green-700"
-              }`}
+              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
             >
               Reportadas: {reportadas}
             </span>
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${
-                theme === "dark"
-                  ? "bg-amber-500/20 text-amber-300"
-                  : "bg-amber-100 text-amber-700"
-              }`}
+              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"}`}
             >
               Pendientes: {pendientes}
             </span>
           </div>
           <p
-            className={`text-xs mt-2 ${
-              theme === "dark" ? "text-gray-400" : "text-gray-600"
-            }`}
+            className={`text-xs mt-2 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
           >
             {pendientes > 0
               ? "Selecciona las tareas que deseas reportar abajo"
@@ -301,20 +327,22 @@ export const tasksTemplates = {
         </div>
       </div>
     </div>
-  ),
+  );
+}
 
-  tasksLoadedColaborative: ({
-    theme,
-    total,
-    miasReportadas,
-    otrosReportadas,
-    pendientes,
-  }: MessageTemplateProps & {
-    total: number;
-    miasReportadas: number;
-    otrosReportadas: number;
-    pendientes: number;
-  }) => (
+function TasksLoadedColaborative({
+  total,
+  miasReportadas,
+  otrosReportadas,
+  pendientes,
+}: {
+  total: number;
+  miasReportadas: number;
+  otrosReportadas: number;
+  pendientes: number;
+}) {
+  const theme = useTheme();
+  return (
     <div
       className={`p-3 rounded-lg border ${
         theme === "dark"
@@ -325,57 +353,41 @@ export const tasksTemplates = {
       <div className="flex items-start gap-3">
         <Users className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm mb-2 flex items-center gap-2">
+          <p
+            className={`font-medium text-sm mb-2 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
             Trabajo colaborativo detectado
           </p>
           <div className="flex flex-wrap gap-2 text-xs mb-2">
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${
-                theme === "dark"
-                  ? "bg-gray-700 text-gray-300"
-                  : "bg-gray-100 text-gray-700"
-              }`}
+              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}
             >
               Total: {total}
             </span>
             {miasReportadas > 0 && (
               <span
-                className={`px-2 py-1 rounded whitespace-nowrap ${
-                  theme === "dark"
-                    ? "bg-green-500/20 text-green-300"
-                    : "bg-green-100 text-green-700"
-                }`}
+                className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
               >
                 Tuyas: {miasReportadas}
               </span>
             )}
             {otrosReportadas > 0 && (
               <span
-                className={`px-2 py-1 rounded whitespace-nowrap ${
-                  theme === "dark"
-                    ? "bg-purple-500/20 text-purple-300"
-                    : "bg-purple-100 text-purple-700"
-                }`}
+                className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}`}
               >
                 Colaboradores: {otrosReportadas}
               </span>
             )}
             {pendientes > 0 && (
               <span
-                className={`px-2 py-1 rounded whitespace-nowrap ${
-                  theme === "dark"
-                    ? "bg-amber-500/20 text-amber-300"
-                    : "bg-amber-100 text-amber-700"
-                }`}
+                className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"}`}
               >
                 Pendientes: {pendientes}
               </span>
             )}
           </div>
           <p
-            className={`text-xs ${
-              theme === "dark" ? "text-gray-400" : "text-gray-600"
-            }`}
+            className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
           >
             {otrosReportadas > 0 && miasReportadas === 0
               ? "Hay reportes de tus colaboradores. Puedes ver el progreso del equipo abajo"
@@ -386,9 +398,12 @@ export const tasksTemplates = {
         </div>
       </div>
     </div>
-  ),
+  );
+}
 
-  noTasksFound: ({ theme }: MessageTemplateProps) => (
+function NoTasksFound() {
+  const theme = useTheme();
+  return (
     <div
       className={`p-3 rounded-lg border ${
         theme === "dark"
@@ -399,11 +414,13 @@ export const tasksTemplates = {
       <div className="flex items-start gap-3">
         <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
         <div className="min-w-0">
-          <p className="font-medium text-sm">No hay tareas pendientes</p>
           <p
-            className={`text-xs mt-1 ${
-              theme === "dark" ? "text-gray-400" : "text-gray-600"
-            }`}
+            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            No hay tareas pendientes
+          </p>
+          <p
+            className={`text-xs mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
           >
             Todas tus tareas han sido reportadas o no hay tareas asignadas para
             hoy.
@@ -411,13 +428,51 @@ export const tasksTemplates = {
         </div>
       </div>
     </div>
+  );
+}
+
+export const tasksTemplates = {
+  tasksLoaded: ({
+    total,
+    reportadas,
+    pendientes,
+  }: {
+    total: number;
+    reportadas: number;
+    pendientes: number;
+  }) => (
+    <TasksLoaded
+      total={total}
+      reportadas={reportadas}
+      pendientes={pendientes}
+    />
   ),
+  tasksLoadedColaborative: ({
+    total,
+    miasReportadas,
+    otrosReportadas,
+    pendientes,
+  }: {
+    total: number;
+    miasReportadas: number;
+    otrosReportadas: number;
+    pendientes: number;
+  }) => (
+    <TasksLoadedColaborative
+      total={total}
+      miasReportadas={miasReportadas}
+      otrosReportadas={otrosReportadas}
+      pendientes={pendientes}
+    />
+  ),
+  noTasksFound: () => <NoTasksFound />,
 };
 
 // ========== MENSAJES DE ÉXITO ==========
 
-export const successTemplates = {
-  reportSaved: ({ theme, count }: MessageTemplateProps & { count: number }) => (
+function ReportSaved({ count }: { count: number }) {
+  const theme = useTheme();
+  return (
     <div
       className={`p-4 rounded-lg border ${
         theme === "dark"
@@ -428,58 +483,95 @@ export const successTemplates = {
       <div className="flex items-center gap-3">
         <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
-          <span className="font-medium text-sm">Reporte guardado</span>
+          <span
+            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            Reporte guardado
+          </span>
           <p
-            className={`text-sm mt-1 ${
-              theme === "dark" ? "text-gray-300" : "text-gray-700"
-            }`}
+            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
           >
             Se actualizaron {count} tareas correctamente. ¡Buen trabajo hoy!
           </p>
         </div>
       </div>
     </div>
-  ),
+  );
+}
 
-  journeyStarted: ({
-    theme,
-    tasksCount,
-  }: MessageTemplateProps & { tasksCount: number }) => (
-    <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+function JourneyStarted({ tasksCount }: { tasksCount: number }) {
+  const theme = useTheme();
+  return (
+    <div
+      className={`p-4 rounded-lg border ${
+        theme === "dark"
+          ? "bg-green-900/20 border-green-500/20"
+          : "bg-green-50 border-green-200"
+      }`}
+    >
       <div className="flex items-center gap-3">
         <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
-          <span className="font-medium text-sm">¡Jornada iniciada!</span>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+          <span
+            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            ¡Jornada iniciada!
+          </span>
+          <p
+            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+          >
             Has explicado {tasksCount} tareas correctamente. ¡Mucho éxito!
           </p>
         </div>
       </div>
     </div>
-  ),
+  );
+}
 
-  explanationsSaved: ({
-    theme,
-    tasksCount,
-  }: MessageTemplateProps & { tasksCount: number }) => (
-    <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+function ExplanationsSaved({ tasksCount }: { tasksCount: number }) {
+  const theme = useTheme();
+  return (
+    <div
+      className={`p-4 rounded-lg border ${
+        theme === "dark"
+          ? "bg-green-900/20 border-green-500/20"
+          : "bg-green-50 border-green-200"
+      }`}
+    >
       <div className="flex items-center gap-3">
         <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
-          <span className="font-medium text-sm">Actividades guardadas</span>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+          <span
+            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
+            Actividades guardadas
+          </span>
+          <p
+            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+          >
             Has explicado {tasksCount} tareas.
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export const successTemplates = {
+  reportSaved: ({ count }: { count: number }) => <ReportSaved count={count} />,
+  journeyStarted: ({ tasksCount }: { tasksCount: number }) => (
+    <JourneyStarted tasksCount={tasksCount} />
+  ),
+  explanationsSaved: ({ tasksCount }: { tasksCount: number }) => (
+    <ExplanationsSaved tasksCount={tasksCount} />
   ),
 };
 
 // ========== MENSAJES DE ERROR ==========
 
-export const errorTemplates = {
-  reportError: ({ theme }: MessageTemplateProps) => (
+function ReportError() {
+  const theme = useTheme();
+  return (
     <div
       className={`p-4 rounded-lg border ${
         theme === "dark"
@@ -489,31 +581,49 @@ export const errorTemplates = {
     >
       <div className="flex items-center gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-        <span className="text-sm">
+        <span
+          className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+        >
           Error al guardar el reporte. Intenta nuevamente.
         </span>
       </div>
     </div>
-  ),
+  );
+}
 
-  activitiesError: ({ theme }: MessageTemplateProps) => (
-    <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+function ActivitiesError() {
+  const theme = useTheme();
+  return (
+    <div
+      className={`p-4 rounded-lg border ${
+        theme === "dark"
+          ? "bg-red-900/20 border-red-500/20"
+          : "bg-red-50 border-red-200"
+      }`}
+    >
       <div className="flex items-center gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
         <div className="min-w-0">
-          <span className="font-medium text-sm">
+          <span
+            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+          >
             Error al obtener actividades
           </span>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+          <p
+            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+          >
             Hubo un problema al obtener tus actividades. Por favor, intenta
             nuevamente más tarde.
           </p>
         </div>
       </div>
     </div>
-  ),
+  );
+}
 
-  generic: ({ theme, message }: MessageTemplateProps & { message: string }) => (
+function GenericError({ message }: { message: string }) {
+  const theme = useTheme();
+  return (
     <div
       className={`p-4 rounded-lg border ${
         theme === "dark"
@@ -523,9 +633,21 @@ export const errorTemplates = {
     >
       <div className="flex items-center gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-        <span className="text-sm min-w-0 break-words">{message}</span>
+        <span
+          className={`text-sm min-w-0 break-words ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+        >
+          {message}
+        </span>
       </div>
     </div>
+  );
+}
+
+export const errorTemplates = {
+  reportError: () => <ReportError />,
+  activitiesError: () => <ActivitiesError />,
+  generic: ({ message }: { message: string }) => (
+    <GenericError message={message} />
   ),
 };
 
@@ -541,12 +663,11 @@ export const messageTemplates = {
 };
 
 // ========== MENSAJES DE TEXTO SIMPLE ==========
+// Estos son strings puros, no JSX — no necesitan tema.
 
 export const textMessages = {
-  // Bienvenida
   greeting: (displayName: string) => `¡Hola ${displayName}! Soy tu asistente.`,
 
-  // Voz
   voiceValidating: "Validando tu explicación...",
   voiceValidated:
     "Perfecto, explicación validada. Pasamos a la siguiente tarea.",
@@ -564,7 +685,6 @@ export const textMessages = {
   voiceJourneyStart:
     "¡Perfecto! Tu jornada ha comenzado. Mucho éxito con tus tareas.",
 
-  // Reporte
   reportSending: "Enviando tu reporte...",
   reportSent: "¡Correcto! Tu reporte ha sido enviado.",
   reportSendError: "Hubo un error al enviar tu reporte.",
@@ -576,11 +696,9 @@ export const textMessages = {
   reportTaskCompleted: "Ok, completada.",
   reportTaskNotCompleted: "Entendido, no completada.",
 
-  // Modo voz - confirmación inicio
   voiceStart: (count: number) =>
     `Vamos a explicar ${count} actividades con tareas programadas. ¿Listo para comenzar?`,
 
-  // Actividad
   activityPresentation: (
     index: number,
     total: number,
@@ -589,13 +707,11 @@ export const textMessages = {
   ) =>
     `Actividad ${index + 1} de ${total}: ${title}. Tiene ${taskCount} tarea${taskCount !== 1 ? "s" : ""}.`,
 
-  // Tarea
   taskPresentation: (index: number, total: number, name: string) =>
     `Tarea ${index + 1} de ${total}: ${name}. ¿Cómo planeas resolver esta tarea?`,
 
   taskQuestion: (index: number, name: string) =>
     `Tarea ${index + 1}: ${name}. ¿La completaste y qué hiciste? O si no, ¿por qué no?`,
 
-  // Chat IA
   chatError: "Lo siento, hubo un error al procesar tu mensaje.",
 };
