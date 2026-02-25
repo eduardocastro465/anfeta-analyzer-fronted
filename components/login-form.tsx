@@ -27,6 +27,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   );
   const [isLoadingColaboradores, setIsLoadingColaboradores] = useState(true);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false); // Nuevo estado para el login
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -100,8 +101,15 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     }
   }, [selectedId, colaboradores]);
 
-  const handleAcceder = () => {
-    SignIn(colaboradorInfo?.email || "").then((user) => {
+  const handleAcceder = async () => {
+    if (!colaboradorInfo) return;
+    
+    setIsLoggingIn(true); // Activar estado de carga
+    setError(null); // Limpiar errores anteriores
+    
+    try {
+      const user = await SignIn(colaboradorInfo?.email || "");
+      
       if (colaboradorInfo && user) {
         localStorage.setItem("colaborador", JSON.stringify(colaboradorInfo));
         localStorage.setItem("actividades", JSON.stringify([]));
@@ -112,7 +120,10 @@ export function LoginForm({ onLogin }: LoginFormProps) {
 
         onLogin(colaboradorInfo, []);
       }
-    });
+    } catch (err) {
+      setError("Error al iniciar sesión. Intenta nuevamente.");
+      setIsLoggingIn(false); // Desactivar carga en caso de error
+    }
   };
 
   const getDisplayName = (colaborador: Colaborador) => {
@@ -221,7 +232,8 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                   <select
                     value={selectedId}
                     onChange={(e) => setSelectedId(e.target.value)}
-                    className="w-full h-12 px-3 bg-white/70 dark:bg-neutral-800/70 backdrop-blur-sm border-0 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#6841ea] shadow-sm appearance-none text-sm"
+                    disabled={isLoggingIn} // Deshabilitar durante el login
+                    className="w-full h-12 px-3 bg-white/70 dark:bg-neutral-800/70 backdrop-blur-sm border-0 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#6841ea] shadow-sm appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="" className="text-gray-400">
                       Selecciona tu usuario...
@@ -288,16 +300,27 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                   </div>
                 </div>
 
-                {/* Botón de acción */}
-                <button
-                  onClick={handleAcceder}
-                  className="w-full h-11 rounded-lg font-medium transition-all text-sm bg-[#6841ea] hover:bg-[#5a36d4] text-white shadow hover:shadow-md"
-                >
-                  <span className="flex items-center justify-center">
-                    Iniciar Sesión
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </span>
-                </button>
+                {/* Botón de acción con loading */}
+                {isLoggingIn ? (
+                  <div className="w-full h-11 rounded-lg bg-[#6841ea] flex items-center justify-center">
+                    <div className="flex space-x-1">
+                      <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleAcceder}
+                    disabled={isLoggingIn}
+                    className="w-full h-11 rounded-lg font-medium transition-all text-sm bg-[#6841ea] hover:bg-[#5a36d4] text-white shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="flex items-center justify-center">
+                      Iniciar Sesión
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </span>
+                  </button>
+                )}
               </div>
             )}
           </div>

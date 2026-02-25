@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
 import type {
@@ -755,24 +755,34 @@ export function ChatContainer({
           }
         `}
       >
-        <ChatBot
-          onViewReports={onViewReports}
-          key={conversacionActiva || "nueva"}
-          colaborador={colaborador}
-          actividades={actividades}
-          onLogout={onLogout}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          conversacionActiva={conversacionActiva}
-          mensajesRestaurados={mensajesRestaurados}
-          analisisRestaurado={analisisRestaurado}
-          onNuevaConversacion={agregarNuevaConversacion}
-          onActualizarNombre={actualizarNombreConversacion}
-          onActualizarTyping={setIsTyping}
-          onOpenSidebar={() => setSidebarOpen(true)}
-          isMobile={isMobile}
-          sidebarOpen={sidebarOpen}
-        />
+        {/* 👇 AQUÍ ESTÁ EL CAMBIO: Si es admin, muestra el Reporte del Día en iframe */}
+        {colaborador.email === "jjohn@pprin.com" ? (
+          <iframe 
+            src="/reporte-del-dia" 
+            className="w-full h-full border-0"
+            title="Reporte del Día"
+            style={{ minHeight: "100vh" }}
+          />
+        ) : (
+          <ChatBot
+            onViewReports={onViewReports}
+            key={conversacionActiva || "nueva"}
+            colaborador={colaborador}
+            actividades={actividades}
+            onLogout={onLogout}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            conversacionActiva={conversacionActiva}
+            mensajesRestaurados={mensajesRestaurados}
+            analisisRestaurado={analisisRestaurado}
+            onNuevaConversacion={agregarNuevaConversacion}
+            onActualizarNombre={actualizarNombreConversacion}
+            onActualizarTyping={setIsTyping}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            isMobile={isMobile}
+            sidebarOpen={sidebarOpen}
+          />
+        )}
       </div>
 
       {/* ── Dialog eliminar ──────────────────────────────────────── */}
