@@ -46,6 +46,7 @@ export interface HeaderProps {
   onOpenSidebar?: () => void;
   isMobile?: boolean;
   isSidebarOpen?: boolean;
+  
 }
 
 export interface Actividad {
@@ -332,6 +333,8 @@ export interface ChatBotProps {
   onViewReports?: () => void;
   preferencias?: any;
   onGuardarPreferencias?: (nuevasPrefs: any) => void;
+  showSettings?: boolean;
+  setShowSettings?: (show: boolean) => void;
 }
 
 export type ChatStep =

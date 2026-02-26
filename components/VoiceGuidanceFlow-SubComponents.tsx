@@ -425,7 +425,10 @@ export const ListeningExplanationStep: React.FC<{
   setVoiceStep: (step: any) => void;
   processVoiceExplanation: (transcript: string) => void;
   setCurrentListeningFor: (text: string) => void;
+  isVoskRecording: boolean;
   isPaused: boolean;
+  voskSilenceCountdown: number | null;
+  isVoskEngine: boolean;
 }> = ({
   currentListeningFor,
   retryCount,
@@ -438,12 +441,17 @@ export const ListeningExplanationStep: React.FC<{
   setVoiceStep,
   processVoiceExplanation,
   setCurrentListeningFor,
+  isVoskRecording,
   isPaused,
+  voskSilenceCountdown,
+  isVoskEngine,
 }) => {
   const [isValidating, setIsValidating] = React.useState(false);
   const [countdown, setCountdown] = React.useState<number | null>(null);
 
   React.useEffect(() => {
+    if (isVoskEngine) return;
+
     let silenceTimer: NodeJS.Timeout | null = null;
     let countdownInterval: NodeJS.Timeout | null = null;
 
@@ -474,6 +482,7 @@ export const ListeningExplanationStep: React.FC<{
     };
   }, [
     voiceTranscript,
+    isVoskEngine,
     processVoiceExplanation,
     recognitionRef,
     setIsRecording,
@@ -482,7 +491,7 @@ export const ListeningExplanationStep: React.FC<{
 
   return (
     <div className="text-center space-y-2.5 sm:space-y-4">
-      {/* Ícono micrófono */}
+      {/* Ícono micrófono + contador */}
       <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto">
         <div
           className={`w-full h-full rounded-full flex items-center justify-center ${
@@ -497,6 +506,8 @@ export const ListeningExplanationStep: React.FC<{
             <Mic className="w-7 h-7 sm:w-10 sm:h-10 text-red-500" />
           )}
         </div>
+
+        {/* Ondas de ping */}
         {!isValidating && (
           <div className="absolute inset-0 flex items-center justify-center">
             {[1, 2, 3].map((i) => (
@@ -513,13 +524,43 @@ export const ListeningExplanationStep: React.FC<{
             ))}
           </div>
         )}
-        {countdown !== null && !isValidating && (
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
-            <div className="bg-[#6841ea] text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
-              {countdown}s
-            </div>
-          </div>
-        )}
+
+        {/* Contador junto al micrófono — siempre visible mientras graba */}
+        {!isValidating &&
+          (() => {
+            const activeCountdown = isVoskEngine
+              ? voskSilenceCountdown
+              : countdown;
+            const total = isVoskEngine ? 4 : 3;
+
+            // Si hay countdown activo, mostrar con número
+            if (activeCountdown !== null) {
+              return (
+                <div className="absolute -bottom-1 -right-1 flex items-center gap-1">
+                  <div className="bg-[#6841ea] text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1">
+                    <Clock className="w-2.5 h-2.5" />
+                    {activeCountdown}s
+                  </div>
+                  {/* Barra de progreso circular pequeña debajo */}
+                  <div className="w-8 h-1 bg-gray-600 rounded-full overflow-hidden absolute -bottom-3 left-1/2 -translate-x-1/2 w-14">
+                    <div
+                      className="h-full bg-[#6841ea] transition-all duration-1000 ease-linear"
+                      style={{ width: `${(activeCountdown / total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
+            // Si está grabando pero sin countdown aún, mostrar indicador REC
+            return (
+              <div className="absolute -bottom-1 -right-1">
+                <div className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse whitespace-nowrap">
+                  REC
+                </div>
+              </div>
+            );
+          })()}
       </div>
 
       <h4 className="text-sm sm:text-lg font-bold">
@@ -587,33 +628,6 @@ export const ListeningExplanationStep: React.FC<{
         </div>
       )}
 
-      {/* Countdown de silencio */}
-      {countdown !== null && !isValidating && voiceTranscript && (
-        <div
-          className={`p-2.5 sm:p-4 rounded-lg border-2 ${
-            theme === "dark"
-              ? "border-[#6841ea] bg-[#6841ea]/10"
-              : "border-[#6841ea] bg-[#6841ea]/5"
-          }`}
-        >
-          <div className="flex items-center justify-center gap-1.5 sm:gap-3 mb-1.5">
-            <Clock className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#6841ea] animate-pulse" />
-            <span className="text-xs sm:text-lg font-bold text-[#6841ea]">
-              Auto-envío en {countdown}s
-            </span>
-          </div>
-          <p className="text-[10px] text-center text-gray-500 hidden sm:block">
-            Detecté silencio. Si no hablas más, enviaré automáticamente tu
-            explicación.
-          </p>
-          <div className="mt-1.5 sm:mt-3 w-full h-1 sm:h-2 bg-gray-300 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#6841ea] transition-all duration-1000 ease-linear"
-              style={{ width: `${(countdown / 3) * 100}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Transcript */}
       {voiceTranscript && (

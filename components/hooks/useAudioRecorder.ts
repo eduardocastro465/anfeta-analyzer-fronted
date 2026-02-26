@@ -5,41 +5,44 @@ export const useAudioRecorder = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const [currentStream, setCurrentStream] = useState<MediaStream | null>(null);
+  const mimeTypeRef = useRef<string>("");
 
-  const startRecording = async (): Promise<MediaStream> => {
-    try {
-      // Solicitar acceso al micrófono
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: false,
-        },
-      });
+  const startRecording = async (
+    onChunk?: (chunk: Blob) => void,
+  ): Promise<MediaStream> => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false,
+      },
+    });
+    setCurrentStream(stream);
 
-      // IMPORTANTE: Guardar y retornar el stream
-      setCurrentStream(stream);
+    // ✅ Detectar codec soportado
+    const mimeType =
+      [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
+      ].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
 
-      // Crear MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+    const mediaRecorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
 
-      // Manejar datos
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
+    mimeTypeRef.current = mediaRecorder.mimeType;
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+        onChunk?.(e.data);
+      }
+    };
 
-      // Iniciar grabación
-      mediaRecorder.start();
-
-      // ✅ Retornar el stream para que puedas usarlo
-      return stream;
-    } catch (error) {
-      throw error;
-    }
+    mediaRecorder.start(1500);
+    return stream;
   };
 
   const stopRecording = async (): Promise<Blob> => {
@@ -52,7 +55,9 @@ export const useAudioRecorder = () => {
 
       mediaRecorder.onstop = () => {
         // Crear blob de audio
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const audioBlob = new Blob(chunksRef.current, {
+          type: mimeTypeRef.current || "audio/webm",
+        });
 
         // Limpiar
         chunksRef.current = [];

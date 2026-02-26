@@ -36,7 +36,7 @@ interface UseAutoSendVoiceOptions {
   /**
    * Función para iniciar la grabación del MediaRecorder
    */
-  startRecording: () => Promise<MediaStream>;
+  startRecording: (onChunk?: (chunk: Blob) => void) => Promise<MediaStream>;
 
   /**
    * Habilitar transcripción en tiempo real (experimental)
@@ -57,7 +57,7 @@ interface UseAutoSendVoiceReturn {
 
 export function useAutoSendVoice({
   silenceThreshold = 3000,
-  speechThreshold = 8,
+  speechThreshold = 3, //
   onTranscriptionComplete,
   onError,
   transcriptionService,
@@ -81,64 +81,73 @@ export function useAutoSendVoice({
   const animationFrameRef = useRef<number | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
+  const realtimeChunksRef = useRef<Blob[]>([]);
+  const realtimeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mimeTypeRef = useRef<string>("");
+  const transcriptRef = useRef("");
 
   // ==================== SINCRONIZACIÓN STATE <-> REF ====================
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
+
   // ==================== RECONOCIMIENTO DE VOZ EN TIEMPO REAL ====================
-  const startRealtimeRecognition = useCallback(() => {
+
+  const updateTranscript = useCallback(
+    (updater: string | ((prev: string) => string)) => {
+      setTranscript((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        transcriptRef.current = next;
+        return next;
+      });
+    },
+    [],
+  );
+
+  const startRealtimeWhisper = useCallback(() => {
     if (!enableRealtimeTranscription) return;
-    if (typeof window === "undefined") return;
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+    realtimeChunksRef.current = [];
 
-    if (!SpeechRecognition) {
-      console.warn("Speech Recognition no soportado en este navegador");
-      return;
-    }
+    realtimeIntervalRef.current = setInterval(async () => {
+      if (!isRecordingRef.current || realtimeChunksRef.current.length === 0)
+        return;
 
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "es-ES";
+      const chunks = [...realtimeChunksRef.current];
+      realtimeChunksRef.current = [];
 
-      recognition.onresult = (event: any) => {
-        let interimTranscript = "";
-        let finalTranscript = "";
+      const chunkBlob = new Blob(chunks, {
+        type: mimeTypeRef.current || "audio/webm",
+      });
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcriptPart = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcriptPart + " ";
-          } else {
-            interimTranscript += transcriptPart;
-          }
+      // ✅ Mínimo 10KB — chunks muy pequeños causan 400 en Groq
+      if (chunkBlob.size < 10000) {
+        // Devolver los chunks al buffer para acumular más
+        realtimeChunksRef.current = [...chunks, ...realtimeChunksRef.current];
+        return;
+      }
+
+      try {
+        const partialTranscript = await transcriptionService(chunkBlob);
+        if (partialTranscript?.trim()) {
+          setTranscript((prev) => (prev + " " + partialTranscript).trim());
         }
+      } catch {
+        // silencioso
+      }
+    }, 3000); // ✅ Subir a 3 segundos para acumular más audio
+  }, [enableRealtimeTranscription, transcriptionService]);
 
-        // Actualizar transcript en tiempo real
-        setTranscript((prev) => {
-          const newTranscript = (prev + finalTranscript).trim();
-          return (
-            newTranscript + (interimTranscript ? " " + interimTranscript : "")
-          );
-        });
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error("Error en reconocimiento de voz:", event.error);
-      };
-
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch (error) {
-      console.error("Error al iniciar reconocimiento:", error);
+  const stopRealtimeWhisper = useCallback(() => {
+    if (realtimeIntervalRef.current) {
+      clearInterval(realtimeIntervalRef.current);
+      realtimeIntervalRef.current = null;
     }
-  }, [enableRealtimeTranscription]);
+  }, []);
 
   const stopRealtimeRecognition = useCallback(() => {
     if (recognitionRef.current) {
@@ -151,10 +160,94 @@ export function useAutoSendVoice({
     }
   }, []);
 
+  const startRealtimeRecognition = useCallback(() => {
+    if (!enableRealtimeTranscription) return;
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      startRealtimeWhisper();
+      return;
+    }
+
+    // ✅ Timeout: si en 5 segundos no llega ningún resultado, cambiar a Whisper
+    let hasReceivedResult = false;
+    const fallbackTimer = setTimeout(() => {
+      if (!hasReceivedResult) {
+        console.warn(
+          "SpeechRecognition no produjo resultados, cambiando a Whisper",
+        );
+        stopRealtimeRecognition();
+        startRealtimeWhisper();
+      }
+    }, 5000);
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "es-ES";
+
+      recognition.onresult = (event: any) => {
+        hasReceivedResult = true;
+        clearTimeout(fallbackTimer); // ✅ Funciona, cancelar fallback
+
+        let interimTranscript = "";
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcriptPart = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcriptPart + " ";
+          } else {
+            interimTranscript += transcriptPart;
+          }
+        }
+        setTranscript((prev) => {
+          const newTranscript = (prev + finalTranscript).trim();
+          return (
+            newTranscript + (interimTranscript ? " " + interimTranscript : "")
+          );
+        });
+      };
+
+      recognition.onerror = () => {
+        clearTimeout(fallbackTimer);
+        stopRealtimeRecognition();
+        startRealtimeWhisper();
+      };
+
+      recognition.onend = () => {
+        if (isRecordingRef.current && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch {}
+        }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch {
+      clearTimeout(fallbackTimer);
+      startRealtimeWhisper();
+    }
+  }, [
+    enableRealtimeTranscription,
+    startRealtimeWhisper,
+    stopRealtimeRecognition,
+  ]);
+
   // ==================== PROCESAMIENTO Y ENVÍO ====================
   const processAndSendAudio = useCallback(async () => {
     if (isProcessingRef.current) {
       return;
+    }
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
 
     isProcessingRef.current = true;
@@ -191,7 +284,7 @@ export function useAutoSendVoice({
       }
 
       // Si no hay transcripción en tiempo real, usar el servicio de transcripción
-      let finalTranscript = transcript.trim();
+      let finalTranscript = transcriptRef.current.trim();
 
       if (!enableRealtimeTranscription || !finalTranscript) {
         finalTranscript = await transcriptionService(audioBlob);
@@ -219,13 +312,14 @@ export function useAutoSendVoice({
     transcriptionService,
     onTranscriptionComplete,
     onError,
-    transcript,
     enableRealtimeTranscription,
     stopRealtimeRecognition,
   ]);
 
   // ==================== TIMER DE SILENCIO ====================
   const resetSilenceTimer = useCallback(() => {
+    if (isProcessingRef.current) return;
+
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
     }
@@ -246,7 +340,7 @@ export function useAutoSendVoice({
         const microphone = audioContext.createMediaStreamSource(stream);
 
         analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.3;
+        analyser.smoothingTimeConstant = 0.8;
         microphone.connect(analyser);
 
         audioContextRef.current = audioContext;
@@ -281,7 +375,7 @@ export function useAutoSendVoice({
         };
 
         resetSilenceTimer();
-        checkAudioLevel();
+        animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
       } catch (error) {
         onError?.(
           error instanceof Error
@@ -310,13 +404,23 @@ export function useAutoSendVoice({
     }
 
     try {
-      const stream = await startRecording();
+      const stream = await startRecording((chunk) => {
+        realtimeChunksRef.current.push(chunk); // acumular chunks para Whisper parcial
+      });
 
-      setIsRecording(true);
       isRecordingRef.current = true;
+      setIsRecording(true);
 
       startAudioLevelDetection(stream);
-      startRealtimeRecognition();
+
+      if (
+        (window as any).SpeechRecognition ||
+        (window as any).webkitSpeechRecognition
+      ) {
+        startRealtimeRecognition(); // Chrome/Edge
+      } else {
+        startRealtimeWhisper(); // Opera/Firefox/otros
+      }
     } catch (error) {
       let errorMessage = "No se pudo acceder al micrófono";
 

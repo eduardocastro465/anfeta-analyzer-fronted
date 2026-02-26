@@ -21,6 +21,7 @@ interface ChatInputBarProps {
   onToggleChatMode?: () => void;
   isLoadingIA?: boolean;
   isSpeaking?: boolean;
+  onStopRecording?: () => void;
 }
 
 export function ChatInputBar({
@@ -39,6 +40,7 @@ export function ChatInputBar({
   isLoadingIA = false,
   onToggleChatMode,
   isSpeaking = false,
+  onStopRecording,
 }: ChatInputBarProps) {
   const isInteractionDisabled =
     !canUserType || isSpeaking || isLoadingIA || isTranscribing;
@@ -320,7 +322,7 @@ export function ChatInputBar({
             placeholder={getPlaceholder()}
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            disabled={isInteractionDisabled}
+            disabled={isInteractionDisabled && !isRecording}
             className={`
               flex-1 h-10 sm:h-12 
               border rounded-lg 
@@ -369,21 +371,34 @@ export function ChatInputBar({
 
           {/* Botón de micrófono */}
           <Button
-            type="button"
-            onClick={isRecording ? onCancelRecording : onStartRecording}
-            disabled={isTranscribing || isSpeaking || isLoadingIA || isInteractionDisabled}
-            className={`
-              relative 
-              h-10 w-10 sm:h-11 sm:w-11 
-              rounded-full p-0
-              transition-shadow duration-200
-              ${
-                isRecording
-                  ? "bg-gradient-to-br from-orange-500 to-red-600 shadow-lg shadow-orange-500/40"
-                  : "bg-gradient-to-br from-[#6841ea] to-[#5a36d4] hover:shadow-lg hover:shadow-[#6841ea]/40"
+            type="button" // Importante: evita que el form haga submit
+            onClick={(e) => {
+              e.preventDefault(); // Doble seguridad
+              if (isRecording) {
+                // Si quieres que la X circular sea CANCELAR estrictamente:
+                onCancelRecording();
+              } else {
+                onStartRecording();
               }
-              disabled:opacity-50 disabled:cursor-not-allowed
-            `}
+            }}
+            disabled={
+              isTranscribing ||
+              isSpeaking ||
+              isLoadingIA ||
+              isInteractionDisabled
+            }
+            className={`
+    relative 
+    h-10 w-10 sm:h-11 sm:w-11 
+    rounded-full p-0
+    transition-shadow duration-200
+    ${
+      isRecording
+        ? "bg-gradient-to-br from-orange-500 to-red-600 shadow-lg shadow-orange-500/40"
+        : "bg-gradient-to-br from-[#6841ea] to-[#5a36d4] hover:shadow-lg hover:shadow-[#6841ea]/40"
+    }
+    disabled:opacity-50 disabled:cursor-not-allowed
+  `}
             title={isRecording ? "Cancelar grabación" : "Grabar audio"}
           >
             {isRecording ? (

@@ -27,23 +27,22 @@ function ModeIA() {
   const theme = useTheme();
   return (
     <div
-      className={`p-3 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-[#6841ea]/10 border-[#6841ea]/20"
           : "bg-purple-50 border-purple-200"
       }`}
     >
-      <div className="flex items-center gap-2">
-        <Bot className="w-4 h-4 text-[#6841ea] flex-shrink-0" />
-        <span className="text-sm font-medium text-[#6841ea]">
+      <div className="flex items-center gap-1.5">
+        <Bot className="w-3.5 h-3.5 text-[#6841ea] flex-shrink-0" />
+        <span className="text-xs font-medium text-[#6841ea]">
           Modo Asistente IA activado
         </span>
       </div>
       <p
-        className={`text-xs mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+        className={`text-[11px] mt-0.5 leading-snug ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
       >
-        Ahora puedes hacer preguntas sobre tus tareas y recibir ayuda
-        personalizada.
+        Ahora puedes hacer preguntas sobre tus tareas y recibir ayuda personalizada.
       </p>
     </div>
   );
@@ -53,7 +52,7 @@ function ModeNormal() {
   const theme = useTheme();
   return (
     <div
-      className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+      className={`text-[11px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
     >
       Modo normal activado
     </div>
@@ -64,10 +63,10 @@ function LoadingActivities({ showAll }: { showAll?: boolean }) {
   const theme = useTheme();
   return (
     <div
-      className={`flex items-center gap-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+      className={`flex items-center gap-1.5 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
     >
-      <Brain className="w-4 h-4 text-[#6841ea] flex-shrink-0" />
-      <span className="text-sm">
+      <Brain className="w-3.5 h-3.5 text-[#6841ea] flex-shrink-0" />
+      <span className="text-xs">
         {showAll
           ? "Obteniendo todas tus actividades..."
           : "Obteniendo análisis de tus actividades..."}
@@ -95,40 +94,40 @@ function UserInfo({
 }) {
   const theme = useTheme();
   return (
-    <div className="flex flex-col gap-3 w-full">
+    <div className="flex flex-col gap-2 w-full">
       {/* Card Usuario */}
-      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10 w-full max-w-full">
-        <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
-          <User className="w-5 h-5 text-[#6841ea]" />
+      <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-[#6841ea]/5 border border-[#6841ea]/10 w-full">
+        <div className="p-1.5 rounded-full bg-[#6841ea]/10 shrink-0">
+          <User className="w-3.5 h-3.5 text-[#6841ea]" />
         </div>
         <div className="min-w-0 flex-1">
           <p
-            className={`font-medium text-sm break-words leading-tight ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-semibold text-xs leading-tight ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Hola, {displayName}!
           </p>
           <div
-            className={`flex items-center gap-1 text-xs min-w-0 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+            className={`flex items-center gap-1 text-[11px] min-w-0 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
           >
-            <Mail className="w-3 h-3 shrink-0" />
+            <Mail className="w-2.5 h-2.5 shrink-0" />
             <span className="break-all leading-tight">{email}</span>
           </div>
         </div>
       </div>
 
       {/* Resumen */}
-      <div className="flex items-start gap-3 w-full max-w-full">
-        <div className="p-2 rounded-full bg-[#6841ea]/10 shrink-0">
-          <Brain className="w-5 h-5 text-[#6841ea]" />
+      <div className="flex items-center gap-2 w-full">
+        <div className="p-1.5 rounded-full bg-[#6841ea]/10 shrink-0">
+          <Brain className="w-3.5 h-3.5 text-[#6841ea]" />
         </div>
         <div className="min-w-0 flex-1">
           <h3
-            className={`font-bold text-sm sm:text-base ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-bold text-xs ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Resumen de tu día
           </h3>
           <p
-            className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+            className={`text-[11px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
           >
             {new Date().toLocaleDateString("es-MX", {
               weekday: "short",
@@ -157,47 +156,47 @@ export const welcomeTemplates = {
 function AnalysisMetrics({ analysis }: { analysis: AssistantAnalysis }) {
   const theme = useTheme();
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2 mt-3">
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-3 gap-1.5 mt-1">
         {/* Alta prioridad */}
         <div
-          className={`p-2 sm:p-3 rounded-lg border ${
+          className={`px-2 py-1.5 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-red-950/20 to-red-900/10 border-red-500/20"
               : "bg-gradient-to-br from-red-50 to-red-100/50 border-red-200"
           }`}
         >
-          <div className="flex items-center gap-1 sm:gap-2 mb-1">
-            <Target className="w-3 h-3 text-red-500 flex-shrink-0" />
+          <div className="flex items-center gap-1 mb-0.5">
+            <Target className="w-2.5 h-2.5 text-red-500 flex-shrink-0" />
             <span
-              className={`text-[10px] sm:text-xs font-medium truncate ${theme === "dark" ? "text-red-300" : "text-red-700"}`}
+              className={`text-[10px] font-medium truncate ${theme === "dark" ? "text-red-300" : "text-red-700"}`}
             >
               Alta
             </span>
           </div>
-          <div className="text-lg sm:text-xl font-bold text-red-500 truncate">
+          <div className="text-base font-bold text-red-500 truncate">
             {analysis.metrics.tareasAltaPrioridad || 0}
           </div>
         </div>
 
         {/* Total */}
         <div
-          className={`p-2 sm:p-3 rounded-lg border ${
+          className={`px-2 py-1.5 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-green-950/20 to-green-900/10 border-green-500/20"
               : "bg-gradient-to-br from-green-50 to-green-100/50 border-green-200"
           }`}
         >
-          <div className="flex items-center gap-1 sm:gap-2 mb-1">
-            <FileText className="w-3 h-3 text-green-500 flex-shrink-0" />
+          <div className="flex items-center gap-1 mb-0.5">
+            <FileText className="w-2.5 h-2.5 text-green-500 flex-shrink-0" />
             <span
-              className={`text-[10px] sm:text-xs font-medium truncate ${theme === "dark" ? "text-green-300" : "text-green-700"}`}
+              className={`text-[10px] font-medium truncate ${theme === "dark" ? "text-green-300" : "text-green-700"}`}
             >
               Total
             </span>
           </div>
           <div
-            className={`text-lg sm:text-xl font-bold truncate ${theme === "dark" ? "text-green-400" : "text-green-600"}`}
+            className={`text-base font-bold truncate ${theme === "dark" ? "text-green-400" : "text-green-600"}`}
           >
             {analysis.metrics.tareasConTiempo || 0}
           </div>
@@ -205,21 +204,21 @@ function AnalysisMetrics({ analysis }: { analysis: AssistantAnalysis }) {
 
         {/* Tiempo */}
         <div
-          className={`p-2 sm:p-3 rounded-lg border ${
+          className={`px-2 py-1.5 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-yellow-950/20 to-yellow-900/10 border-yellow-500/20"
               : "bg-gradient-to-br from-yellow-50 to-yellow-100/50 border-yellow-200"
           }`}
         >
-          <div className="flex items-center gap-1 sm:gap-2 mb-1">
-            <Clock className="w-3 h-3 text-yellow-500 flex-shrink-0" />
+          <div className="flex items-center gap-1 mb-0.5">
+            <Clock className="w-2.5 h-2.5 text-yellow-500 flex-shrink-0" />
             <span
-              className={`text-[10px] sm:text-xs font-medium truncate ${theme === "dark" ? "text-yellow-300" : "text-yellow-700"}`}
+              className={`text-[10px] font-medium truncate ${theme === "dark" ? "text-yellow-300" : "text-yellow-700"}`}
             >
               Tiempo
             </span>
           </div>
-          <div className="text-sm sm:text-xl font-bold text-yellow-500 truncate">
+          <div className="text-sm font-bold text-yellow-500 truncate">
             {analysis.metrics.tiempoEstimadoTotal || "0h 0m"}
           </div>
         </div>
@@ -228,15 +227,15 @@ function AnalysisMetrics({ analysis }: { analysis: AssistantAnalysis }) {
       {/* Texto descriptivo */}
       {analysis.answer && (
         <div
-          className={`p-3 rounded-lg border ${
+          className={`px-2.5 py-2 rounded-lg border ${
             theme === "dark"
               ? "bg-gradient-to-br from-[#6841ea]/10 to-[#8b5cf6]/5 border-[#6841ea]/20"
               : "bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200"
           }`}
         >
-          <div className="flex items-start gap-2">
-            <Bot className="w-4 h-4 text-[#6841ea] mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-start gap-1.5">
+            <Bot className="w-3.5 h-3.5 text-[#6841ea] mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0 space-y-0.5">
               {analysis.answer
                 .split("\n")
                 .filter((line) => line.trim().length > 0)
@@ -246,7 +245,7 @@ function AnalysisMetrics({ analysis }: { analysis: AssistantAnalysis }) {
                   return (
                     <p
                       key={i}
-                      className={`text-sm leading-relaxed ${
+                      className={`text-xs leading-relaxed ${
                         isBold
                           ? "font-semibold text-[#6841ea]"
                           : theme === "dark"
@@ -286,39 +285,39 @@ function TasksLoaded({
   const theme = useTheme();
   return (
     <div
-      className={`p-3 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-[#6841ea]/10 border-[#6841ea]/20"
           : "bg-purple-50 border-purple-200"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <Target className="w-5 h-5 text-[#6841ea] mt-0.5 flex-shrink-0" />
+      <div className="flex items-start gap-2">
+        <Target className="w-3.5 h-3.5 text-[#6841ea] mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p
-            className={`font-medium text-sm mb-2 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs mb-1.5 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Tareas encontradas
           </p>
-          <div className="flex gap-2 text-xs flex-wrap">
+          <div className="flex gap-1.5 text-[10px] flex-wrap">
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}
+              className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}
             >
               Total: {total}
             </span>
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
+              className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
             >
               Reportadas: {reportadas}
             </span>
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"}`}
+              className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"}`}
             >
               Pendientes: {pendientes}
             </span>
           </div>
           <p
-            className={`text-xs mt-2 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+            className={`text-[11px] mt-1.5 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
           >
             {pendientes > 0
               ? "Selecciona las tareas que deseas reportar abajo"
@@ -344,50 +343,50 @@ function TasksLoadedColaborative({
   const theme = useTheme();
   return (
     <div
-      className={`p-3 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-purple-900/20 border-purple-500/20"
           : "bg-purple-50 border-purple-200"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <Users className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
+      <div className="flex items-start gap-2">
+        <Users className="w-3.5 h-3.5 text-purple-500 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p
-            className={`font-medium text-sm mb-2 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs mb-1.5 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Trabajo colaborativo detectado
           </p>
-          <div className="flex flex-wrap gap-2 text-xs mb-2">
+          <div className="flex flex-wrap gap-1.5 text-[10px] mb-1.5">
             <span
-              className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}
+              className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}
             >
               Total: {total}
             </span>
             {miasReportadas > 0 && (
               <span
-                className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
+                className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-700"}`}
               >
                 Tuyas: {miasReportadas}
               </span>
             )}
             {otrosReportadas > 0 && (
               <span
-                className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}`}
+                className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"}`}
               >
                 Colaboradores: {otrosReportadas}
               </span>
             )}
             {pendientes > 0 && (
               <span
-                className={`px-2 py-1 rounded whitespace-nowrap ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"}`}
+                className={`px-1.5 py-0.5 rounded whitespace-nowrap ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"}`}
               >
                 Pendientes: {pendientes}
               </span>
             )}
           </div>
           <p
-            className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+            className={`text-[11px] ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
           >
             {otrosReportadas > 0 && miasReportadas === 0
               ? "Hay reportes de tus colaboradores. Puedes ver el progreso del equipo abajo"
@@ -405,25 +404,24 @@ function NoTasksFound() {
   const theme = useTheme();
   return (
     <div
-      className={`p-3 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-gray-800/50 border-gray-700"
           : "bg-gray-50 border-gray-200"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
           <p
-            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             No hay tareas pendientes
           </p>
           <p
-            className={`text-xs mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+            className={`text-[11px] mt-0.5 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
           >
-            Todas tus tareas han sido reportadas o no hay tareas asignadas para
-            hoy.
+            Todas tus tareas han sido reportadas o no hay tareas asignadas para hoy.
           </p>
         </div>
       </div>
@@ -474,22 +472,22 @@ function ReportSaved({ count }: { count: number }) {
   const theme = useTheme();
   return (
     <div
-      className={`p-4 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-green-900/20 border-green-500/20"
           : "bg-green-50 border-green-200"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
           <span
-            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Reporte guardado
           </span>
           <p
-            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+            className={`text-[11px] mt-0.5 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
           >
             Se actualizaron {count} tareas correctamente. ¡Buen trabajo hoy!
           </p>
@@ -503,22 +501,22 @@ function JourneyStarted({ tasksCount }: { tasksCount: number }) {
   const theme = useTheme();
   return (
     <div
-      className={`p-4 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-green-900/20 border-green-500/20"
           : "bg-green-50 border-green-200"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
           <span
-            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             ¡Jornada iniciada!
           </span>
           <p
-            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+            className={`text-[11px] mt-0.5 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
           >
             Has explicado {tasksCount} tareas correctamente. ¡Mucho éxito!
           </p>
@@ -532,22 +530,22 @@ function ExplanationsSaved({ tasksCount }: { tasksCount: number }) {
   const theme = useTheme();
   return (
     <div
-      className={`p-4 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-green-900/20 border-green-500/20"
           : "bg-green-50 border-green-200"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
         <div className="min-w-0">
           <span
-            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Actividades guardadas
           </span>
           <p
-            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+            className={`text-[11px] mt-0.5 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
           >
             Has explicado {tasksCount} tareas.
           </p>
@@ -573,16 +571,16 @@ function ReportError() {
   const theme = useTheme();
   return (
     <div
-      className={`p-4 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-red-900/20 border-red-500/20"
           : "bg-red-50 border-red-200"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
         <span
-          className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+          className={`text-xs ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
         >
           Error al guardar el reporte. Intenta nuevamente.
         </span>
@@ -595,25 +593,24 @@ function ActivitiesError() {
   const theme = useTheme();
   return (
     <div
-      className={`p-4 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-red-900/20 border-red-500/20"
           : "bg-red-50 border-red-200"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
         <div className="min-w-0">
           <span
-            className={`font-medium text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`font-medium text-xs ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             Error al obtener actividades
           </span>
           <p
-            className={`text-sm mt-1 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+            className={`text-[11px] mt-0.5 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
           >
-            Hubo un problema al obtener tus actividades. Por favor, intenta
-            nuevamente más tarde.
+            Hubo un problema al obtener tus actividades. Por favor, intenta nuevamente más tarde.
           </p>
         </div>
       </div>
@@ -625,16 +622,16 @@ function GenericError({ message }: { message: string }) {
   const theme = useTheme();
   return (
     <div
-      className={`p-4 rounded-lg border ${
+      className={`px-2.5 py-2 rounded-lg border ${
         theme === "dark"
           ? "bg-red-900/20 border-red-500/20"
           : "bg-red-50 border-red-200"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+      <div className="flex items-center gap-2">
+        <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
         <span
-          className={`text-sm min-w-0 break-words ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+          className={`text-xs min-w-0 break-words ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
         >
           {message}
         </span>

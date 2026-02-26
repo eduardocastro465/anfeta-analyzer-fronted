@@ -32,7 +32,6 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
 };
-
 export default function RootLayout({
   children,
 }: {
@@ -40,6 +39,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const tema = localStorage.getItem('tema') || 'AUTO';
+                  const dark = tema === 'dark' || 
+                    (tema === 'AUTO' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  if (dark) document.documentElement.classList.add('dark');
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="font-sans antialiased" suppressHydrationWarning>
         <ServiceWorkerRegister />
         {children}

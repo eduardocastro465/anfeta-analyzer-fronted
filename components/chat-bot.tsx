@@ -55,20 +55,29 @@ import { messageTemplates } from "./chat/messageTemplates";
 import { ChatInputBar } from "./chat/ChatInputBar";
 import { useMessageRestoration } from "@/components/hooks/useMessageRestoration";
 import { useAudioRecorder } from "./hooks/useAudioRecorder";
-import { transcribirAudioCliente } from "@/lib/transcription";
 import { useAutoSendVoice } from "@/components/Audio/UseAutoSendVoiceOptions";
 import { useToast } from "@/hooks/use-toast";
 import { isReportTime } from "@/util/Timeutils";
 import { ChatThemeProvider } from "@/context/ThemeContext";
 import { TurnoPanel } from "@/components/TurnoPanel";
+import {
+  useVoiceEngine,
+  VoiceEngineSelector,
+  type VoiceEngine,
+} from "./Voiceengineselector";
 
 // ==================== TIPOS LOCALES ====================
 interface ExtendedChatBotProps extends ChatBotProps {
   onOpenSidebar?: () => void;
+  onEngineChange?: (engine: VoiceEngine) => void;
+  onVoskStatusChange?: (status: "idle" | "loading" | "ready" | "error") => void;
   isMobile?: boolean;
   sidebarOpen?: boolean;
+  engineOverride?: VoiceEngine;
+  openPiPWindow?: () => void;
+  closePiPWindow?: () => void;
+  isPiPModeProp?: boolean;
 }
-
 // ==================== COMPONENTE PRINCIPAL ====================
 
 export function ChatBot({
@@ -87,6 +96,12 @@ export function ChatBot({
   sidebarOpen = true,
   preferencias,
   onGuardarPreferencias,
+  onEngineChange: onEngineChangeProp,
+  onVoskStatusChange,
+  engineOverride,
+  openPiPWindow,
+  closePiPWindow,
+  isPiPModeProp,
 }: ExtendedChatBotProps) {
   // ==================== REFS ====================
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -101,10 +116,13 @@ export function ChatBot({
   // ==================== HOOKS ====================
   const router = useRouter();
   const { toast } = useToast();
+
   const isManuallyCancellingRef = useRef(false);
+  const voskGuidedModeRef = useRef(false);
   const voiceRecognition = useVoiceRecognition();
   const voiceMode = useVoiceMode();
   const conversationHistory = useConversationHistory();
+
   const {
     speak: speakText,
     stop: stopVoice,
@@ -117,6 +135,43 @@ export function ChatBot({
     preferencias?.idiomaVoz ?? "es-MX",
   );
   const audioRecorder = useAudioRecorder();
+
+  const { engine, setEngine, transcriptionService, voskRealtime, voskStatus } =
+    useVoiceEngine({
+      onVoskPartial: (text) => {
+        // Solo actualizar el input del chat si NO estamos en modo guiado
+        if (!voskGuidedModeRef.current) {
+          setUserInput(text);
+        }
+      },
+      onVoskFinal: async (transcript) => {
+        if (voskGuidedModeRef.current) {
+          voskGuidedModeRef.current = false;
+          await processVoiceExplanation(transcript);
+          return;
+        }
+        // Chat general
+        setUserInput("");
+        if (!transcript.trim()) return;
+        addMessage("user", transcript);
+        setIsTyping(true);
+        setIsLoadingIA(true);
+        try {
+          const sessionId =
+            conversacionActiva || assistantAnalysis?.sessionId || null;
+          const response = await chatGeneralIA(transcript, sessionId);
+          if (response.respuesta) {
+            addMessage("bot", response.respuesta);
+            speakText(response.respuesta);
+          }
+        } catch {
+          addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
+        } finally {
+          setIsLoadingIA(false);
+          setIsTyping(false);
+        }
+      },
+    });
 
   // ==================== CONSTANTS ====================
   const displayName = getDisplayName(colaborador);
@@ -136,8 +191,8 @@ export function ChatBot({
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   const [horaInicioReporteMañana] = useState("2:00 AM");
-  const [horaFinReporteMañana] = useState("3:32 PM");
-  const [horaInicioReporte] = useState("3:33 PM");
+  const [horaFinReporteMañana] = useState("1:32 PM");
+  const [horaInicioReporte] = useState("1:33 PM");
   const [horaFinReporte] = useState("5:30 PM");
 
   const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
@@ -158,10 +213,19 @@ export function ChatBot({
     speechText: string;
   } | null>(null);
 
-  // Refs para datos que el TurnoPanel necesita pero que cambian frecuentemente
-  // Se usan en el panel via props directas, no via closure capturado en mensajes
   const colaboradoresUnicosRef = useRef<string[]>([]);
   const turnoActualRef = useRef<"mañana" | "tarde">(turnoActual);
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  const canUserType =
+    step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
 
   useEffect(() => {
     colaboradoresUnicosRef.current = colaboradoresUnicos;
@@ -171,8 +235,18 @@ export function ChatBot({
     turnoActualRef.current = turnoActual;
   }, [turnoActual]);
 
-  const canUserType =
-    step !== "loading-analysis" && step !== "error" && !voiceMode.voiceMode;
+  useEffect(() => {
+    onEngineChangeProp?.(engine);
+  }, [engine]);
+
+  useEffect(() => {
+    onVoskStatusChange?.(voskStatus);
+  }, [voskStatus]);
+  useEffect(() => {
+    if (engineOverride && engineOverride !== engine) {
+      setEngine(engineOverride);
+    }
+  }, [engineOverride]);
 
   useEffect(() => {
     if (preferencias?.velocidadVoz != null)
@@ -427,27 +501,31 @@ export function ChatBot({
 
   actualizarDatosRef.current = actualizarDatosPorWebSocket;
 
+  // ✅ DESPUÉS
   useEffect(() => {
     if (!colaborador?.email) return;
     wsService.conectar(colaborador.email);
-    wsService.on("cambios-tareas", () => {
+
+    const onCambiosTareas = () => {
       toast({
         title: "Actualizando datos",
         description: "Hay cambios en tus actividades",
         duration: 2000,
       });
       actualizarDatosRef.current();
-    });
-    wsService.on("explicacion_guardada", () => {
+    };
+    const onExplicacionGuardada = () => {
       actualizarDatosRef.current();
-    });
+    };
+
+    wsService.on("cambios-tareas", onCambiosTareas);
+    wsService.on("explicacion_guardada", onExplicacionGuardada);
+
     return () => {
-      wsService.off("cambios-tareas");
-      wsService.off("explicacion_guardada");
-      wsService.desconectar();
+      wsService.off("cambios-tareas", onCambiosTareas); // ✅ solo el suyo
+      wsService.off("explicacion_guardada", onExplicacionGuardada); // ✅ solo el suyo
     };
   }, [colaborador?.email]);
-
   // ==================== MODO VOZ - NAVEGACIÓN ====================
   const speakActivityByIndex = (activityIndex: number) => {
     const activitiesToUse =
@@ -526,7 +604,9 @@ export function ChatBot({
 
   // ==================== AUTO-SEND VOICE: CHAT GENERAL ====================
   const autoSendVoiceChat = useAutoSendVoice({
-    transcriptionService: transcribirAudioCliente,
+    // Descomentar para que funcione solo con groq
+    // transcriptionService: transcribirAudioCliente,
+    transcriptionService,
     stopRecording: audioRecorder.stopRecording,
     startRecording: audioRecorder.startRecording,
     onTranscriptionComplete: async (transcript) => {
@@ -587,12 +667,13 @@ export function ChatBot({
 
   // ==================== AUTO-SEND VOICE: MODO GUIADO ====================
   const autoSendVoiceGuided = useAutoSendVoice({
-    transcriptionService: transcribirAudioCliente,
+    // transcriptionService: transcribirAudioCliente, // Descomentar para que funcione solo con groq
+    transcriptionService,
     stopRecording: audioRecorder.stopRecording,
     startRecording: audioRecorder.startRecording,
     silenceThreshold: 3000,
     speechThreshold: 10,
-    enableRealtimeTranscription: true,
+    enableRealtimeTranscription: false, // true para habilitar la transcripción en tiempo real (consume mucho mas tokens)
     onTranscriptionComplete: async (transcript) => {
       const trimmedTranscript = cleanExplanationTranscript(transcript);
       const validation = validateExplanationLength(trimmedTranscript);
@@ -708,6 +789,29 @@ export function ChatBot({
     },
   });
 
+  const handleStartRecording = async () => {
+    if (engine === "vosk") {
+      await voskRealtime.startRealtime();
+    } else {
+      await autoSendVoiceChat.startVoiceRecording();
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (engine === "vosk") {
+      await voskRealtime.stopRealtime(); // ← detiene Y envía via onVoskFinal
+    } else {
+      await autoSendVoiceChat.cancelVoiceRecording();
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    if (engine === "vosk") {
+      voskRealtime.cancelRealtime();
+    } else {
+      await autoSendVoiceChat.cancelVoiceRecording();
+    }
+  };
   const {
     isRecording,
     isTranscribing,
@@ -1025,9 +1129,11 @@ export function ChatBot({
 
   const cancelVoiceMode = () => {
     isManuallyCancellingRef.current = true;
+    voskGuidedModeRef.current = false;
     stopVoice();
     voiceRecognition.stopRecording();
     cancelVoiceRecording();
+    voskRealtime.cancelRealtime();
     voiceMode.cancelVoiceMode();
     setSelectedTaskIds([]);
     setFilteredActivitiesForVoice([]);
@@ -1074,7 +1180,13 @@ export function ChatBot({
       );
     voiceMode.setVoiceStep("listening-explanation");
     voiceMode.setExpectedInputType("explanation");
-    setTimeout(() => autoSendVoiceGuided.startVoiceRecording(), 100);
+
+    if (engine === "vosk") {
+      voskGuidedModeRef.current = true;
+      setTimeout(() => voskRealtime.startRealtime(), 100);
+    } else {
+      setTimeout(() => autoSendVoiceGuided.startVoiceRecording(), 100);
+    }
   };
 
   const processVoiceExplanation = async (transcript: string) => {
@@ -1549,14 +1661,14 @@ export function ChatBot({
   return (
     <ChatThemeProvider value={theme}>
       <div
-        className={`flex flex-col h-screen min-w-0 overflow-hidden ${
+        className={`flex flex-col h-screen min-w-0 ${
           theme === "dark"
             ? "bg-[#101010] text-white"
             : "bg-white text-gray-900"
         }`}
       >
         <ChatHeader
-          isInPiPWindow={isInPiPWindow}
+          isInPiPWindow={isPiPModeProp ?? isInPiPWindow}
           sidebarOpen={conversationHistory.sidebarOpen}
           setSidebarOpen={conversationHistory.setSidebarOpen}
           theme={theme}
@@ -1566,9 +1678,9 @@ export function ChatBot({
           rate={rate}
           changeRate={changeRate}
           isSpeaking={isSpeaking}
-          isPiPMode={isPiPMode}
-          openPiPWindow={() => {}}
-          closePiPWindow={() => {}}
+          openPiPWindow={openPiPWindow ?? (() => {})}
+          closePiPWindow={closePiPWindow ?? (() => {})}
+          isPiPMode={isPiPModeProp ?? isPiPMode}
           setShowLogoutDialog={setShowLogoutDialog}
           onOpenSidebar={onOpenSidebar}
           isMobile={isMobile}
@@ -1588,8 +1700,17 @@ export function ChatBot({
               ? filteredActivitiesForVoice
               : activitiesWithTasks
           }
+          autoSendVoice={{
+            // ← AGREGAR ESTO
+            isRecording: autoSendVoiceGuided.isRecording,
+            isTranscribing: autoSendVoiceGuided.isTranscribing,
+            audioLevel: autoSendVoiceGuided.audioLevel,
+            startVoiceRecording: autoSendVoiceGuided.startVoiceRecording,
+            cancelVoiceRecording: autoSendVoiceGuided.cancelVoiceRecording,
+          }}
           taskExplanations={voiceMode.taskExplanations}
           voiceTranscript={autoSendVoiceGuided.transcript}
+          voskRealtime={voskRealtime}
           currentListeningFor={voiceMode.currentListeningFor}
           retryCount={voiceMode.retryCount}
           voiceConfirmationText=""
@@ -1606,6 +1727,8 @@ export function ChatBot({
           sendExplanationsToBackend={sendExplanationsToBackend}
           recognitionRef={voiceRecognition.recognitionRef}
           setIsRecording={() => {}}
+          isVoskEngine={engine === "vosk"} // ← AGREGAR
+          voskSilenceCountdown={voskRealtime?.silenceCountdown ?? null} // ← AGREGAR
           setIsListening={() => {}}
           setVoiceStep={voiceMode.setVoiceStep}
           setCurrentListeningFor={voiceMode.setCurrentListeningFor}
@@ -1635,23 +1758,37 @@ export function ChatBot({
           </div>
         </div>
 
+        <div className="relative h-0 flex justify-center overflow-visible z-10">
+          <div className="absolute -top-10">
+            <VoiceEngineSelector
+              engine={engine}
+              onEngineChange={setEngine}
+              voskStatus={voskStatus}
+              theme={theme}
+            />
+          </div>
+        </div>
+
         <ChatInputBar
           userInput={userInput}
           setUserInput={(v) => setUserInput(v)}
           onSubmit={handleUserInput}
-          onVoiceClick={startVoiceRecording}
-          isRecording={isRecording}
+          onVoiceClick={handleStartRecording}
+          isRecording={
+            engine === "vosk" ? voskRealtime.isRecording : isRecording
+          }
           canUserType={canUserType}
           theme={theme}
-          onStartRecording={startVoiceRecording}
-          onCancelRecording={cancelVoiceRecording}
-          isTranscribing={isTranscribing}
+          onStartRecording={handleStartRecording}
+          onCancelRecording={handleCancelRecording}
+          isTranscribing={engine === "vosk" ? false : isTranscribing}
           audioLevel={audioLevel}
           isLoadingIA={isLoadingIA}
           inputRef={inputRef}
           chatMode={chatMode}
           isSpeaking={isSpeaking}
           onToggleChatMode={toggleChatMode}
+          onStopRecording={handleStopRecording}
         />
 
         {/* Diálogo de éxito */}

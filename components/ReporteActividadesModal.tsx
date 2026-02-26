@@ -15,14 +15,13 @@ import {
   Loader2,
   AlertCircle,
   XCircle,
+  Zap,
 } from "lucide-react";
 
 import type { ActividadDiaria } from "@/lib/types";
 import { guardarReporteTarde } from "@/lib/api";
-import { useAudioRecorder } from "./hooks/useAudioRecorder";
-import { transcribirAudioCliente } from "@/lib/transcription";
-import { useAutoSendVoice } from "@/components/Audio/UseAutoSendVoiceOptions";
 import { useVoiceSynthesis } from "@/components/hooks/use-voice-synthesis";
+import { useVoskRealtime } from "@/components/hooks/useVoskRealtime";
 
 interface ReporteActividadesModalProps {
   isOpen: boolean;
@@ -90,10 +89,34 @@ export function ReporteActividadesModal({
   const startRecordingRef = useRef<() => void>(() => {});
   const cancelRecordingRef = useRef<() => void>(() => {});
 
-  // ==================== HOOKS ====================
-  const audioRecorder = useAudioRecorder();
-  const { speak: speakText, stop: stopVoice, isSpeaking } = useVoiceSynthesis();
+  // Ref para el callback onFinal de Vosk — siempre fresco, evita stale closures
+  const voskFinalCallbackRef = useRef<(text: string) => void>(() => {});
 
+  // ==================== HOOKS DE VOZ ====================
+  const { speak: speakText, stop: stopVoice } = useVoiceSynthesis();
+
+  const {
+    status: voskStatus,
+    isRecording,
+    transcript: voskTranscript,
+    silenceCountdown,
+    startRealtime,
+    stopRealtime,
+    cancelRealtime,
+    loadModel,
+  } = useVoskRealtime({
+    silenceThresholdMs: 3000,
+    onFinal: (text) => voskFinalCallbackRef.current(text),
+    onError: (err) => {
+      setErrorValidacion(err.message || "Error en Vosk");
+      setTimeout(() => {
+        setErrorValidacion(null);
+        setPaso("preguntando-que-hizo");
+      }, 3000);
+    },
+  });
+
+  // ==================== SINCRONIZAR REFS ====================
   useEffect(() => {
     pasoActualRef.current = paso;
   }, [paso]);
@@ -106,6 +129,35 @@ export function ReporteActividadesModal({
   useEffect(() => {
     stopVoiceRef.current = stopVoice;
   }, [stopVoice]);
+
+  // Enrutar start/cancel a Vosk
+  useEffect(() => {
+    startRecordingRef.current = () => {
+      startRealtime();
+    };
+    cancelRecordingRef.current = () => {
+      cancelRealtime();
+    };
+  }, [startRealtime, cancelRealtime]);
+
+  // Mantener el callback de Vosk siempre actualizado con las funciones más recientes
+  // Sin deps intencionalmente → corre cada render para que nunca quede stale
+  useEffect(() => {
+    voskFinalCallbackRef.current = async (text: string) => {
+      if (pasoActualRef.current === "escuchando-motivo") {
+        await procesarMotivo(text);
+      } else {
+        await procesarRespuesta(text, pasoActualRef.current);
+      }
+    };
+  });
+
+  // Precargar modelo Vosk cuando el modal abre
+  useEffect(() => {
+    if (isOpen && voskStatus === "idle") {
+      loadModel().catch(() => {});
+    }
+  }, [isOpen, voskStatus, loadModel]);
 
   // Resetear al abrir
   useEffect(() => {
@@ -141,9 +193,34 @@ export function ReporteActividadesModal({
             });
           }
         });
+
+        revision.tareasReportadas?.forEach((tarea: any) => {
+          if (tareasSeleccionadas.has(tarea.id)) {
+            const reporteExistente = Array.from(
+              tareasReportadasMap.values(),
+            ).find(
+              (r) =>
+                r.pendienteId === tarea.id || r.nombreTarea === tarea.nombre,
+            );
+            tareas.push({
+              pendienteId: tarea.id,
+              nombre: tarea.nombre,
+              descripcion: tarea.descripcion || reporteExistente?.texto || "",
+              duracionMin: tarea.duracionMin || 0,
+              terminada: false,
+              motivoNoCompletado: null,
+              actividadId: revision.actividadId,
+              completadoLocal: false,
+              motivoLocal: "",
+              actividadTitulo: revision.actividadTitulo,
+              actividadHorario: revision.actividadHorario,
+            });
+          }
+        });
       });
       return tareas;
     }
+
     return actividadesDiarias.flatMap((actividad) =>
       actividad.pendientes
         .filter((p) => p.descripcion && p.descripcion.trim().length > 0)
@@ -161,7 +238,12 @@ export function ReporteActividadesModal({
           actividadHorario: `${actividad.horaInicio} - ${actividad.horaFin}`,
         })),
     );
-  }, [tareasSeleccionadas, actividadesConTareas, actividadesDiarias]);
+  }, [
+    tareasSeleccionadas,
+    actividadesConTareas,
+    actividadesDiarias,
+    tareasReportadasMap,
+  ]);
 
   const tareasRef = useRef(tareasParaReportar);
   useEffect(() => {
@@ -171,43 +253,6 @@ export function ReporteActividadesModal({
   const tareaActual = tareasParaReportar[indiceActual];
   const totalTareas = tareasParaReportar.length;
   const progreso = totalTareas > 0 ? (indiceActual / totalTareas) * 100 : 0;
-
-  // ==================== HOOK AUTO-SEND VOICE ====================
-  const {
-    isRecording,
-    isTranscribing,
-    audioLevel,
-    startVoiceRecording,
-    cancelVoiceRecording,
-    cleanup,
-  } = useAutoSendVoice({
-    silenceThreshold: 3000,
-    speechThreshold: 8,
-    transcriptionService: transcribirAudioCliente,
-    stopRecording: audioRecorder.stopRecording,
-    startRecording: audioRecorder.startRecording,
-    onTranscriptionComplete: async (transcript) => {
-      if (pasoActualRef.current === "escuchando-motivo") {
-        await procesarMotivo(transcript);
-      } else {
-        await procesarRespuesta(transcript, pasoActualRef.current);
-      }
-    },
-    onError: (error) => {
-      setErrorValidacion(error.message || "Error al procesar el audio");
-      setTimeout(() => {
-        setErrorValidacion(null);
-        setPaso("preguntando-que-hizo");
-      }, 3000);
-    },
-  });
-
-  useEffect(() => {
-    startRecordingRef.current = startVoiceRecording;
-  }, [startVoiceRecording]);
-  useEffect(() => {
-    cancelRecordingRef.current = cancelVoiceRecording;
-  }, [cancelVoiceRecording]);
 
   // ==================== HELPERS ====================
   const actualizarEstadoTarea = useCallback(
@@ -301,21 +346,34 @@ export function ReporteActividadesModal({
           speakRef.current("Perfecto, tarea completada.").catch(() => {});
           setTimeout(() => avanzarSiguienteTarea(indiceCapturado), 1500);
         } else {
-          // ← Va directo a pedir motivo, sin pantalla intermedia
           stopVoiceRef.current();
           setIndiceNoCompletada(indiceCapturado);
           setTranscriptNoCompletada(transcript);
+
+          if (data.motivoYaCapturado) {
+            actualizarEstadoTarea(tareaCapturada.pendienteId, "no-completada");
+            speakRef
+              .current("Entendido, registrado. Pasamos a la siguiente tarea.")
+              .catch(() => {});
+            setIndiceNoCompletada(null);
+            setTranscriptNoCompletada(null);
+            setTimeout(() => avanzarSiguienteTarea(indiceCapturado), 1500);
+            return;
+          }
+
           setPaso("preguntando-motivo");
           const texto =
-            "Entendido. ¿Cuál fue el motivo por el que no pudiste completar la tarea?";
+            "¿Cuál fue el motivo por el que no pudiste completar la tarea?";
           speakRef.current(texto).catch(() => {});
-          const estimatedMs = Math.max(3000, texto.length * 55);
-          setTimeout(() => {
-            if (pasoActualRef.current === "preguntando-motivo") {
-              setPaso("escuchando-motivo");
-              setTimeout(() => startRecordingRef.current(), 500);
-            }
-          }, estimatedMs);
+          setTimeout(
+            () => {
+              if (pasoActualRef.current === "preguntando-motivo") {
+                setPaso("escuchando-motivo");
+                setTimeout(() => startRecordingRef.current(), 500);
+              }
+            },
+            Math.max(3000, texto.length * 55),
+          );
         }
       } else {
         throw new Error(data.error || "Error al guardar");
@@ -334,7 +392,7 @@ export function ReporteActividadesModal({
 
   // ==================== REINTENTAR EXPLICACIÓN ====================
   const reintentarExplicacion = () => {
-    cancelVoiceRecording();
+    cancelRecordingRef.current();
     stopVoiceRef.current();
     setIndiceNoCompletada(null);
     setTranscriptNoCompletada(null);
@@ -357,6 +415,7 @@ export function ReporteActividadesModal({
         pendienteId: tareaCapturada.pendienteId,
         queHizo: transcriptNoCompletada || "",
         motivoNoCompletado: motivoTranscript.trim(),
+        soloGuardarMotivo: true,
       });
 
       actualizarEstadoTarea(tareaCapturada.pendienteId, "no-completada");
@@ -455,10 +514,6 @@ export function ReporteActividadesModal({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    return () => cleanup();
-  }, [cleanup]);
-
   // ==================== CANCELAR ====================
   const handleCancelar = async () => {
     cancelRecordingRef.current();
@@ -484,6 +539,95 @@ export function ReporteActividadesModal({
       <span className="flex items-center gap-1 text-[10px] font-bold text-red-500 dark:text-red-400">
         <XCircle className="w-3 h-3" /> No completada
       </span>
+    );
+  };
+
+  // ==================== PANEL MICRÓFONO (reutilizable) ====================
+  // Muestra micrófono + transcripción parcial en tiempo real + countdown
+  const MicPanel = ({ color = "red" }: { color?: "red" | "yellow" }) => {
+    const p = {
+      red: {
+        ring: "bg-red-500/20 border-red-500/40",
+        glow: "border-red-500",
+        icon: "text-red-500",
+        dot: "bg-red-500",
+        label: "text-red-600 dark:text-red-400",
+        badgeBg: "bg-red-500/10 border-red-500/30",
+        countdown:
+          theme === "dark"
+            ? "bg-red-900/30 border-red-700/60 text-red-300"
+            : "bg-red-50 border-red-300 text-red-700",
+        partial:
+          theme === "dark"
+            ? "bg-[#2a2a2a] border-[#3a3a3a] text-gray-300"
+            : "bg-gray-50 border-gray-200 text-gray-700",
+      },
+      yellow: {
+        ring: "bg-yellow-500/20 border-yellow-500/40",
+        glow: "border-yellow-500",
+        icon: "text-yellow-500",
+        dot: "bg-yellow-500",
+        label: "text-yellow-600 dark:text-yellow-400",
+        badgeBg: "bg-yellow-500/10 border-yellow-500/30",
+        countdown:
+          theme === "dark"
+            ? "bg-yellow-900/30 border-yellow-700/60 text-yellow-300"
+            : "bg-yellow-50 border-yellow-300 text-yellow-700",
+        partial:
+          theme === "dark"
+            ? "bg-[#2a2a2a] border-[#3a3a3a] text-gray-300"
+            : "bg-gray-50 border-gray-200 text-gray-700",
+      },
+    }[color];
+
+    return (
+      <div className="text-center space-y-3">
+        {/* Ícono de micrófono + onda */}
+        <div className="relative w-16 h-16 mx-auto">
+          <div
+            className={`w-16 h-16 rounded-full flex items-center justify-center animate-pulse border ${p.ring}`}
+          >
+            <Mic className={`w-8 h-8 ${p.icon}`} />
+          </div>
+          {/* Aro exterior — pulsa cuando está grabando */}
+          <div
+            className={`absolute inset-0 rounded-full border-2 ${p.glow} transition-all duration-300`}
+            style={{
+              transform: isRecording ? "scale(1.2)" : "scale(1)",
+              opacity: isRecording ? 0.55 : 0,
+            }}
+          />
+        </div>
+
+        {/* Estado textual */}
+        <p className="text-xs text-gray-500 font-medium">
+          {voskStatus === "loading"
+            ? "Cargando modelo Vosk..."
+            : isRecording
+              ? "Escuchando... deja de hablar 3 s para enviar"
+              : "Preparando micrófono..."}
+        </p>
+
+        {/* Transcripción parcial en tiempo real */}
+        {voskTranscript && isRecording && (
+          <div
+            className={`mx-4 px-3 py-2 rounded-lg text-xs text-left border leading-relaxed ${p.partial}`}
+          >
+            <span className="font-semibold opacity-50 mr-1">En vivo:</span>
+            <span className="italic">{voskTranscript}</span>
+          </div>
+        )}
+
+        {/* Countdown de silencio */}
+        {silenceCountdown !== null && (
+          <div
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold ${p.countdown}`}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${p.dot} animate-ping`} />
+            Enviando en {silenceCountdown}s...
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -514,7 +658,37 @@ export function ReporteActividadesModal({
               {turno === "tarde"
                 ? "Explicación de Tareas Completadas"
                 : "Reporte de Actividades del Día"}
+
+              {/* Badge de estado del modelo Vosk */}
+              <span
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  voskStatus === "ready"
+                    ? theme === "dark"
+                      ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                      : "bg-violet-100 text-violet-700 border-violet-300"
+                    : voskStatus === "loading"
+                      ? theme === "dark"
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        : "bg-amber-100 text-amber-700 border-amber-300"
+                      : theme === "dark"
+                        ? "bg-gray-700 text-gray-400 border-gray-600"
+                        : "bg-gray-100 text-gray-500 border-gray-300"
+                }`}
+              >
+                {voskStatus === "loading" ? (
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                ) : (
+                  <Zap className="w-2.5 h-2.5" />
+                )}
+                Vosk
+                {voskStatus === "loading"
+                  ? "..."
+                  : voskStatus === "ready"
+                    ? " ✓"
+                    : ""}
+              </span>
             </div>
+
             {paso !== "inicial" && paso !== "completado" && (
               <Badge
                 variant="outline"
@@ -548,9 +722,47 @@ export function ReporteActividadesModal({
                   </Badge>
                 </div>
                 <p className="text-xs text-gray-500">
-                  El asistente te preguntará qué hiciste en cada tarea. La IA
-                  analizará automáticamente si la completaste.
+                  El asistente te preguntará qué hiciste en cada tarea. Vosk
+                  procesará tu voz localmente — sin enviar audio a la nube.
                 </p>
+
+                {/* Estado del modelo */}
+                <div
+                  className={`mt-2 flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg ${
+                    voskStatus === "ready"
+                      ? theme === "dark"
+                        ? "bg-green-900/20 text-green-300"
+                        : "bg-green-50 text-green-700"
+                      : voskStatus === "loading"
+                        ? theme === "dark"
+                          ? "bg-violet-900/20 text-violet-300"
+                          : "bg-violet-50 text-violet-700"
+                        : voskStatus === "error"
+                          ? theme === "dark"
+                            ? "bg-red-900/20 text-red-300"
+                            : "bg-red-50 text-red-700"
+                          : theme === "dark"
+                            ? "bg-gray-800 text-gray-400"
+                            : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {voskStatus === "loading" ? (
+                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  ) : voskStatus === "ready" ? (
+                    <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                  ) : voskStatus === "error" ? (
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  ) : (
+                    <Zap className="w-3 h-3 flex-shrink-0" />
+                  )}
+                  {voskStatus === "loading"
+                    ? "Cargando modelo Vosk (~30 MB)..."
+                    : voskStatus === "ready"
+                      ? "Modelo listo — voz se procesa localmente"
+                      : voskStatus === "error"
+                        ? "Error al cargar Vosk"
+                        : "Preparando Vosk..."}
+                </div>
               </div>
 
               {totalTareas === 0 ? (
@@ -565,12 +777,22 @@ export function ReporteActividadesModal({
               ) : (
                 <Button
                   onClick={iniciarReporte}
-                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white h-10 font-bold shadow-md"
+                  disabled={voskStatus === "loading" || voskStatus === "error"}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white h-10 font-bold shadow-md disabled:opacity-50"
                 >
-                  <Mic className="w-4 h-4 mr-1.5" />
-                  {turno === "tarde"
-                    ? "Iniciar Explicación por Voz"
-                    : "Iniciar Reporte por Voz"}
+                  {voskStatus === "loading" ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />{" "}
+                      Cargando Vosk...
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-4 h-4 mr-1.5" />
+                      {turno === "tarde"
+                        ? "Iniciar Explicación por Voz"
+                        : "Iniciar Reporte por Voz"}
+                    </>
+                  )}
                 </Button>
               )}
             </div>
@@ -703,37 +925,7 @@ export function ReporteActividadesModal({
           )}
 
           {/* ========== ESCUCHANDO QUÉ HIZO ========== */}
-          {paso === "escuchando-que-hizo" && (
-            <div className="text-center space-y-3">
-              <div className="relative w-16 h-16 mx-auto">
-                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center animate-pulse border border-red-500/40">
-                  <Mic className="w-8 h-8 text-red-500" />
-                </div>
-                <div
-                  className="absolute inset-0 rounded-full border-2 border-red-500 transition-all"
-                  style={{
-                    transform: `scale(${1 + audioLevel / 200})`,
-                    opacity: audioLevel / 100,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 font-medium">
-                {isRecording
-                  ? "Escuchando... (Deja de hablar 3 segundos para enviar)"
-                  : isTranscribing
-                    ? "Procesando audio..."
-                    : "Preparando micrófono..."}
-              </p>
-              {isRecording && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/30">
-                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-[10px] font-bold text-red-600 dark:text-red-400">
-                    Audio: {audioLevel.toFixed(0)}%
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+          {paso === "escuchando-que-hizo" && <MicPanel color="red" />}
 
           {/* ========== GUARDANDO QUÉ HIZO ========== */}
           {paso === "guardando-que-hizo" && (
@@ -765,29 +957,7 @@ export function ReporteActividadesModal({
           )}
 
           {/* ========== ESCUCHANDO ACLARACIÓN ========== */}
-          {paso === "escuchando-aclaracion" && (
-            <div className="text-center space-y-3">
-              <div className="relative w-16 h-16 mx-auto">
-                <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center animate-pulse border border-yellow-500/40">
-                  <Mic className="w-8 h-8 text-yellow-500" />
-                </div>
-                <div
-                  className="absolute inset-0 rounded-full border-2 border-yellow-500 transition-all"
-                  style={{
-                    transform: `scale(${1 + audioLevel / 200})`,
-                    opacity: audioLevel / 100,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 font-medium">
-                {isRecording
-                  ? "Escuchando tu aclaración..."
-                  : isTranscribing
-                    ? "Procesando audio..."
-                    : "Preparando micrófono..."}
-              </p>
-            </div>
-          )}
+          {paso === "escuchando-aclaracion" && <MicPanel color="yellow" />}
 
           {/* ========== GUARDANDO ACLARACIÓN ========== */}
           {paso === "guardando-aclaracion" && (
@@ -827,7 +997,7 @@ export function ReporteActividadesModal({
 
           {/* ========== ESCUCHANDO MOTIVO ========== */}
           {paso === "escuchando-motivo" && (
-            <div className="text-center space-y-3">
+            <div className="space-y-3">
               <div
                 className={`p-3 rounded-lg border ${
                   theme === "dark"
@@ -836,32 +1006,14 @@ export function ReporteActividadesModal({
                 }`}
               >
                 <XCircle className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                <p className="text-xs font-bold text-red-600 dark:text-red-400 text-center">
                   Tarea no completada — explica el motivo
                 </p>
               </div>
-              <div className="relative w-16 h-16 mx-auto">
-                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center animate-pulse border border-red-500/40">
-                  <Mic className="w-8 h-8 text-red-500" />
-                </div>
-                <div
-                  className="absolute inset-0 rounded-full border-2 border-red-500 transition-all"
-                  style={{
-                    transform: `scale(${1 + audioLevel / 200})`,
-                    opacity: audioLevel / 100,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 font-medium">
-                {isRecording
-                  ? "Explica por qué no pudiste completarla..."
-                  : isTranscribing
-                    ? "Procesando..."
-                    : "Preparando micrófono..."}
-              </p>
+              <MicPanel color="red" />
               <button
                 onClick={reintentarExplicacion}
-                className="text-[10px] text-orange-500 hover:underline font-medium"
+                className="w-full text-[10px] text-orange-500 hover:underline font-medium"
               >
                 ¿Sí la completaste? Volver a explicar
               </button>

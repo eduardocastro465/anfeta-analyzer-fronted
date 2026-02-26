@@ -1,19 +1,17 @@
 import React from "react";
 import Image from "next/image";
-import {
-  Menu,
-  PictureInPicture,
-  Minimize2,
-  Moon,
-  Sun,
-  LogOut,
-  BarChart3,
-} from "lucide-react";
+import { Menu, Moon, Sun, LogOut, BarChart3, MoreVertical } from "lucide-react";
 import { SpeedControlHeader } from "./SpeedControlHeader";
 import { HeaderProps } from "@/lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const ChatHeader: React.FC<HeaderProps> = ({
-  isInPiPWindow,
   theme,
   toggleTheme,
   displayName,
@@ -21,9 +19,6 @@ export const ChatHeader: React.FC<HeaderProps> = ({
   rate,
   changeRate,
   isSpeaking,
-  isPiPMode,
-  openPiPWindow,
-  closePiPWindow,
   setShowLogoutDialog,
   onOpenSidebar,
   isMobile,
@@ -31,118 +26,80 @@ export const ChatHeader: React.FC<HeaderProps> = ({
   onViewReports,
 }) => {
   const isAdminJohn = colaborador.email === "jjohn@pprin.com";
+  const isDark = theme === "dark";
 
-  // ── PiP MODE ──────────────────────────────────────────────────────────────
-  if (isInPiPWindow) {
-    return (
-      <div
-        className={`fixed top-0 left-0 right-0 z-20 ${
-          theme === "dark" ? "bg-[#1a1a1a]" : "bg-white"
-        } border-b ${theme === "dark" ? "border-white/5" : "border-black/5"}`}
-      >
-        <div className="px-3 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  theme === "dark" ? "bg-[#252527]" : "bg-gray-100"
-                }`}
-              >
-                <Image
-                  src="/icono.webp"
-                  alt="Chat"
-                  width={16}
-                  height={16}
-                  className="object-contain"
-                />
-              </div>
-              <h2 className="text-sm font-bold truncate">Anfeta Asistente</h2>
-            </div>
+  const leftClass =
+    !isMobile && isSidebarOpen ? "left-64 sm:left-72 md:left-80" : "left-0";
 
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                onClick={toggleTheme}
-                aria-label="Toggle theme"
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                  theme === "dark"
-                    ? "bg-[#2a2a2a] hover:bg-[#353535]"
-                    : "bg-gray-100 hover:bg-gray-200"
-                }`}
-              >
-                {theme === "light" ? (
-                  <Moon className="w-3 h-3" />
-                ) : (
-                  <Sun className="w-3 h-3" />
-                )}
-              </button>
-              <button
-                onClick={() => window.close()}
-                aria-label="Close"
-                className="w-7 h-7 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-700 transition-colors"
-              >
-                <span className="text-white text-xs font-bold leading-none">
-                  ✕
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── NORMAL MODE ───────────────────────────────────────────────────────────
   return (
-    <div className="relative top-0 left-0 right-0 z-20">
+    <div
+      className={`
+        fixed top-0 right-0 ${leftClass} z-20
+        backdrop-blur-2xl border-b
+        transition-all duration-300
+        ${
+          isDark
+            ? "bg-black/20 border-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-white/[0.04]"
+            : "bg-white/25 border-black/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ring-1 ring-black/[0.04]"
+        }
+      `}
+      style={{
+        WebkitBackdropFilter: "blur(32px) saturate(1.8)",
+        backdropFilter: "blur(32px) saturate(1.8)",
+      }}
+    >
+      {/* Degradado inferior */}
       <div
-        className={`absolute top-0 left-0 right-0 h-24 pointer-events-none bg-gradient-to-b ${
-          theme === "dark"
-            ? "from-[#101010]/90 via-[#101010]/60 to-transparent"
-            : "from-white/80 via-white/40 to-transparent"
+        className={`absolute bottom-0 left-0 right-0 pointer-events-none translate-y-full ${
+          isDark
+            ? "bg-gradient-to-b from-[#101010]/60 to-transparent"
+            : "bg-gradient-to-b from-white/60 to-transparent"
         }`}
+        style={{ height: "20px" }}
       />
 
-      <div className="relative max-w-4xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+      <div className="relative max-w-4xl mx-auto px-2 sm:px-3 py-1.5 sm:py-2">
         <div className="flex items-center justify-between gap-2">
-          {/* ── LEFT ─────────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {/* ── LEFT ── */}
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            {/* Botón sidebar — solo móvil cuando está cerrado */}
             {isMobile && !isSidebarOpen && onOpenSidebar && (
               <button
                 onClick={onOpenSidebar}
-                aria-label="Open sidebar"
-                className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                  theme === "dark"
+                aria-label="Abrir sidebar"
+                className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                  isDark
                     ? "bg-[#2a2a2a] hover:bg-[#353535]"
                     : "bg-gray-100 hover:bg-gray-200"
                 }`}
               >
-                <Menu className="w-4 h-4 text-[#6841ea]" />
+                <Menu className="w-3.5 h-3.5 text-[#6841ea]" />
               </button>
             )}
 
+            {/* Avatar */}
             <div className="flex-shrink-0 animate-tilt">
               <Image
                 src="/icono.webp"
                 alt="Chat"
-                width={isMobile ? 48 : 64}
-                height={isMobile ? 48 : 64}
-                className="rounded-full drop-shadow-[0_0_12px_rgba(168,139,255,0.85)]"
+                width={isMobile ? 28 : 52}
+                height={isMobile ? 28 : 52}
+                className="rounded-full drop-shadow-[0_0_10px_rgba(168,139,255,0.85)]"
               />
             </div>
 
+            {/* Nombre + email */}
             <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-bold leading-tight">
+              <h1 className="text-xs sm:text-base font-bold leading-tight truncate">
                 Asistente
               </h1>
               <p
-                className={`text-xs sm:text-sm truncate ${
-                  theme === "dark" ? "text-gray-400" : "text-gray-600"
-                }`}
+                className={`text-[10px] sm:text-xs truncate ${isDark ? "text-gray-400" : "text-gray-600"}`}
               >
-                <span>{displayName}</span>
+                <span className="truncate">{displayName}</span>
                 <span className="hidden sm:inline"> • {colaborador.email}</span>
                 {isAdminJohn && (
-                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 rounded-full">
+                  <span className="ml-1 inline-flex items-center px-1 py-0.5 text-[9px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 rounded-full">
                     Admin
                   </span>
                 )}
@@ -150,8 +107,9 @@ export const ChatHeader: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* ── RIGHT ────────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* ── RIGHT ── */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Control velocidad — siempre visible */}
             <SpeedControlHeader
               rate={rate}
               changeRate={changeRate}
@@ -159,66 +117,129 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               theme={theme}
             />
 
-            {isAdminJohn && (
+            {/* ── DESKTOP: botones individuales ── */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              {isAdminJohn && (
+                <button
+                  onClick={() => onViewReports?.()}
+                  className={`h-8 rounded-lg text-xs font-medium flex items-center gap-1.5 px-2.5 transition-colors ${
+                    isDark
+                      ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Reportes</span>
+                </button>
+              )}
+
               <button
-                onClick={() => onViewReports?.()}
-                className={`h-9 rounded-lg text-sm font-medium flex items-center gap-1.5 px-2 sm:px-3 transition-colors ${
-                  theme === "dark"
+                onClick={toggleTheme}
+                aria-label="Toggle theme"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  isDark
+                    ? "bg-[#2a2a2a] hover:bg-[#353535]"
+                    : "bg-gray-100 hover:bg-gray-200"
+                }`}
+              >
+                {isDark ? (
+                  <Sun className="w-3.5 h-3.5 text-gray-300" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5 text-gray-700" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setShowLogoutDialog(true)}
+                aria-label="Logout"
+                className={`h-8 rounded-lg text-xs font-medium flex items-center gap-1.5 px-2.5 transition-colors ${
+                  isDark
                     ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                <BarChart3 className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden sm:inline">Reportes</span>
+                <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Salir</span>
               </button>
-            )}
+            </div>
 
-            <button
-              onClick={isPiPMode ? closePiPWindow : openPiPWindow}
-              aria-label={isPiPMode ? "Exit PiP" : "Enter PiP"}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                isPiPMode
-                  ? "bg-red-600 hover:bg-red-700"
-                  : theme === "dark"
+            {/* ── MÓVIL: logout + dropdown ── */}
+            <div className="flex sm:hidden items-center gap-1">
+              <button
+                onClick={() => setShowLogoutDialog(true)}
+                aria-label="Logout"
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                  isDark
                     ? "bg-[#2a2a2a] hover:bg-[#353535]"
                     : "bg-gray-100 hover:bg-gray-200"
-              }`}
-            >
-              {isPiPMode ? (
-                <Minimize2 className="w-4 h-4 text-white" />
-              ) : (
-                <PictureInPicture className="w-4 h-4 text-[#6841ea]" />
-              )}
-            </button>
+                }`}
+              >
+                <LogOut className="w-3 h-3 text-red-400" />
+              </button>
 
-            <button
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                theme === "dark"
-                  ? "bg-[#2a2a2a] hover:bg-[#353535]"
-                  : "bg-gray-100 hover:bg-gray-200"
-              }`}
-            >
-              {theme === "light" ? (
-                <Moon className="w-4 h-4 text-gray-700" />
-              ) : (
-                <Sun className="w-4 h-4 text-gray-300" />
-              )}
-            </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                      isDark
+                        ? "bg-[#2a2a2a] hover:bg-[#353535]"
+                        : "bg-gray-100 hover:bg-gray-200"
+                    }`}
+                  >
+                    <MoreVertical
+                      className="w-3 h-3"
+                      style={{ color: isDark ? "#9ca3af" : "#6b7280" }}
+                    />
+                  </button>
+                </DropdownMenuTrigger>
 
-            <button
-              onClick={() => setShowLogoutDialog(true)}
-              aria-label="Logout"
-              className={`h-9 rounded-lg text-sm font-medium flex items-center gap-1.5 px-2 sm:px-3 transition-colors ${
-                theme === "dark"
-                  ? "bg-[#2a2a2a] text-gray-300 hover:bg-[#353535]"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              <LogOut className="w-4 h-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Salir</span>
-            </button>
+                <DropdownMenuContent
+                  align="end"
+                  className={`min-w-[150px] ${
+                    isDark
+                      ? "bg-[#1a1a1a] border-[#2a2a2a] text-white"
+                      : "bg-white border-gray-200 text-gray-900"
+                  }`}
+                >
+                  <DropdownMenuItem
+                    onClick={toggleTheme}
+                    className={`flex items-center gap-2 cursor-pointer ${
+                      isDark
+                        ? "hover:bg-[#2a2a2a] focus:bg-[#2a2a2a]"
+                        : "hover:bg-gray-100 focus:bg-gray-100"
+                    }`}
+                  >
+                    {isDark ? (
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                    ) : (
+                      <Moon className="w-3.5 h-3.5 text-gray-600" />
+                    )}
+                    <span className="text-xs">
+                      {isDark ? "Modo claro" : "Modo oscuro"}
+                    </span>
+                  </DropdownMenuItem>
+
+                  {isAdminJohn && (
+                    <>
+                      <DropdownMenuSeparator
+                        className={isDark ? "bg-[#2a2a2a]" : "bg-gray-200"}
+                      />
+                      <DropdownMenuItem
+                        onClick={() => onViewReports?.()}
+                        className={`flex items-center gap-2 cursor-pointer ${
+                          isDark
+                            ? "hover:bg-[#2a2a2a] focus:bg-[#2a2a2a]"
+                            : "hover:bg-gray-100 focus:bg-gray-100"
+                        }`}
+                      >
+                        <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                        <span className="text-xs">Reportes</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </div>

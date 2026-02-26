@@ -19,6 +19,7 @@ import {
   ChevronDown,
   X,
   TrendingUp,
+  Pencil,
 } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { PanelReporteTareasTardeProps, RevisionProcesada } from "@/lib/types";
@@ -60,13 +61,21 @@ export function PanelReporteTareasTarde({
 
   useEffect(() => {
     if (!currentUserEmail) return;
-    wsService.on("cambios-tareas", () => cargarTareasReportadas(false));
-    wsService.on("explicacion_guardada", () => cargarTareasReportadas(false));
-    wsService.on("reportes-actualizados", () => cargarTareasReportadas(false));
+    cargarTareasReportadas(false);
+  }, [currentUserEmail]);
+
+  useEffect(() => {
+    if (!currentUserEmail) return;
+    const onCambios = () => cargarTareasReportadas(false);
+    const onExplicacion = () => cargarTareasReportadas(false);
+    const onReportes = () => cargarTareasReportadas(false);
+    wsService.on("cambios-tareas", onCambios);
+    wsService.on("explicacion_guardada", onExplicacion);
+    wsService.on("reportes-actualizados", onReportes);
     return () => {
-      wsService.off("cambios-tareas");
-      wsService.off("reportes-actualizados");
-      wsService.off("explicacion_guardada");
+      wsService.off("cambios-tareas", onCambios);
+      wsService.off("explicacion_guardada", onExplicacion);
+      wsService.off("reportes-actualizados", onReportes);
     };
   }, [currentUserEmail]);
 
@@ -90,16 +99,12 @@ export function PanelReporteTareasTarde({
             (metadata.tieneReportesColaborativos || false),
         );
       }
-
       if (nuevasTareasReportadas.length === 0) return;
-
       setTareasReportadasMap((mapActual) => {
         const nuevoMap = new Map(mapActual);
-
         nuevasTareasReportadas.forEach((item: any, index: number) => {
           const tareaId = item.pendienteId || item.id || `tarea-${index}`;
           if (!tareaId) return;
-
           let reportadoPor =
             item.reportadoPor?.nombre || item.reportadoPor || "Usuario";
           let emailReportado =
@@ -108,7 +113,6 @@ export function PanelReporteTareasTarde({
             item.userEmail ||
             "";
           let esMiReporte = item.esMiReporte || false;
-
           if (!emailReportado && currentUserEmail) {
             const emailEncontrado =
               item.emailEncontrado ||
@@ -128,7 +132,6 @@ export function PanelReporteTareasTarde({
               reportadoPor = currentUserEmail.split("@")[0];
             }
           }
-
           const tareaExistente = mapActual.get(tareaId);
           if (tareaExistente) {
             const fechaExistente = new Date(
@@ -184,7 +187,6 @@ export function PanelReporteTareasTarde({
             });
           }
         });
-
         return nuevoMap;
       });
     },
@@ -271,9 +273,8 @@ export function PanelReporteTareasTarde({
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (!mostrarModalReporte && ultimoReporteEnviado > 0) {
+    if (!mostrarModalReporte && ultimoReporteEnviado > 0)
       timer = setTimeout(() => cargarTareasReportadas(true), 1000);
-    }
     return () => {
       if (timer) clearTimeout(timer);
     };
@@ -350,6 +351,23 @@ export function PanelReporteTareasTarde({
   const toggleSeleccionTarea = useCallback(
     (tarea: any) => {
       const tareaId = tarea.id;
+      const reporte = Array.from(tareasReportadasMap.values()).find(
+        (r) => r.pendienteId === tareaId || r.nombreTarea === tarea.nombre,
+      );
+      if (reporte) {
+        if (!reporte.esMiReporte) {
+          mostrarAlertaMensaje(
+            `Ya reportada por ${reporte.reportadoPor || "otro colaborador"}`,
+          );
+          return;
+        }
+        setTareasSeleccionadas((prev) => {
+          const nuevas = new Set(prev);
+          nuevas.has(tareaId) ? nuevas.delete(tareaId) : nuevas.add(tareaId);
+          return nuevas;
+        });
+        return;
+      }
       if (!tarea.descripcion || tarea.descripcion.trim().length === 0) {
         mostrarAlertaMensaje(
           `"${tarea.nombre}" no tiene descripción del pendiente.`,
@@ -363,24 +381,13 @@ export function PanelReporteTareasTarde({
         );
         return;
       }
-      const reporte = Array.from(tareasReportadasMap.values()).find(
-        (r) => r.pendienteId === tareaId || r.nombreTarea === tarea.nombre,
-      );
-      if (reporte) {
-        mostrarAlertaMensaje(
-          reporte.esMiReporte
-            ? `Ya reportaste: "${reporte.nombreTarea}"`
-            : `Ya reportada por ${reporte.reportadoPor || "otro colaborador"}`,
-        );
-        return;
-      }
       setTareasSeleccionadas((prev) => {
         const nuevas = new Set(prev);
         nuevas.has(tareaId) ? nuevas.delete(tareaId) : nuevas.add(tareaId);
         return nuevas;
       });
     },
-    [tareasReportadasMap, mostrarAlertaMensaje],
+    [tareasReportadasMap, mostrarAlertaMensaje, currentUserEmail],
   );
 
   const seleccionarTodasTareas = useCallback(() => {
@@ -441,31 +448,42 @@ export function PanelReporteTareasTarde({
     [cargarTareasReportadas],
   );
 
+  useEffect(() => {
+    if (actividadesConTareas.length === 0) return;
+    const idsPendientes = actividadesConTareas.flatMap((a) =>
+      a.tareasNoReportadas
+        .filter((t: any) => {
+          const tieneDesc = !!(
+            t.descripcion && t.descripcion.trim().length > 0
+          );
+          const emailDueño = t.explicacionVoz?.emailUsuario;
+          const bloqueadaPorOtro = !!(
+            emailDueño && emailDueño !== currentUserEmail
+          );
+          return tieneDesc && !bloqueadaPorOtro;
+        })
+        .map((t: any) => t.id),
+    );
+    setTareasSeleccionadas(new Set(idsPendientes));
+  }, [actividadesConTareas, currentUserEmail]);
+
   return (
     <div className="w-full max-w-lg mx-auto animate-in slide-in-from-bottom-2 duration-300">
       {/* Alerta flotante */}
       {mostrarAlerta && (
-        <div className="fixed top-0 left-0 right-0 z-50 animate-in slide-in-from-top duration-300 sm:top-3 sm:left-auto sm:right-3 sm:max-w-sm">
+        <div className="fixed top-0 left-0 right-0 z-50 animate-in slide-in-from-top duration-300 sm:top-3 sm:left-auto sm:right-3 sm:max-w-xs">
           <div
-            className={`px-4 py-3 flex items-center gap-2 sm:rounded-lg shadow-lg backdrop-blur-sm ${
-              theme === "dark"
-                ? "bg-orange-900/95 text-white border-b border-orange-500/50 sm:border"
-                : "bg-orange-100 text-gray-800 border-b border-orange-300 sm:border"
-            }`}
+            className={`px-3 py-2 flex items-center gap-2 sm:rounded-lg shadow-lg backdrop-blur-sm ${theme === "dark" ? "bg-orange-900/95 text-white border-b border-orange-500/50 sm:border" : "bg-orange-100 text-gray-800 border-b border-orange-300 sm:border"}`}
           >
-            <Sunset className="w-4 h-4 text-orange-500 animate-pulse flex-shrink-0" />
-            <span className="text-xs font-medium flex-1 min-w-0">
+            <Sunset className="w-3.5 h-3.5 text-orange-500 animate-pulse flex-shrink-0" />
+            <span className="text-[11px] font-medium flex-1 min-w-0">
               {mensajeAlerta}
             </span>
             <button
-              className={`ml-1 p-1 rounded-full flex-shrink-0 min-w-[32px] min-h-[32px] flex items-center justify-center ${
-                theme === "dark"
-                  ? "hover:bg-orange-500/20"
-                  : "hover:bg-orange-200"
-              }`}
+              className={`ml-1 p-1 rounded-full flex-shrink-0 flex items-center justify-center ${theme === "dark" ? "hover:bg-orange-500/20" : "hover:bg-orange-200"}`}
               onClick={() => setMostrarAlerta(false)}
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -474,38 +492,34 @@ export function PanelReporteTareasTarde({
       {/* Banner colaborativo */}
       {mostrandoReportesDeOtros && estadisticasServidor && (
         <div
-          className={`p-3 rounded-xl mb-3 border ${
-            theme === "dark"
-              ? "bg-orange-900/30 border-orange-700/50"
-              : "bg-orange-50 border-orange-300"
-          }`}
+          className={`px-3 py-2.5 rounded-xl mb-2 border ${theme === "dark" ? "bg-orange-900/30 border-orange-700/50" : "bg-orange-50 border-orange-300"}`}
         >
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2">
             <div
-              className={`p-2 rounded-lg flex-shrink-0 ${theme === "dark" ? "bg-orange-500/20" : "bg-orange-200"}`}
+              className={`p-1.5 rounded-lg flex-shrink-0 ${theme === "dark" ? "bg-orange-500/20" : "bg-orange-200"}`}
             >
-              <Users className="w-4 h-4 text-orange-500" />
+              <Users className="w-3.5 h-3.5 text-orange-500" />
             </div>
             <div className="flex-1 min-w-0">
               <h4
-                className={`font-bold text-sm mb-1 ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
+                className={`font-bold text-xs mb-0.5 ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
               >
                 Reportes del equipo — Turno Tarde
               </h4>
               <p
-                className={`text-xs mb-2 leading-relaxed ${theme === "dark" ? "text-orange-200" : "text-orange-600"}`}
+                className={`text-[11px] mb-1.5 leading-relaxed ${theme === "dark" ? "text-orange-200" : "text-orange-600"}`}
               >
                 {estadisticasServidor.mensaje ||
                   "No tienes reportes propios, pero hay reportes de otros colaboradores."}
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1">
                 <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${theme === "dark" ? "bg-orange-800/50 text-orange-200" : "bg-orange-200 text-orange-800"}`}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${theme === "dark" ? "bg-orange-800/50 text-orange-200" : "bg-orange-200 text-orange-800"}`}
                 >
                   Tú: {currentUserEmail.split("@")[0]}
                 </span>
                 <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${theme === "dark" ? "bg-blue-800/50 text-blue-200" : "bg-blue-200 text-blue-800"}`}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${theme === "dark" ? "bg-blue-800/50 text-blue-200" : "bg-blue-200 text-blue-800"}`}
                 >
                   {estadisticasServidor.tareasColaboradores || 0} reportes de
                   otros
@@ -519,46 +533,35 @@ export function PanelReporteTareasTarde({
       {/* Panel principal */}
       {hayTareas ? (
         <div
-          className={`w-full rounded-xl border overflow-hidden shadow-md ${
-            theme === "dark"
-              ? "bg-[#1e1e1e] border-orange-900/50"
-              : "bg-white border-orange-200"
-          }`}
+          className={`w-full rounded-xl border overflow-hidden shadow-sm ${theme === "dark" ? "bg-[#1e1e1e] border-orange-900/50" : "bg-white border-orange-200"}`}
         >
           {/* Header */}
           <div
-            className={`px-3 py-3 border-b ${
-              theme === "dark"
-                ? "bg-orange-500/15 border-orange-900/50"
-                : "bg-orange-500/8 border-orange-200"
-            }`}
+            className={`px-3 py-2 border-b ${theme === "dark" ? "bg-orange-500/10 border-orange-900/40" : "bg-orange-500/6 border-orange-100"}`}
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <Sunset className="w-4 h-4 text-orange-500 flex-shrink-0" />
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Sunset className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
                 <h4
                   className={`font-bold text-xs uppercase tracking-wide truncate ${theme === "dark" ? "text-orange-200" : "text-orange-800"}`}
                 >
                   Tareas Tarde
                 </h4>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
-                  >
-                    {estadisticas.totalTareas}
-                  </span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/30 text-green-300" : "bg-green-100 text-green-700"}`}
-                  >
-                    ✓ {estadisticas.totalReportadas}
-                  </span>
-                </div>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
+                >
+                  {estadisticas.totalTareas}
+                </span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/25 text-green-300" : "bg-green-100 text-green-700"}`}
+                >
+                  ✓ {estadisticas.totalReportadas}
+                </span>
               </div>
-
               <div className="flex items-center gap-1 flex-shrink-0">
                 {mostrandoReportesDeOtros && (
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold hidden sm:inline-block ${theme === "dark" ? "bg-orange-500/30 text-orange-200" : "bg-orange-200 text-orange-800"}`}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold hidden sm:inline-block ${theme === "dark" ? "bg-orange-500/30 text-orange-200" : "bg-orange-200 text-orange-800"}`}
                   >
                     De otros
                   </span>
@@ -566,15 +569,11 @@ export function PanelReporteTareasTarde({
                 <button
                   onClick={handleRecargarTareas}
                   disabled={isLoading}
-                  className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-                    theme === "dark"
-                      ? "hover:bg-orange-500/20 text-orange-400"
-                      : "hover:bg-orange-100 text-orange-600"
-                  }`}
-                  title="Recargar tareas"
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${theme === "dark" ? "hover:bg-orange-500/20 text-orange-400" : "hover:bg-orange-100 text-orange-600"}`}
+                  title="Recargar"
                 >
                   <RefreshCw
-                    className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                    className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
                   />
                 </button>
               </div>
@@ -582,26 +581,26 @@ export function PanelReporteTareasTarde({
           </div>
 
           {/* Contenido */}
-          <div className="p-3">
+          <div className="p-2.5">
             {/* Info box */}
             <div
-              className={`text-xs p-3 rounded-xl mb-3 border ${
+              className={`text-[11px] px-2.5 py-2 rounded-lg mb-2.5 border ${
                 theme === "dark"
                   ? mostrandoReportesDeOtros
-                    ? "bg-orange-900/25 text-orange-200 border-orange-700/40"
-                    : "bg-blue-950/50 text-blue-200 border-blue-800/40"
+                    ? "bg-orange-900/20 text-orange-200 border-orange-700/30"
+                    : "bg-blue-950/40 text-blue-200 border-blue-800/30"
                   : mostrandoReportesDeOtros
                     ? "bg-orange-50 text-orange-800 border-orange-200"
                     : "bg-blue-50 text-blue-800 border-blue-200"
               }`}
             >
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5 mb-1">
                 {mostrandoReportesDeOtros ? (
-                  <Users className="w-4 h-4 flex-shrink-0" />
+                  <Users className="w-3 h-3 flex-shrink-0" />
                 ) : (
-                  <TrendingUp className="w-4 h-4 flex-shrink-0" />
+                  <TrendingUp className="w-3 h-3 flex-shrink-0" />
                 )}
-                <strong className="font-bold">
+                <strong className="font-bold text-[11px]">
                   {mostrandoReportesDeOtros
                     ? "Trabajo colaborativo"
                     : `Pendientes por reportar: ${estadisticas.totalNoReportadas}`}
@@ -609,17 +608,13 @@ export function PanelReporteTareasTarde({
                 {!mostrandoReportesDeOtros &&
                   estadisticas.totalNoReportadas > 0 && (
                     <span
-                      className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
-                        theme === "dark"
-                          ? "bg-amber-500/25 text-amber-300"
-                          : "bg-amber-500/20 text-amber-800"
-                      }`}
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-500/20 text-amber-800"}`}
                     >
                       Por reportar
                     </span>
                   )}
               </div>
-              <p className="text-xs leading-relaxed opacity-90">
+              <p className="text-[11px] leading-relaxed opacity-90">
                 {mostrandoReportesDeOtros ? (
                   <>
                     <strong>Tú:</strong>{" "}
@@ -645,7 +640,7 @@ export function PanelReporteTareasTarde({
             </div>
 
             {/* Lista de actividades */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               {actividadesConTareas.map(
                 (revision: RevisionProcesada, idx: number) => {
                   const actividad = assistantAnalysis.data.actividades.find(
@@ -751,9 +746,9 @@ function ActivityItem({
 
   const badgeColor = useMemo(() => {
     const colors = [
-      "bg-orange-500/30 text-orange-400 border-orange-500/50",
-      "bg-amber-500/30 text-amber-400 border-amber-500/50",
-      "bg-yellow-500/30 text-yellow-400 border-yellow-500/50",
+      "bg-orange-500/25 text-orange-400 border-orange-500/40",
+      "bg-amber-500/25 text-amber-400 border-amber-500/40",
+      "bg-yellow-500/25 text-yellow-400 border-yellow-500/40",
     ];
     return colors[index % 3];
   }, [index]);
@@ -765,86 +760,67 @@ function ActivityItem({
 
   return (
     <div
-      className={`rounded-xl border overflow-hidden ${
-        theme === "dark"
-          ? "bg-[#252525] border-orange-900/30"
-          : "bg-white border-orange-100 shadow-sm"
-      }`}
+      className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#232323] border-orange-900/25" : "bg-white border-orange-100 shadow-sm"}`}
     >
+      {/* activity header */}
       <div
-        className={`px-3 py-3 ${theme === "dark" ? "border-b border-orange-900/20" : "border-b border-orange-50"}`}
+        className={`px-2.5 py-2 ${theme === "dark" ? "border-b border-orange-900/15" : "border-b border-orange-50"}`}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-2">
           <div
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border flex-shrink-0 ${badgeColor}`}
+            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border flex-shrink-0 ${badgeColor}`}
           >
             {index + 1}
           </div>
-
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex items-center justify-between gap-2">
               <h5
-                className={`font-bold text-sm leading-tight ${theme === "dark" ? "text-orange-200" : "text-orange-900"}`}
+                className={`font-bold text-xs leading-tight truncate ${theme === "dark" ? "text-orange-200" : "text-orange-900"}`}
               >
                 {actividad.titulo}
               </h5>
               <span
-                className={`text-xs font-semibold flex items-center gap-1 flex-shrink-0 px-2 py-0.5 rounded-lg ${
-                  theme === "dark"
-                    ? "bg-orange-900/40 text-orange-300"
-                    : "bg-orange-100 text-orange-700"
-                }`}
+                className={`text-[10px] font-semibold flex items-center gap-0.5 flex-shrink-0 px-1.5 py-0.5 rounded-md ${theme === "dark" ? "bg-orange-900/40 text-orange-300" : "bg-orange-100 text-orange-700"}`}
               >
-                <Clock className="w-3 h-3" />
+                <Clock className="w-2.5 h-2.5" />
                 {actividad.horario}
               </span>
             </div>
-
-            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            <div className="flex flex-wrap items-center gap-1 mt-0.5">
               {currentUserEmail && (
                 <>
                   <span
-                    className={`text-xs font-semibold ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
+                    className={`text-[10px] font-semibold ${theme === "dark" ? "text-blue-300" : "text-blue-600"}`}
                   >
                     Tú: {currentUserEmail.split("@")[0]}
                   </span>
                   <span
-                    className={`text-xs ${theme === "dark" ? "text-gray-600" : "text-gray-300"}`}
+                    className={`text-[10px] ${theme === "dark" ? "text-gray-600" : "text-gray-300"}`}
                   >
                     ·
                   </span>
                 </>
               )}
-
               {esActividadIndividual ? (
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
-                    theme === "dark"
-                      ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                      : "bg-blue-50 text-blue-700 border border-blue-200"
-                  }`}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 ${theme === "dark" ? "bg-blue-500/15 text-blue-300 border border-blue-500/25" : "bg-blue-50 text-blue-700 border border-blue-200"}`}
                 >
-                  <UserIcon className="w-3 h-3" />
+                  <UserIcon className="w-2.5 h-2.5" />
                   Individual
                 </span>
               ) : (
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
-                    theme === "dark"
-                      ? "bg-green-500/20 text-green-300 border border-green-500/30"
-                      : "bg-green-50 text-green-700 border border-green-200"
-                  }`}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 ${theme === "dark" ? "bg-green-500/15 text-green-300 border border-green-500/25" : "bg-green-50 text-green-700 border border-green-200"}`}
                 >
-                  <UsersIcon className="w-3 h-3" />
+                  <UsersIcon className="w-2.5 h-2.5" />
                   Equipo ({colaboradoresReales.length})
                 </span>
               )}
-
               {mostrandoReportesDeOtros && (
                 <span
-                  className={`text-xs font-semibold ${theme === "dark" ? "text-orange-400" : "text-orange-600"}`}
+                  className={`text-[10px] font-semibold ${theme === "dark" ? "text-orange-400" : "text-orange-600"}`}
                 >
-                  Mostrando reportes de otros
+                  De otros
                 </span>
               )}
             </div>
@@ -852,18 +828,18 @@ function ActivityItem({
         </div>
       </div>
 
-      <div className="p-3 space-y-3">
+      <div className="p-2 space-y-2">
         {revision.tareasReportadas.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />
               <span
-                className={`text-xs font-bold ${theme === "dark" ? "text-green-400" : "text-green-700"}`}
+                className={`text-[11px] font-bold ${theme === "dark" ? "text-green-400" : "text-green-700"}`}
               >
                 Reportadas ({revision.tareasReportadas.length})
               </span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {revision.tareasReportadas.map((tarea: any) => {
                 const reporteInfo = Array.from(
                   tareasReportadasMap.values(),
@@ -880,6 +856,10 @@ function ActivityItem({
                     reporteInfo={reporteInfo}
                     esMiReporte={reporteInfo.esMiReporte || false}
                     currentUserEmail={currentUserEmail}
+                    estaSeleccionada={
+                      tareasSeleccionadas?.has?.(tarea.id) || false
+                    }
+                    onToggleSeleccion={() => onToggleTarea(tarea)}
                   />
                 );
               })}
@@ -889,20 +869,20 @@ function ActivityItem({
 
         {revision.tareasNoReportadas.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Clock className="w-3 h-3 text-amber-500 flex-shrink-0" />
               <span
-                className={`text-xs font-bold ${theme === "dark" ? "text-amber-400" : "text-amber-700"}`}
+                className={`text-[11px] font-bold ${theme === "dark" ? "text-amber-400" : "text-amber-700"}`}
               >
                 Pendientes ({revision.tareasNoReportadas.length})
               </span>
               <span
-                className={`text-xs ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+                className={`text-[10px] ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
               >
                 · Toca para seleccionar
               </span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {revision.tareasNoReportadas.map((tarea: any) => {
                 const estaReportada = Array.from(
                   tareasReportadasMap.values(),
@@ -941,6 +921,8 @@ interface TareaReportadaProps {
   reporteInfo?: any;
   esMiReporte: boolean;
   currentUserEmail: string;
+  estaSeleccionada?: boolean;
+  onToggleSeleccion?: () => void;
 }
 
 function TareaReportada({
@@ -948,17 +930,19 @@ function TareaReportada({
   reporteInfo,
   esMiReporte,
   currentUserEmail,
+  estaSeleccionada = false,
+  onToggleSeleccion,
 }: TareaReportadaProps) {
   const theme = useTheme();
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
   if (!reporteInfo) return null;
 
-  const reportadoPor = reporteInfo.reportadoPor || "Usuario";
-  const emailReportado = reporteInfo.emailReportado || "";
   const esRealmenteMiReporte =
     esMiReporte &&
     currentUserEmail &&
-    emailReportado.toLowerCase() === currentUserEmail.toLowerCase();
+    reporteInfo.emailReportado?.toLowerCase() ===
+      currentUserEmail.toLowerCase();
+  const reportadoPor = reporteInfo.reportadoPor || "Usuario";
   const nombreFormateado =
     reportadoPor.charAt(0).toUpperCase() + reportadoPor.slice(1);
   const fechaFormateada = new Date(
@@ -972,106 +956,125 @@ function TareaReportada({
 
   return (
     <div
-      className={`p-3 rounded-xl border ${
-        esRealmenteMiReporte
+      className={`px-2.5 py-2 rounded-lg border transition-all duration-150 ${
+        estaSeleccionada && esRealmenteMiReporte
           ? theme === "dark"
-            ? "bg-green-900/20 border-green-700/40"
-            : "bg-green-50 border-green-200"
-          : theme === "dark"
-            ? "bg-orange-900/20 border-orange-700/40"
-            : "bg-orange-50 border-orange-200"
+            ? "bg-orange-900/20 border-orange-500/60"
+            : "bg-orange-50 border-orange-400"
+          : esRealmenteMiReporte
+            ? theme === "dark"
+              ? "bg-green-900/15 border-green-700/35"
+              : "bg-green-50 border-green-200"
+            : theme === "dark"
+              ? "bg-orange-900/15 border-orange-700/35"
+              : "bg-orange-50 border-orange-200"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         <div
-          className={`w-6 h-6 flex items-center justify-center rounded-full border flex-shrink-0 mt-0.5 ${
-            esRealmenteMiReporte
+          className={`w-5 h-5 flex items-center justify-center rounded-full border flex-shrink-0 mt-0.5 ${
+            estaSeleccionada && esRealmenteMiReporte
               ? theme === "dark"
-                ? "bg-green-500/30 text-green-300 border-green-500/50"
-                : "bg-green-100 text-green-700 border-green-300"
-              : theme === "dark"
-                ? "bg-orange-500/30 text-orange-300 border-orange-500/50"
-                : "bg-orange-100 text-orange-700 border-orange-300"
+                ? "bg-orange-500/25 border-orange-500/60 text-orange-300"
+                : "bg-orange-100 border-orange-400 text-orange-600"
+              : esRealmenteMiReporte
+                ? theme === "dark"
+                  ? "bg-green-500/25 text-green-300 border-green-500/45"
+                  : "bg-green-100 text-green-700 border-green-300"
+                : theme === "dark"
+                  ? "bg-orange-500/25 text-orange-300 border-orange-500/45"
+                  : "bg-orange-100 text-orange-700 border-orange-300"
           }`}
         >
-          <Check className="w-3.5 h-3.5" />
+          <Check className="w-3 h-3" />
         </div>
 
         <div className="flex-1 min-w-0">
           <p
-            className={`text-sm font-semibold leading-tight mb-1.5 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+            className={`text-xs font-semibold leading-tight mb-1 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             {tarea.nombre}
           </p>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span
-              className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                esRealmenteMiReporte
+          {esRealmenteMiReporte && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSeleccion?.();
+              }}
+              className={`mb-1.5 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all min-h-[24px] ${
+                estaSeleccionada
                   ? theme === "dark"
-                    ? "bg-green-500/30 text-green-300"
-                    : "bg-green-100 text-green-800"
+                    ? "bg-orange-500/25 border-orange-500/60 text-orange-300"
+                    : "bg-orange-100 border-orange-400 text-orange-700"
                   : theme === "dark"
-                    ? "bg-orange-500/30 text-orange-300"
-                    : "bg-orange-100 text-orange-800"
+                    ? "border-gray-600 text-gray-400 hover:border-orange-500/50 hover:text-orange-400 hover:bg-orange-500/10"
+                    : "border-gray-300 text-gray-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50"
               }`}
             >
+              {estaSeleccionada ? (
+                <>
+                  <Check className="w-2.5 h-2.5" />
+                  Seleccionada
+                </>
+              ) : (
+                <>
+                  <Pencil className="w-2.5 h-2.5" />
+                  Editar
+                </>
+              )}
+            </button>
+          )}
+
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${esRealmenteMiReporte ? (theme === "dark" ? "bg-green-500/25 text-green-300" : "bg-green-100 text-green-800") : theme === "dark" ? "bg-orange-500/25 text-orange-300" : "bg-orange-100 text-orange-800"}`}
+            >
               {esRealmenteMiReporte ? (
-                <span className="flex items-center gap-1">
-                  <User className="w-3 h-3 inline" />
+                <span className="flex items-center gap-0.5">
+                  <User className="w-2.5 h-2.5 inline" />
                   Mi reporte
                 </span>
               ) : (
-                <span className="flex items-center gap-1">
-                  <Users className="w-3 h-3 inline" />
+                <span className="flex items-center gap-0.5">
+                  <Users className="w-2.5 h-2.5 inline" />
                   Por {nombreFormateado}
                 </span>
               )}
             </span>
-
             <span
-              className={`text-xs flex items-center gap-1 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+              className={`text-[10px] flex items-center gap-0.5 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
             >
-              <Calendar className="w-3 h-3" />
+              <Calendar className="w-2.5 h-2.5" />
               {fechaFormateada}
             </span>
-
             {tarea.duracionMin > 0 && (
               <span
-                className={`text-xs px-2 py-0.5 rounded-full font-semibold ${theme === "dark" ? "text-blue-300 bg-blue-500/20" : "text-blue-700 bg-blue-100"}`}
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${theme === "dark" ? "text-blue-300 bg-blue-500/15" : "text-blue-700 bg-blue-100"}`}
               >
-                {tarea.duracionMin} min
+                {tarea.duracionMin}m
               </span>
             )}
           </div>
 
           {reporteInfo.texto && (
-            <div className="mt-2">
+            <div className="mt-1.5">
               <button
                 onClick={() => setMostrarDescripcion(!mostrarDescripcion)}
-                className={`flex items-center gap-1.5 text-xs font-semibold py-1.5 px-0 rounded-md transition-colors min-h-[36px] ${
-                  theme === "dark"
-                    ? "text-gray-400 hover:text-gray-200"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
+                className={`flex items-center gap-1 text-[10px] font-semibold py-0.5 rounded-md transition-colors min-h-[28px] ${theme === "dark" ? "text-gray-400 hover:text-gray-200" : "text-gray-600 hover:text-gray-900"}`}
               >
-                <MessageSquare className="w-3.5 h-3.5" />
-                {mostrarDescripcion ? "Ocultar explicación" : "Ver explicación"}
+                <MessageSquare className="w-3 h-3" />
+                {mostrarDescripcion ? "Ocultar" : "Ver explicación"}
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${mostrarDescripcion ? "rotate-180" : ""}`}
+                  className={`w-3 h-3 transition-transform ${mostrarDescripcion ? "rotate-180" : ""}`}
                 />
               </button>
-
               {mostrarDescripcion && (
                 <div
-                  className={`mt-1.5 p-3 rounded-xl text-xs leading-relaxed ${
-                    theme === "dark"
-                      ? "bg-[#2a2a2a] text-gray-300 border border-[#3a3a3a]"
-                      : "bg-white text-gray-700 border border-gray-200"
-                  }`}
+                  className={`mt-1 p-2 rounded-lg text-[11px] leading-relaxed ${theme === "dark" ? "bg-[#2a2a2a] text-gray-300 border border-[#3a3a3a]" : "bg-white text-gray-700 border border-gray-200"}`}
                 >
                   <p
-                    className={`font-semibold mb-1 text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                    className={`font-semibold mb-0.5 text-[10px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
                   >
                     {esRealmenteMiReporte
                       ? "Mi explicación:"
@@ -1084,7 +1087,7 @@ function TareaReportada({
                   </p>
                   {reporteInfo.encontradoEn && (
                     <p
-                      className={`mt-2 pt-2 border-t text-[11px] ${theme === "dark" ? "border-[#3a3a3a] text-gray-500" : "border-gray-200 text-gray-500"}`}
+                      className={`mt-1.5 pt-1.5 border-t text-[10px] ${theme === "dark" ? "border-[#3a3a3a] text-gray-500" : "border-gray-200 text-gray-500"}`}
                     >
                       Fuente: {reporteInfo.encontradoEn}
                     </p>
@@ -1139,13 +1142,13 @@ function TareaPendiente({
 
   return (
     <div
-      className={`p-3 rounded-xl border transition-all duration-150 ${
+      className={`px-2.5 py-2 rounded-lg border transition-all duration-150 ${
         estaBloqueada
           ? `opacity-50 ${theme === "dark" ? "bg-gray-900/50 border-gray-700" : "bg-gray-50 border-gray-200"}`
           : estaSeleccionada
-            ? `border-orange-500 shadow-md ${theme === "dark" ? "bg-orange-900/20" : "bg-orange-50"}`
+            ? `border-orange-500 shadow-sm ${theme === "dark" ? "bg-orange-900/15" : "bg-orange-50"}`
             : theme === "dark"
-              ? "bg-[#222222] border-[#3a3a3a] active:bg-[#2a2a2a]"
+              ? "bg-[#202020] border-[#333] active:bg-[#2a2a2a]"
               : "bg-white border-gray-200 active:bg-orange-50/50"
       }`}
       onClick={() => {
@@ -1155,12 +1158,12 @@ function TareaPendiente({
       aria-checked={estaSeleccionada}
       aria-disabled={estaBloqueada}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         <div
-          className={`w-6 h-6 flex items-center justify-center border-2 rounded-lg transition-all flex-shrink-0 mt-0.5 ${
+          className={`w-5 h-5 flex items-center justify-center border-2 rounded-md transition-all flex-shrink-0 mt-0.5 ${
             estaBloqueada
               ? theme === "dark"
-                ? "border-red-700 bg-red-900/30"
+                ? "border-red-700 bg-red-900/25"
                 : "border-red-300 bg-red-50"
               : estaSeleccionada
                 ? "bg-orange-500 border-orange-500 shadow-sm"
@@ -1170,68 +1173,50 @@ function TareaPendiente({
           }`}
         >
           {estaBloqueada ? (
-            <X className="w-3.5 h-3.5 text-red-500" />
+            <X className="w-3 h-3 text-red-500" />
           ) : estaSeleccionada ? (
-            <Check className="w-3.5 h-3.5 text-white" />
+            <Check className="w-3 h-3 text-white" />
           ) : null}
         </div>
 
         <div className="flex-1 min-w-0">
           <p
-            className={`text-sm font-semibold leading-tight mb-2 ${
-              estaBloqueada
-                ? theme === "dark"
-                  ? "text-gray-600"
-                  : "text-gray-400"
-                : theme === "dark"
-                  ? "text-gray-200"
-                  : "text-gray-800"
-            }`}
+            className={`text-xs font-semibold leading-tight mb-1 ${estaBloqueada ? (theme === "dark" ? "text-gray-600" : "text-gray-400") : theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
           >
             {tarea.nombre}
           </p>
 
-          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          <div className="flex flex-wrap items-center gap-1 mb-1">
             {tarea.explicacionVoz?.emailUsuario &&
               (tarea.explicacionVoz.emailUsuario === currentUserEmail ? (
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1">
-                  <User className="w-3 h-3" />
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/25 flex items-center gap-0.5">
+                  <User className="w-2.5 h-2.5" />
                   Mi reporte
                 </span>
               ) : (
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1">
-                  <Users className="w-3 h-3" />
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/25 flex items-center gap-0.5">
+                  <Users className="w-2.5 h-2.5" />
                   De {tarea.explicacionVoz.emailUsuario.split("@")[0]}
                 </span>
               ))}
-
             {estaBloqueadaPorOtro ? null : estaBloqueada ? (
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
-                <X className="w-3 h-3" />
-                Sin descripción
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25 flex items-center gap-0.5">
+                <X className="w-2.5 h-2.5" />
+                Sin desc.
               </span>
             ) : estaExplicada ? (
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-500 border border-green-500/30 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-500 border border-green-500/25 flex items-center gap-0.5">
+                <CheckCircle2 className="w-2.5 h-2.5" />
                 Explicada
               </span>
             ) : (
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30 flex items-center gap-1">
-                <Mic className="w-3 h-3" />
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/25 flex items-center gap-0.5">
+                <Mic className="w-2.5 h-2.5" />
                 Pendiente
               </span>
             )}
-
             <span
-              className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
-                estaBloqueada
-                  ? "opacity-50"
-                  : tarea.prioridad === "ALTA"
-                    ? "bg-red-500/20 text-red-400 border-red-500/30"
-                    : theme === "dark"
-                      ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                      : "bg-amber-100 text-amber-800 border-amber-300"
-              }`}
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${estaBloqueada ? "opacity-50" : tarea.prioridad === "ALTA" ? "bg-red-500/15 text-red-400 border-red-500/25" : theme === "dark" ? "bg-amber-500/15 text-amber-400 border-amber-500/25" : "bg-amber-100 text-amber-800 border-amber-300"}`}
             >
               {tarea.prioridad}
             </span>
@@ -1239,37 +1224,36 @@ function TareaPendiente({
 
           {tieneDescripcion && (
             <p
-              className={`text-xs mb-1.5 leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+              className={`text-[10px] mb-1 leading-relaxed ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
             >
-              <FileText className="w-3 h-3 inline mr-1 opacity-70" />
-              {tarea.descripcion.substring(0, 90)}
-              {tarea.descripcion.length > 90 && "…"}
+              <FileText className="w-2.5 h-2.5 inline mr-1 opacity-60" />
+              {tarea.descripcion.substring(0, 80)}
+              {tarea.descripcion.length > 80 && "…"}
             </p>
           )}
-
           {tieneQueHizo && (
             <p
-              className={`text-xs mb-1.5 leading-relaxed ${theme === "dark" ? "text-green-400" : "text-green-600"}`}
+              className={`text-[10px] mb-1 leading-relaxed ${theme === "dark" ? "text-green-400" : "text-green-600"}`}
             >
-              <CheckCircle2 className="w-3 h-3 inline mr-1" />
-              {tarea.queHizo.substring(0, 90)}
-              {tarea.queHizo.length > 90 && "…"}
+              <CheckCircle2 className="w-2.5 h-2.5 inline mr-1" />
+              {tarea.queHizo.substring(0, 80)}
+              {tarea.queHizo.length > 80 && "…"}
             </p>
           )}
 
-          <div className="flex items-center justify-between gap-2 mt-1.5">
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center justify-between gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-1">
               <span
-                className={`text-xs font-medium flex items-center gap-1 ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                className={`text-[10px] font-medium flex items-center gap-0.5 ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
               >
                 {esActividadIndividual ? (
                   <>
-                    <User className="w-3 h-3" />
-                    Tú solo
+                    <User className="w-2.5 h-2.5" />
+                    Solo
                   </>
                 ) : (
                   <>
-                    <Users className="w-3 h-3" />
+                    <Users className="w-2.5 h-2.5" />
                     Equipo ({colaboradoresReales.length})
                   </>
                 )}
@@ -1278,30 +1262,30 @@ function TareaPendiente({
                 colaboradoresReales.slice(0, 2).map((c: string, i: number) => (
                   <span
                     key={i}
-                    className={`text-xs px-1.5 py-0.5 rounded-full ${estaBloqueada ? "opacity-50" : theme === "dark" ? "bg-[#2a2a2a] text-gray-400" : "bg-gray-100 text-gray-600"}`}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full ${estaBloqueada ? "opacity-50" : theme === "dark" ? "bg-[#2a2a2a] text-gray-400" : "bg-gray-100 text-gray-600"}`}
                   >
                     {c.split("@")[0]}
                   </span>
                 ))}
               {colaboradoresReales.length > 2 && (
                 <span
-                  className={`text-xs ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+                  className={`text-[10px] ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
                 >
                   +{colaboradoresReales.length - 2}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               {tarea.duracionMin > 0 && (
                 <span
-                  className={`text-xs font-medium ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                  className={`text-[10px] font-medium ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
                 >
                   {tarea.duracionMin}m
                 </span>
               )}
               {tarea.diasPendiente > 0 && (
                 <span
-                  className={`text-xs font-semibold ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-amber-400" : "text-amber-600"}`}
+                  className={`text-[10px] font-semibold ${estaBloqueada ? "opacity-50" : theme === "dark" ? "text-amber-400" : "text-amber-600"}`}
                 >
                   {tarea.diasPendiente}d
                 </span>
@@ -1375,29 +1359,56 @@ function PiePanelReporte({
       return;
     }
     if (countSeleccionadas === 0) return;
-    if (esTurnoTarde && onOpenReporteModal) onOpenReporteModal();
-    else onExplicarTareasSeleccionadas();
+    if (esTurnoTarde) {
+      onOpenReporteModal?.();
+      return;
+    }
+    onExplicarTareasSeleccionadas();
+  };
+
+  const hayTareasPendientes = totalTareasPendientes > 0;
+
+  const textoBoton = () => {
+    if (esHoraReporte)
+      return (
+        <>
+          <ClipboardList className="w-3.5 h-3.5" />
+          Iniciar Reporte
+        </>
+      );
+    if (!hayTareasPendientes && countSeleccionadas > 0)
+      return (
+        <>
+          <Pencil className="w-3.5 h-3.5" />
+          Editar Reporte ({countSeleccionadas})
+        </>
+      );
+    return (
+      <>
+        <Mic className="w-3.5 h-3.5" />
+        Reportar Tareas{countSeleccionadas > 0 && ` (${countSeleccionadas})`}
+      </>
+    );
   };
 
   return (
     <div
-      className={`px-3 py-3 border-t ${theme === "dark" ? "border-orange-900/40 bg-[#1c1c1c]" : "border-orange-100 bg-orange-50/50"}`}
+      className={`px-3 py-2.5 border-t ${theme === "dark" ? "border-orange-900/35 bg-[#1a1a1a]" : "border-orange-100 bg-orange-50/40"}`}
     >
-      <div className="flex flex-col gap-3">
-        {/* Stats */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-col gap-2">
+        {/* Stats row */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex flex-wrap items-center gap-1">
               <span
                 className={`text-xs font-bold ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
               >
                 {totalTareasPendientes} pendiente
                 {totalTareasPendientes !== 1 ? "s" : ""}
               </span>
-
               {mostrandoReportesDeOtros ? (
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-800"}`}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/15 text-orange-300" : "bg-orange-100 text-orange-800"}`}
                 >
                   De otros: {tareasReportadasPorOtros}
                 </span>
@@ -1405,13 +1416,13 @@ function PiePanelReporte({
                 totalTareasReportadas > 0 && (
                   <div className="flex gap-1 flex-wrap">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-800"}`}
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-green-500/15 text-green-300" : "bg-green-100 text-green-800"}`}
                     >
                       {tareasReportadasPorMi} mías
                     </span>
                     {tareasReportadasPorOtros > 0 && (
                       <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-800"}`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/15 text-orange-300" : "bg-orange-100 text-orange-800"}`}
                       >
                         {tareasReportadasPorOtros} de otros
                       </span>
@@ -1420,20 +1431,18 @@ function PiePanelReporte({
                 )
               )}
             </div>
-
             {countSeleccionadas > 0 && !esHoraReporte && (
               <span
-                className={`text-xs flex items-center gap-1 font-bold ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
+                className={`text-[10px] flex items-center gap-0.5 font-bold ${theme === "dark" ? "text-orange-300" : "text-orange-700"}`}
               >
-                <CheckSquare className="w-3.5 h-3.5" />
+                <CheckSquare className="w-3 h-3" />
                 {countSeleccionadas} seleccionada
                 {countSeleccionadas !== 1 ? "s" : ""}
               </span>
             )}
-
             {currentUserEmail && (
               <span
-                className={`text-xs ${theme === "dark" ? "text-gray-600" : "text-gray-400"}`}
+                className={`text-[10px] ${theme === "dark" ? "text-gray-600" : "text-gray-400"}`}
               >
                 {nombreUsuario}
                 {mostrandoReportesDeOtros && " · Sin reportes propios"}
@@ -1444,97 +1453,71 @@ function PiePanelReporte({
           <div className="flex-shrink-0">
             {mostrandoReportesDeOtros ? (
               <span
-                className={`text-xs px-2.5 py-1 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-orange-500/20 text-orange-300 border border-orange-500/30" : "bg-orange-100 text-orange-800 border border-orange-200"}`}
+                className={`text-[10px] px-2 py-0.5 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-orange-500/15 text-orange-300 border border-orange-500/25" : "bg-orange-100 text-orange-800 border border-orange-200"}`}
               >
-                <UsersIcon className="w-3 h-3" />
+                <UsersIcon className="w-2.5 h-2.5" />
                 Colaborativo
               </span>
             ) : esTrabajoEnEquipo ? (
               <span
-                className={`text-xs px-2.5 py-1 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-green-500/20 text-green-300 border border-green-500/30" : "bg-green-100 text-green-800 border border-green-200"}`}
+                className={`text-[10px] px-2 py-0.5 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-green-500/15 text-green-300 border border-green-500/25" : "bg-green-100 text-green-800 border border-green-200"}`}
               >
-                <UsersIcon className="w-3 h-3" />
+                <UsersIcon className="w-2.5 h-2.5" />
                 Equipo ({todosColaboradores.length})
               </span>
             ) : (
               <span
-                className={`text-xs px-2.5 py-1 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" : "bg-blue-100 text-blue-800 border border-blue-200"}`}
+                className={`text-[10px] px-2 py-0.5 flex items-center gap-1 font-bold rounded-full ${theme === "dark" ? "bg-blue-500/15 text-blue-300 border border-blue-500/25" : "bg-blue-100 text-blue-800 border border-blue-200"}`}
               >
-                <UserIcon className="w-3 h-3" />
+                <UserIcon className="w-2.5 h-2.5" />
                 Individual
               </span>
             )}
           </div>
         </div>
 
-        {/* Seleccionar todas */}
+        {/* Select all row */}
         {!esHoraReporte && totalTareasPendientes > 0 && (
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={
                 todasSeleccionadas ? onDeseleccionarTodas : onSeleccionarTodas
               }
-              className={`flex-1 h-10 flex items-center justify-center gap-2 text-xs font-semibold rounded-xl border transition-colors ${
-                theme === "dark"
-                  ? "border-orange-700/50 text-orange-300 hover:bg-orange-900/30 active:bg-orange-900/50"
-                  : "border-orange-300 text-orange-700 hover:bg-orange-100 active:bg-orange-200"
-              }`}
+              className={`flex-1 h-8 flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${theme === "dark" ? "border-orange-700/45 text-orange-300 hover:bg-orange-900/25" : "border-orange-300 text-orange-700 hover:bg-orange-100"}`}
             >
-              <CheckSquare className="w-4 h-4" />
+              <CheckSquare className="w-3.5 h-3.5" />
               {todasSeleccionadas
                 ? "Deseleccionar todas"
                 : "Seleccionar con descripción"}
             </button>
-
             {onRecargar && (
               <button
                 onClick={onRecargar}
                 disabled={isLoading}
-                className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-colors flex-shrink-0 ${
-                  theme === "dark"
-                    ? "border-orange-700/50 text-orange-400 hover:bg-orange-900/30"
-                    : "border-orange-300 text-orange-600 hover:bg-orange-100"
-                }`}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors flex-shrink-0 ${theme === "dark" ? "border-orange-700/45 text-orange-400 hover:bg-orange-900/25" : "border-orange-300 text-orange-600 hover:bg-orange-100"}`}
                 title="Recargar"
               >
                 <RefreshCw
-                  className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                  className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
                 />
               </button>
             )}
           </div>
         )}
 
-        {/* Botón principal — sin gradiente */}
+        {/* Main CTA */}
         <button
           onClick={handleMainAction}
           disabled={!esHoraReporte && countSeleccionadas === 0}
-          className={`w-full h-12 flex items-center justify-center gap-2 text-sm font-bold text-white rounded-xl shadow-md transition-all active:scale-[0.98] ${
+          className={`w-full h-9 flex items-center justify-center gap-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all active:scale-[0.98] ${
             countSeleccionadas === 0 && !esHoraReporte
               ? theme === "dark"
                 ? "bg-gray-700 cursor-not-allowed text-gray-500"
                 : "bg-gray-300 cursor-not-allowed text-gray-500"
-              : "bg-orange-500 hover:bg-orange-600 active:bg-orange-600 shadow-orange-500/30"
+              : "bg-orange-500 hover:bg-orange-600 shadow-orange-500/25"
           }`}
         >
-          {esHoraReporte ? (
-            <>
-              <ClipboardList className="w-4 h-4" />
-              Iniciar Reporte
-            </>
-          ) : esTurnoTarde ? (
-            <>
-              <Mic className="w-4 h-4" />
-              Explicar Tareas
-              {countSeleccionadas > 0 && ` (${countSeleccionadas})`}
-            </>
-          ) : (
-            <>
-              <Mic className="w-4 h-4" />
-              Reportar Tareas
-              {countSeleccionadas > 0 && ` (${countSeleccionadas})`}
-            </>
-          )}
+          {textoBoton()}
         </button>
       </div>
     </div>
@@ -1564,26 +1547,22 @@ export function NoTasksMessage({
   return (
     <div className="animate-in slide-in-from-bottom-2 duration-300 px-1">
       <div
-        className={`p-6 rounded-xl border text-center shadow-sm ${
-          theme === "dark"
-            ? "bg-[#1e1e1e] border-orange-900/40"
-            : "bg-white border-orange-100"
-        }`}
+        className={`p-4 rounded-xl border text-center shadow-sm ${theme === "dark" ? "bg-[#1e1e1e] border-orange-900/40" : "bg-white border-orange-100"}`}
       >
         {mostrandoReportesDeOtros && estadisticasServidor ? (
           <>
             <div
-              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${theme === "dark" ? "bg-orange-500/20" : "bg-orange-100"}`}
+              className={`w-9 h-9 rounded-full flex items-center justify-center mx-auto mb-2 ${theme === "dark" ? "bg-orange-500/15" : "bg-orange-100"}`}
             >
-              <Users className="w-6 h-6 text-orange-500" />
+              <Users className="w-5 h-5 text-orange-500" />
             </div>
             <h4
-              className={`font-bold mb-2 text-base ${theme === "dark" ? "text-orange-300" : "text-orange-800"}`}
+              className={`font-bold mb-1 text-sm ${theme === "dark" ? "text-orange-300" : "text-orange-800"}`}
             >
               Reportes del equipo
             </h4>
             <p
-              className={`text-sm mb-3 leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
+              className={`text-xs mb-2 leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}
             >
               {nombreUsuario}, no tienes tareas propias, pero hay{" "}
               <strong>{estadisticasServidor.tareasColaboradores || 0}</strong>{" "}
@@ -1591,7 +1570,7 @@ export function NoTasksMessage({
               de otros colaboradores.
             </p>
             <div
-              className={`text-xs p-3 rounded-xl mb-3 ${theme === "dark" ? "bg-orange-900/30 text-orange-200 border border-orange-700/40" : "bg-orange-50 text-orange-800 border border-orange-200"}`}
+              className={`text-[11px] px-2.5 py-1.5 rounded-lg mb-2 ${theme === "dark" ? "bg-orange-900/25 text-orange-200 border border-orange-700/35" : "bg-orange-50 text-orange-800 border border-orange-200"}`}
             >
               {estadisticasServidor.mensaje || "Trabajo colaborativo"}
             </div>
@@ -1599,17 +1578,17 @@ export function NoTasksMessage({
         ) : (
           <>
             <div
-              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${theme === "dark" ? "bg-green-500/20" : "bg-green-100"}`}
+              className={`w-9 h-9 rounded-full flex items-center justify-center mx-auto mb-2 ${theme === "dark" ? "bg-green-500/15" : "bg-green-100"}`}
             >
-              <CheckCircle2 className="w-6 h-6 text-green-500" />
+              <CheckCircle2 className="w-5 h-5 text-green-500" />
             </div>
             <h4
-              className={`font-bold mb-2 text-base ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
+              className={`font-bold mb-1 text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}
             >
               Todas las tareas reportadas
             </h4>
             <p
-              className={`text-sm mb-3 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
+              className={`text-xs mb-2 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
             >
               {nombreUsuario}, no hay tareas pendientes.
             </p>
@@ -1618,13 +1597,9 @@ export function NoTasksMessage({
         {onRecargar && (
           <button
             onClick={onRecargar}
-            className={`inline-flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl border transition-colors min-h-[40px] ${
-              theme === "dark"
-                ? "border-orange-700/50 text-orange-400 hover:bg-orange-900/30"
-                : "border-orange-300 text-orange-700 hover:bg-orange-50"
-            }`}
+            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-colors min-h-[32px] ${theme === "dark" ? "border-orange-700/45 text-orange-400 hover:bg-orange-900/25" : "border-orange-300 text-orange-700 hover:bg-orange-50"}`}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="w-3 h-3" />
             Recargar tareas
           </button>
         )}
@@ -1650,7 +1625,6 @@ export function TasksPanel({
   onExplicarTareasSeleccionadas = () => {},
 }: any) {
   const theme = useTheme();
-
   const todosColaboradores = useMemo(() => {
     if (!assistantAnalysis?.colaboradoresInvolucrados) return [];
     return assistantAnalysis.colaboradoresInvolucrados;
@@ -1659,11 +1633,7 @@ export function TasksPanel({
   return (
     <div className="animate-in slide-in-from-bottom-2 duration-300">
       <div
-        className={`w-full rounded-xl border overflow-hidden shadow-md ${
-          theme === "dark"
-            ? "bg-[#1a1a1a] border-orange-900/50"
-            : "bg-white border-orange-200"
-        }`}
+        className={`w-full rounded-xl border overflow-hidden shadow-sm ${theme === "dark" ? "bg-[#1a1a1a] border-orange-900/50" : "bg-white border-orange-200"}`}
       >
         <PiePanelReporte
           totalTareasPendientes={totalTareasPendientes}

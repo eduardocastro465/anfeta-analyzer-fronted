@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
 import type {
@@ -20,6 +20,7 @@ import {
   MoreVertical,
   AlertTriangle,
   Info,
+  Settings,
 } from "lucide-react";
 import {
   eliminarConversacion,
@@ -45,6 +46,8 @@ import {
 import { ChatBot } from "./chat-bot";
 import { obtenerMensajesConversacion } from "@/lib/historial.service";
 import { applyThemeToDom, resolveTheme } from "@/util/theme";
+import { AccountSettingsModal } from "./Accountsettingsmodal";
+import { VoiceEngine } from "./Voiceengineselector";
 
 type ViewMode = "chat" | "reportes";
 
@@ -95,6 +98,16 @@ export function ChatContainer({
   const [eliminando, setEliminando] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [verificandoConversacion, setVerificandoConversacion] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const [engine, setEngine] = useState<VoiceEngine>("vosk");
+  const [voskStatus, setVoskStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+
+  const [isPiPMode, setIsPiPMode] = useState(false);
+  const pipWindowRef = useRef<Window | null>(null);
+  const [showPiPOverlay, setShowPiPOverlay] = useState(false);
 
   const router = useRouter();
   const { toast } = useToast();
@@ -144,6 +157,37 @@ export function ChatContainer({
     setTheme(newTheme);
     applyThemeToDom(newTheme);
     onGuardarPreferencias?.({ ...preferencias, tema: newTheme });
+  };
+
+  const openPiPWindow = () => {
+    if (isMobile) {
+      // Móvil: overlay flotante
+      setShowPiPOverlay(true);
+      setIsPiPMode(true);
+    } else {
+      // Desktop: ventana nueva
+      const pipUrl = `${window.location.pathname}?pip=true`;
+      const w = window.open(
+        pipUrl,
+        "pip-window",
+        "width=400,height=600,resizable=yes,scrollbars=no",
+      );
+      if (w) {
+        pipWindowRef.current = w;
+        setIsPiPMode(true);
+      }
+    }
+  };
+
+  const closePiPWindow = () => {
+    if (isMobile) {
+      setShowPiPOverlay(false);
+    } else {
+      if (pipWindowRef.current && !pipWindowRef.current.closed)
+        pipWindowRef.current.close();
+      pipWindowRef.current = null;
+    }
+    setIsPiPMode(false);
   };
 
   useEffect(() => {
@@ -713,22 +757,69 @@ export function ChatContainer({
 
         {/* Footer sidebar */}
         <div
-          className={`p-2 sm:p-3 border-t flex-shrink-0 ${
-            theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"
-          }`}
+          className={`p-2 sm:p-3 border-t flex-shrink-0 ${theme === "dark" ? "border-[#1a1a1a]" : "border-gray-200"}`}
         >
-          <p
-            className={`text-[10px] sm:text-xs text-center ${
-              theme === "dark" ? "text-gray-600" : "text-gray-400"
+          <button
+            onClick={() => setShowSettings(true)} // si el modal vive en ChatContainer
+            // onClick={onOpenSettings}                    // si el modal vive en ChatBot
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors group ${
+              theme === "dark"
+                ? "hover:bg-[#1a1a1a] text-gray-400 hover:text-white"
+                : "hover:bg-gray-100 text-gray-500 hover:text-gray-900"
             }`}
           >
-            {new Date().toLocaleDateString("es-MX", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-            })}
-          </p>
+            <div className="w-7 h-7 rounded-full bg-[#6841ea] flex items-center justify-center shrink-0">
+              <span className="text-white text-[10px] font-bold">
+                {colaborador.firstName
+                  ? colaborador.firstName
+                      .split(" ")
+                      .map((n: string) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : colaborador.email.slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-xs font-medium truncate">
+                {colaborador.firstName ?? colaborador.email}
+              </p>
+              <p
+                className={`text-[10px] truncate ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
+              >
+                {new Date().toLocaleDateString("es-MX", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+            <Settings className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
         </div>
+
+        <AccountSettingsModal
+          open={showSettings}
+          onClose={() => setShowSettings(false)}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          rate={preferencias?.velocidadVoz ?? 1.2}
+          onChangeRate={(newRate) =>
+            onGuardarPreferencias?.({ ...preferencias, velocidadVoz: newRate })
+          }
+          idiomaVoz={preferencias?.idiomaVoz ?? "es-MX"}
+          onChangeIdioma={(idioma) =>
+            onGuardarPreferencias?.({ ...preferencias, idiomaVoz: idioma })
+          }
+          engine={engine}
+          onEngineChange={(eng) => setEngine(eng)}
+          voskStatus={voskStatus}
+          colaborador={{
+            nombre: colaborador.firstName,
+            email: colaborador.email,
+          }}
+          onGuardarPreferencias={onGuardarPreferencias}
+        />
       </aside>
 
       {/* Botón toggle desktop */}
@@ -793,6 +884,13 @@ export function ChatContainer({
             sidebarOpen={sidebarOpen}
             preferencias={preferencias}
             onGuardarPreferencias={onGuardarPreferencias}
+            showSettings={showSettings}
+            setShowSettings={setShowSettings}
+            onEngineChange={setEngine}
+            onVoskStatusChange={setVoskStatus}
+            engineOverride={engine}
+            openPiPWindow={openPiPWindow}
+            closePiPWindow={closePiPWindow}
           />
         )}
       </div>

@@ -25,12 +25,22 @@ import type { VoiceGuidanceFlowProps, VoiceModeStep } from "@/lib/types";
 // Extendemos el tipo para incluir las tareas seleccionadas
 interface ExtendedVoiceGuidanceFlowProps extends VoiceGuidanceFlowProps {
   selectedTaskIds?: string[] | Set<string>; // IDs de las tareas seleccionadas
+  isVoskEngine?: boolean;
+  voskSilenceCountdown?: number | null;
   autoSendVoice?: {
     isRecording: boolean;
     isTranscribing: boolean;
     audioLevel: number;
     startVoiceRecording: () => Promise<void>;
     cancelVoiceRecording: () => Promise<void>;
+  };
+  voskRealtime?: {
+    transcript: string;
+    isRecording: boolean;
+    status: "idle" | "loading" | "ready" | "error";
+    silenceCountdown: number | null;
+    stopRealtime: () => Promise<string>;
+    cancelRealtime: () => void;
   };
 }
 
@@ -64,6 +74,7 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
   setCurrentListeningFor,
   selectedTaskIds = [],
   autoSendVoice,
+  voskRealtime,
 }) => {
   // CREAR UN VALOR POR DEFECTO SEGURO PARA autoSendVoice
   const safeAutoSendVoice = useMemo(
@@ -260,7 +271,9 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
     return (
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center ${
-          theme === "dark" ? "bg-black/80" : "bg-white/95"
+          theme === "dark"
+            ? "bg-black/70 backdrop-blur-[2px]"
+            : "bg-white/70 backdrop-blur-[2px]"
         }`}
       >
         <div
@@ -303,7 +316,9 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
     return (
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center ${
-          theme === "dark" ? "bg-black/80" : "bg-white/95"
+          theme === "dark"
+            ? "bg-black/70 backdrop-blur-[2px]"
+            : "bg-white/70 backdrop-blur-[2px]"
         }`}
       >
         <Loader2 className="w-8 h-8 animate-spin text-[#6841ea]" />
@@ -354,12 +369,12 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center 
+   className={`fixed inset-0 z-50 flex items-center justify-center 
   p-4 sm:p-8 lg:p-12
   ${
     theme === "dark"
-      ? "bg-black/80 backdrop-blur-sm"
-      : "bg-white/95 backdrop-blur-sm"
+      ? "bg-black/70 backdrop-blur-[2px]"
+      : "bg-white/70 backdrop-blur-[2px]"
   }`}
     >
       <div
@@ -565,13 +580,20 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
             <ListeningExplanationStep
               currentListeningFor={currentListeningFor}
               retryCount={retryCount}
-              voiceTranscript={voiceTranscript}
+              voiceTranscript={voskRealtime?.transcript || voiceTranscript}
+              isVoskRecording={voskRealtime?.isRecording ?? false}
               theme={theme}
-              stopRecording={safeAutoSendVoice.cancelVoiceRecording}
+              stopRecording={
+                voskRealtime?.isRecording
+                  ? () => voskRealtime.stopRealtime()
+                  : safeAutoSendVoice.cancelVoiceRecording
+              }
               processVoiceExplanation={processVoiceExplanation}
               recognitionRef={recognitionRef}
               setIsRecording={setIsRecording}
               setIsListening={setIsListening}
+              voskSilenceCountdown={voskRealtime?.silenceCountdown ?? null}
+              isVoskEngine={!!voskRealtime}
               setVoiceStep={setVoiceStep}
               setCurrentListeningFor={setCurrentListeningFor}
               isPaused={isPaused}
