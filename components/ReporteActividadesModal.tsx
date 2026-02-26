@@ -758,7 +758,7 @@ export function ReporteActividadesModal({
                   {voskStatus === "loading"
                     ? "Cargando modelo Vosk (~30 MB)..."
                     : voskStatus === "ready"
-                      ? "Modelo listo — voz se procesa localmente"
+                      ? "Modelo listo para usar"
                       : voskStatus === "error"
                         ? "Error al cargar Vosk"
                         : "Preparando Vosk..."}

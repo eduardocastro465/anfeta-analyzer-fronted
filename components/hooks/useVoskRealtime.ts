@@ -173,8 +173,7 @@ export function useVoskRealtime({
       const source = audioCtx.createMediaStreamSource(stream);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
-
-      processor.onaudioprocess = (e) => {
+    processor.onaudioprocess = (e) => {
         if (cancelledRef.current || isStopping.current) return;
 
         const input = e.inputBuffer.getChannelData(0);
