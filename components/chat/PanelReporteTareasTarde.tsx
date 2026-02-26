@@ -210,7 +210,7 @@ export function PanelReporteTareasTarde({
       setIsLoading(true);
       actualizandoRef.current = true;
       try {
-        const url = `http://localhost:4000/api/v1/reportes/tareas-reportadas?email=${encodeURIComponent(currentUserEmail)}&limit=100`;
+        const url = `${process.env.NEXT_PUBLIC_BASE_URL_BACK}/reportes/tareas-reportadas?email=${encodeURIComponent(currentUserEmail)}&limit=100`;
         const response = await fetch(url, {
           method: "GET",
           credentials: "include",
