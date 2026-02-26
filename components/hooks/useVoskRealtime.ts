@@ -1,20 +1,10 @@
 // hooks/useVoskRealtime.ts
-// ─────────────────────────────────────────────
-// Transcripción en tiempo real via Socket.io.
-// Usa el wsService existente para enviar chunks de audio al backend
-// y recibir texto parcial en vivo mientras el usuario habla.
-//
-// API pública idéntica a la versión anterior:
-//   startRealtime, stopRealtime, cancelRealtime, loadModel (no-op)
-//   status, isRecording, transcript, silenceCountdown
-// ─────────────────────────────────────────────
-
 import { useRef, useState, useCallback } from "react";
-import { wsService } from "@/lib/websocket.service";
 
+const MODEL_URL = "/models/vosk-model-small-es-0.42.tar.gz";
 const SAMPLE_RATE = 16000;
-const SILENCE_THRESHOLD = 0.01; // Umbral de silencio para considerar que se detuvo la grabación
-const SILENCE_DURATION_MS = 3500; // Duración mínima de silencio para considerar que se detuvo la grabación
+const SILENCE_THRESHOLD = 0.006; // RMS mínimo para considerar que hay voz
+const SILENCE_DURATION_MS = 3500; // ms de silencio antes de auto-enviar
 
 type VoskStatus = "idle" | "loading" | "ready" | "error";
 
@@ -22,7 +12,7 @@ interface UseVoskRealtimeOptions {
   onPartial?: (text: string) => void;
   onFinal?: (text: string) => void;
   onError?: (error: Error) => void;
-  silenceThresholdMs?: number;
+  silenceThresholdMs?: number; // override del timeout de silencio
 }
 
 interface UseVoskRealtimeReturn {
@@ -36,17 +26,6 @@ interface UseVoskRealtimeReturn {
   loadModel: () => Promise<void>;
 }
 
-// ── Convierte Float32 a PCM16 (formato que acepta Vosk) ───────────────────
-function float32ToPCM16(float32: Float32Array): ArrayBuffer {
-  const pcm = new Int16Array(float32.length);
-  for (let i = 0; i < float32.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, float32[i]));
-    pcm[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-  }
-  return pcm.buffer;
-}
-
-// ── Hook ───────────────────────────────────────────────────────────────────
 export function useVoskRealtime({
   onPartial,
   onFinal,
@@ -56,104 +35,127 @@ export function useVoskRealtime({
   const [status, setStatus] = useState<VoskStatus>("idle");
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [silenceCountdown, setSilenceCountdown] = useState<number | null>(null);
 
-  // Audio refs
+  const modelRef = useRef<any>(null);
+  const recognizerRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-
-  // Control interno
+  const [silenceCountdown, setSilenceCountdown] = useState<number | null>(null);
+  const loadingRef = useRef<Promise<void> | null>(null);
   const cancelledRef = useRef(false);
-  const isStopping = useRef(false);
-  const hasSpeechRef = useRef(false);
+  const fullTextRef = useRef("");
+  const lastPartialRef = useRef("");
+
+  // ── silencio ──
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const liveTranscriptRef = useRef(""); // acumula texto confirmado (final: true)
+  const hasSpeechRef = useRef(false); // hubo voz al menos una vez
+  const isStopping = useRef(false); // evitar doble stop
 
-  // ── loadModel: no-op, el modelo vive en el backend ──────────────────────
+  // ==================== CARGA DEL MODELO ====================
   const loadModel = useCallback(async () => {
-    setStatus("ready");
+    if (modelRef.current) return;
+    if (loadingRef.current) return loadingRef.current;
+
+    const doLoad = async () => {
+      try {
+        setStatus("loading");
+        const Vosk = await import("vosk-browser");
+        const model = await Vosk.createModel(MODEL_URL);
+        modelRef.current = model;
+        setStatus("ready");
+      } catch (err) {
+        setStatus("error");
+        loadingRef.current = null;
+        throw err;
+      }
+    };
+
+    loadingRef.current = doLoad();
+    return loadingRef.current;
   }, []);
 
-  // ── Limpieza de audio ────────────────────────────────────────────────────
-  const _cleanupAudio = useCallback(() => {
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    audioCtxRef.current?.close();
-    audioCtxRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  }, []);
-
-  // ── Stop interno ──────────────────────────────────────────────────────────
+  // ==================== STOP (interno, reutilizable) ====================
   const _doStop = useCallback(
-    (wasCancelled = false): string => {
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
+    (wasCancelled = false): Promise<string> => {
+      return new Promise((resolve) => {
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
 
-      setIsRecording(false);
-      setSilenceCountdown(null);
-      _cleanupAudio();
+        setIsRecording(false);
 
-      // Avisar al backend que terminó la sesión
-      wsService.emit("vosk-stop", null);
+        processorRef.current?.disconnect();
+        processorRef.current = null;
 
-      // Remover listeners de vosk
-      wsService.off("vosk-parcial");
-      wsService.off("vosk-error");
+        const recognizer = recognizerRef.current;
+        recognizer?.retrieveFinalResult();
+        setSilenceCountdown(null);
+        setTimeout(() => {
+          const text =
+            fullTextRef.current.trim() || lastPartialRef.current.trim();
+          setTranscript(text);
+          // ✅ Solo enviar si NO fue cancelado
+          if (!wasCancelled) onFinal?.(text);
 
-      const finalText = liveTranscriptRef.current.trim();
+          try {
+            recognizer?.remove();
+          } catch {}
+          recognizerRef.current = null;
 
-      if (!wasCancelled) {
-        onFinal?.(finalText);
-      }
+          audioCtxRef.current?.close();
+          audioCtxRef.current = null;
 
-      liveTranscriptRef.current = "";
-      isStopping.current = false;
-      return finalText;
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+
+          isStopping.current = false;
+          resolve(text);
+        }, 800);
+      });
     },
-    [_cleanupAudio, onFinal],
+    [onFinal],
   );
 
-  // ── startRealtime ─────────────────────────────────────────────────────────
+  // ==================== INICIAR ====================
   const startRealtime = useCallback(async (): Promise<MediaStream | null> => {
     cancelledRef.current = false;
     isStopping.current = false;
     hasSpeechRef.current = false;
-    liveTranscriptRef.current = "";
+    fullTextRef.current = "";
+    lastPartialRef.current = "";
     setTranscript("");
-    setStatus("ready");
-
-    // Registrar listeners de Socket.io para esta sesión
-    wsService.on("vosk-parcial", (data: { text: string; final: boolean }) => {
-      if (cancelledRef.current) return;
-
-      let live = "";
-
-      if (data.final) {
-        // Texto confirmado: acumularlo
-        liveTranscriptRef.current += data.text + " ";
-        live = liveTranscriptRef.current.trim();
-      } else {
-        // Texto parcial: mostrar acumulado + parcial actual
-        live = (liveTranscriptRef.current + data.text).trim();
-      }
-
-      setTranscript(live);
-      onPartial?.(live);
-    });
-
-    wsService.on("vosk-error", (data: { error: string }) => {
-      onError?.(new Error(data.error));
-      setStatus("error");
-    });
-
-    // Iniciar sesión en el backend
-    await wsService.emitWhenReady("vosk-start", null);
 
     try {
+      if (!modelRef.current) await loadModel();
+      if (!modelRef.current) throw new Error("Modelo no disponible");
+
+      const recognizer = new modelRef.current.KaldiRecognizer(SAMPLE_RATE);
+      recognizerRef.current = recognizer;
+
+      recognizer.on("result", (msg: any) => {
+        const text = msg?.result?.text ?? msg?.text ?? "";
+        if (text) {
+          if (!fullTextRef.current.endsWith(text)) {
+            fullTextRef.current += text + " ";
+          }
+          const current = fullTextRef.current.trim();
+          setTranscript(current);
+          onPartial?.(current);
+        }
+      });
+
+      recognizer.on("partialresult", (msg: any) => {
+        const partial = msg?.result?.partial ?? msg?.partial ?? "";
+        if (partial) {
+          lastPartialRef.current = partial;
+          const live = (fullTextRef.current + partial).trim();
+          setTranscript(live);
+          onPartial?.(live);
+        }
+      });
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -169,33 +171,32 @@ export function useVoskRealtime({
       audioCtxRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
-      const processor = audioCtx.createScriptProcessor(8192, 1, 1);
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
         if (cancelledRef.current || isStopping.current) return;
 
         const input = e.inputBuffer.getChannelData(0);
-        const float32 = new Float32Array(input);
+        const pcm = new Float32Array(input);
 
-        // Calcular RMS para detección de silencio
+        // Calcular RMS para detectar silencio
         let sum = 0;
-        for (let i = 0; i < float32.length; i++) sum += float32[i] * float32[i];
-        const rms = Math.sqrt(sum / float32.length);
+        for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
+        const rms = Math.sqrt(sum / pcm.length);
 
-        // Enviar chunk al backend via Socket.io
-        wsService.emit("vosk-chunk", float32ToPCM16(float32));
+        recognizer.acceptWaveformFloat(pcm, SAMPLE_RATE);
 
-        // Detección de silencio
         if (rms > SILENCE_THRESHOLD) {
           hasSpeechRef.current = true;
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
             silenceTimerRef.current = null;
           }
-          setSilenceCountdown(null);
+          setSilenceCountdown(null); // ← limpiar visual cuando vuelve a hablar
         } else if (hasSpeechRef.current && !silenceTimerRef.current) {
-          const totalSeconds = Math.ceil(silenceThresholdMs / 1000);
+          // Iniciar countdown visual
+          const totalSeconds = Math.ceil(silenceThresholdMs / 1000); // 4
           setSilenceCountdown(totalSeconds);
 
           const countdownInterval = setInterval(() => {
@@ -208,12 +209,12 @@ export function useVoskRealtime({
             });
           }, 1000);
 
-          silenceTimerRef.current = setTimeout(() => {
+          silenceTimerRef.current = setTimeout(async () => {
             clearInterval(countdownInterval);
             setSilenceCountdown(null);
             if (!isStopping.current && !cancelledRef.current) {
               isStopping.current = true;
-              _doStop(false);
+              await _doStop(false);
             }
           }, silenceThresholdMs);
         }
@@ -226,48 +227,56 @@ export function useVoskRealtime({
       return stream;
     } catch (err) {
       const error =
-        err instanceof Error ? err : new Error("Error iniciando grabación");
+        err instanceof Error ? err : new Error("Error iniciando Vosk");
       onError?.(error);
-      setStatus("error");
       return null;
     }
-  }, [onPartial, onError, _doStop, silenceThresholdMs]);
+  }, [loadModel, onPartial, onError, _doStop, silenceThresholdMs]);
 
-  // ── stopRealtime ──────────────────────────────────────────────────────────
+  // ==================== DETENER MANUAL ====================
   const stopRealtime = useCallback((): Promise<string> => {
     if (isStopping.current) return Promise.resolve("");
     isStopping.current = true;
-    return Promise.resolve(_doStop(false));
+    return _doStop(false); // false = no cancelado, sí enviar
   }, [_doStop]);
 
-  // ── cancelRealtime ────────────────────────────────────────────────────────
+  // ==================== CANCELAR ====================
   const cancelRealtime = useCallback(() => {
     cancelledRef.current = true;
+    setSilenceCountdown(null); // ← limpiar visual
     isStopping.current = false;
+    setIsRecording(false);
+    setTranscript("");
 
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
 
-    setSilenceCountdown(null);
-    setIsRecording(false);
-    setTranscript("");
-    _cleanupAudio();
+    processorRef.current?.disconnect();
+    processorRef.current = null;
 
-    wsService.emit("vosk-stop", null);
-    wsService.off("vosk-parcial");
-    wsService.off("vosk-error");
+    try {
+      recognizerRef.current?.remove();
+    } catch {}
+    recognizerRef.current = null;
 
-    liveTranscriptRef.current = "";
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+
+    fullTextRef.current = "";
+    lastPartialRef.current = "";
     hasSpeechRef.current = false;
-  }, [_cleanupAudio]);
+  }, []);
 
   return {
     status,
     isRecording,
     transcript,
-    silenceCountdown,
+    silenceCountdown, // ← NUEVO
     startRealtime,
     stopRealtime,
     cancelRealtime,
