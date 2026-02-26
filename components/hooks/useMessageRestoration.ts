@@ -146,9 +146,7 @@ export function useMessageRestoration({
 
   // Resetear cuando se cambia de conversación o se crea una nueva
   useEffect(() => {
-    if (!conversacionActiva) {
-      restorationProcessedRef.current = null;
-    }
+    restorationProcessedRef.current = null;
   }, [conversacionActiva]);
 
   // Retornar si la restauración fue exitosa

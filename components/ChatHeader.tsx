@@ -77,16 +77,33 @@ export const ChatHeader: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Avatar */}
-            <div className="flex-shrink-0 animate-tilt">
+            {/* Avatar con halo */}
+            <div className="flex-shrink-0 relative">
+              <div
+                className="absolute inset-0 rounded-full blur-md opacity-50"
+                style={{
+                  background: "rgba(104,65,234,0.4)",
+                  transform: "scale(1.3)",
+                }}
+              />
               <Image
                 src="/icono.webp"
-                alt="Chat"
-                width={isMobile ? 28 : 52}
-                height={isMobile ? 28 : 52}
-                className="rounded-full drop-shadow-[0_0_10px_rgba(168,139,255,0.85)]"
+                alt="Asistente"
+                width={isMobile ? 30 : 36}
+                height={isMobile ? 30 : 36}
+                className="relative rounded-full"
+                style={{
+                  boxShadow:
+                    "0 0 0 1.5px rgba(104,65,234,0.35), 0 2px 12px rgba(104,65,234,0.25)",
+                }}
+              />
+              {/* Indicador online */}
+              <span
+                className="absolute bottom-0 right-0 w-2 h-2 rounded-full border-[1.5px] bg-emerald-400"
+                style={{ borderColor: isDark ? "#0a0a0a" : "#fff" }}
               />
             </div>
+
 
             {/* Nombre + email */}
             <div className="min-w-0">

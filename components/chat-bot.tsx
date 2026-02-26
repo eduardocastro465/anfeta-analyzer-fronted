@@ -996,6 +996,21 @@ export function ChatBot({
     scrollRef,
   });
 
+  useEffect(() => {
+    if (!conversacionActiva || !assistantAnalysis || messages.length === 0)
+      return;
+
+    const yaHayPanel = messages.some(
+      (msg) =>
+        msg.isWide &&
+        React.isValidElement(msg.content) &&
+        (msg.content as any).type === TurnoPanel,
+    );
+
+    if (!yaHayPanel) {
+      actualizarPanelTurno(turnoActual, assistantAnalysis);
+    }
+  }, [conversacionActiva, assistantAnalysis]);
   // ==================== AUTO-SCROLL ====================
   useEffect(() => {
     if (scrollRef.current)
