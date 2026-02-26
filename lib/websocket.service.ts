@@ -153,6 +153,7 @@ export class WebSocketService {
    */
   emit(evento: string, datos: any) {
     if (this.socket?.connected) {
+      console.log(`[WS emit] ${evento} socketId=${this.socket.id}`);
       this.socket.emit(evento, datos);
     } else {
       console.warn(`No se pudo emitir ${evento}: WebSocket no conectado`);
@@ -172,22 +173,38 @@ export class WebSocketService {
     }
   }
 
-  emitWhenReady(evento: string, datos: any, timeout = 3000): Promise<void> {
+  emitWhenReady(evento: string, datos: any, timeout = 5000): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Ya conectado → emitir de inmediato
       if (this.socket?.connected) {
         this.socket.emit(evento, datos);
         return resolve();
       }
 
+      // Socket no inicializado → no podemos hacer nada
+      if (!this.socket) {
+        return reject(
+          new Error(
+            `Socket no inicializado al emitir: ${evento}. Llama wsService.conectar() primero.`,
+          ),
+        );
+      }
+
+      console.warn(`[WS] esperando conexión para emitir ${evento}...`);
+
       const timer = setTimeout(() => {
+        this.socket?.off("connect", onConnect);
         reject(new Error(`Timeout esperando conexión para emitir: ${evento}`));
       }, timeout);
 
-      this.socket?.once("connect", () => {
+      const onConnect = () => {
         clearTimeout(timer);
         this.socket?.emit(evento, datos);
         resolve();
-      });
+      };
+
+      this.socket.once("connect", onConnect);
+      this.socket.connect();
     });
   }
   /**

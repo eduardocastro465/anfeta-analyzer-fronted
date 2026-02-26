@@ -789,13 +789,19 @@ export function ChatBot({
     },
   });
 
-  const handleStartRecording = async () => {
-    if (engine === "vosk") {
-      await voskRealtime.startRealtime();
-    } else {
-      await autoSendVoiceChat.startVoiceRecording();
+const handleStartRecording = async () => {
+  if (engine === "vosk") {
+    // Asegurarse que el socket esté conectado antes de iniciar
+    if (!wsService.estaConectado()) {
+      wsService.conectar(colaborador.email);
+      // Esperar un momento para que conecte
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-  };
+    await voskRealtime.startRealtime();
+  } else {
+    await autoSendVoiceChat.startVoiceRecording();
+  }
+};
 
   const handleStopRecording = async () => {
     if (engine === "vosk") {

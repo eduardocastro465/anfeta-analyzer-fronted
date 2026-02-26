@@ -176,15 +176,17 @@ export function useVoskRealtime({
         if (cancelledRef.current || isStopping.current) return;
 
         const input = e.inputBuffer.getChannelData(0);
-        const float32 = new Float32Array(input);
+        const pcm  = new Float32Array(input);
+
+        console.log("[Vosk] chunk size:", pcm.byteLength, "connected:", wsService.estaConectado());
 
         // Calcular RMS para detección de silencio
         let sum = 0;
-        for (let i = 0; i < float32.length; i++) sum += float32[i] * float32[i];
-        const rms = Math.sqrt(sum / float32.length);
+        for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
+        const rms = Math.sqrt(sum / pcm.length);
 
         // Enviar chunk al backend via Socket.io
-        wsService.emit("vosk-chunk", float32ToPCM16(float32));
+        wsService.emit("vosk-chunk", float32ToPCM16(pcm));
 
         // Detección de silencio
         if (rms > SILENCE_THRESHOLD) {
