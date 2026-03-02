@@ -1672,6 +1672,43 @@ export function ChatBot({
     }
   };
 
+  useEffect(() => {
+    const isPastTenAM = () => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      return hours > 10 || (hours === 10 && minutes >= 0);
+    };
+
+    const pollingInterval = setInterval(async () => {
+      if (!isPastTenAM()) return;
+      if (turnoActualRef.current !== "mañana") return;
+      if (fetchingAnalysisRef.current) return;
+
+      try {
+        console.log("Polling 10AM activado");
+        const data = await obtenerActividadesConRevisiones({
+          email: colaborador.email,
+          showAll: false,
+          consultarAlApi: true,
+        });
+
+        const colabs = extraerColaboradores(data);
+        setColaboradoresUnicos(colabs);
+        colaboradoresUnicosRef.current = colabs;
+
+        const adaptedData = adaptarDatosAnalisis(data);
+        assistantAnalysisRef.current = adaptedData;
+        setAssistantAnalysis(adaptedData);
+        actualizarPanelTurno(turnoActualRef.current, adaptedData);
+      } catch (error) {
+        console.error("❌ Error en polling 10AM:", error);
+      }
+    }, 10_000); // cada 10 segundos
+
+    return () => clearInterval(pollingInterval);
+  }, [colaborador.email]);
+
   const handleVoiceMessageClick = (voiceText: string) => {
     setUserInput(voiceText);
     if (inputRef.current) inputRef.current.focus();
@@ -1784,7 +1821,7 @@ export function ChatBot({
           </div>
         </div>
 
-        <div className="relative h-0 flex justify-center overflow-visible z-10">
+        {/* <div className="relative h-0 flex justify-center overflow-visible z-10">
           <div className="absolute -top-10">
             <VoiceEngineSelector
               engine={engine}
@@ -1793,7 +1830,7 @@ export function ChatBot({
               theme={theme}
             />
           </div>
-        </div>
+        </div> */}
 
         <ChatInputBar
           userInput={userInput}
