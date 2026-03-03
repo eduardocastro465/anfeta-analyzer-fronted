@@ -127,6 +127,12 @@ export function ChatBot({
   const voiceMode = useVoiceMode();
   const conversationHistory = useConversationHistory();
 
+  const resolverIA = (transcript: string, sessionId: string | null) => {
+    return chatModeRef.current === "ia" && assistantAnalysisRef.current
+      ? consultarIAProyecto(transcript, sessionId)
+      : chatGeneralIA(transcript, sessionId);
+  };
+
   const {
     speak: speakText,
     stop: stopVoice,
@@ -163,7 +169,7 @@ export function ChatBot({
         try {
           const sessionId =
             conversacionActiva || assistantAnalysis?.sessionId || null;
-          const response = await chatGeneralIA(transcript, sessionId);
+          const response = await resolverIA(transcript, sessionId);
           if (response.respuesta) {
             addMessage("bot", response.respuesta);
             speakText(response.respuesta);
@@ -200,6 +206,7 @@ export function ChatBot({
   const [horaFinReporte] = useState("5:30 PM");
 
   const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
+  const chatModeRef = useRef<"normal" | "ia">("ia");
   const [isPiPMode, setIsPiPMode] = useState(false);
   const [isInPiPWindow, setIsInPiPWindow] = useState(false);
 
@@ -622,7 +629,9 @@ export function ChatBot({
       try {
         const sessionId =
           conversacionActiva || assistantAnalysis?.sessionId || null;
-        const response = await chatGeneralIA(transcript, sessionId);
+
+        const response = await resolverIA(transcript, sessionId);
+
         if (response.respuesta) {
           addMessage("bot", response.respuesta);
           speakText(response.respuesta);
@@ -975,7 +984,6 @@ export function ChatBot({
     init();
   }, []);
 
-  
   // ==================== CAMBIO DE TURNO ====================
   useEffect(() => {
     const intervalo = setInterval(() => {
@@ -1162,21 +1170,21 @@ export function ChatBot({
     setFilteredActivitiesForVoice([]);
   };
 
-const cancelVoiceMode = () => {
-  isManuallyCancellingRef.current = true;
-  voskGuidedModeRef.current = false;
-  stopVoice();
-  voiceRecognition.stopRecording();
-  cancelVoiceRecording();
-  autoSendVoiceGuided.cancelVoiceRecording();
-  voskRealtime.cancelRealtime();
-  voiceMode.cancelVoiceMode();
-  setSelectedTaskIds([]);
-  setFilteredActivitiesForVoice([]);
-  setTimeout(() => {
-    isManuallyCancellingRef.current = false;
-  }, 500);
-};
+  const cancelVoiceMode = () => {
+    isManuallyCancellingRef.current = true;
+    voskGuidedModeRef.current = false;
+    stopVoice();
+    voiceRecognition.stopRecording();
+    cancelVoiceRecording();
+    autoSendVoiceGuided.cancelVoiceRecording();
+    voskRealtime.cancelRealtime();
+    voiceMode.cancelVoiceMode();
+    setSelectedTaskIds([]);
+    setFilteredActivitiesForVoice([]);
+    setTimeout(() => {
+      isManuallyCancellingRef.current = false;
+    }, 500);
+  };
 
   const confirmStartVoiceMode = () => {
     const activitiesToUse =
@@ -1593,6 +1601,7 @@ const cancelVoiceMode = () => {
   // ==================== CHAT ====================
   const toggleChatMode = () => {
     const newMode = chatMode === "normal" ? "ia" : "normal";
+    chatModeRef.current = newMode;
     setChatMode(newMode);
     addMessage(
       "system",
@@ -1634,10 +1643,7 @@ const cancelVoiceMode = () => {
       setIsLoadingIA(true);
       const sessionId =
         conversacionActiva || assistantAnalysis?.sessionId || null;
-      const response =
-        chatMode === "ia" && assistantAnalysis
-          ? await consultarIAProyecto(mensajeAEnviar, sessionId)
-          : await chatGeneralIA(mensajeAEnviar, sessionId);
+      const response = await resolverIA(mensajeAEnviar, sessionId);
 
       if (response?.respuesta) {
         addMessage("bot", response.respuesta);
