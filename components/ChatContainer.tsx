@@ -13,6 +13,7 @@ import { obtenerLabelDia } from "@/util/labelDia";
 import {
   History,
   MessageSquare,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -90,7 +91,9 @@ export function ChatContainer({
   >([]);
   const [analisisRestaurado, setAnalisisRestaurado] =
     useState<AssistantAnalysis | null>(null);
-  const [cargandoConversacion, setCargandoConversacion] = useState(false);
+  const [cargandoConversacionId, setCargandoConversacionId] = useState<
+    string | null
+  >(null);
 
   // Estados para eliminar
   const [conversacionAEliminar, setConversacionAEliminar] =
@@ -279,12 +282,48 @@ export function ChatContainer({
     init();
   }, [router, toast]);
 
+  
+
+  const refrescarHistorial = async () => {
+    try {
+      setSidebarCargando(true);
+      const historialRes = await obtenerHistorialSidebar();
+      if (historialRes.success && historialRes.data) {
+        const conversacionesOrdenadas = [...historialRes.data].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        setConversaciones(conversacionesOrdenadas);
+
+        // Si hay una conversación activa, también la refrescamos
+        if (conversacionActiva) {
+          await restaurarConversacion(conversacionActiva);
+        }
+
+        toast({
+          title: "Historial actualizado",
+          description: "Las conversaciones se han recargado correctamente",
+        });
+      }
+    } catch (error) {
+      console.error("Error al refrescar:", error);
+      toast({
+        variant: "destructive",
+        title: "Error al actualizar",
+        description: "No se pudo sincronizar el historial",
+      });
+    } finally {
+      setSidebarCargando(false);
+    }
+  };
+
   const restaurarConversacion = async (sessionId: string) => {
     try {
-      setCargandoConversacion(true);
+      setCargandoConversacionId(sessionId);
 
       const response = await obtenerMensajesConversacion(sessionId);
 
+      console.log("response", response);
       if (response.success && response.data) {
         const { data } = response;
 
@@ -331,33 +370,47 @@ export function ChatContainer({
       setAnalisisRestaurado(null);
       setConversacionActiva(sessionId);
     } finally {
-      setCargandoConversacion(false);
+      setCargandoConversacionId(null);
     }
   };
 
   const seleccionarConversacion = async (conv: ConversacionSidebar) => {
     if (conversacionActiva === conv.sessionId) {
-      // ✅ En móvil, cerrar sidebar al seleccionar
+      // En móvil, cerrar sidebar al seleccionar
       if (isMobile) setSidebarOpen(false);
       return;
     }
     await restaurarConversacion(conv.sessionId);
     setViewMode("chat");
-    // ✅ En móvil, cerrar sidebar al seleccionar conversación
+    // En móvil, cerrar sidebar al seleccionar conversación
     if (isMobile) setSidebarOpen(false);
   };
 
+  // ✅ REEMPLAZAR agregarNuevaConversacion completo
   const agregarNuevaConversacion = (nuevaConv: ConversacionSidebar) => {
-    const yaExiste = conversaciones.some(
-      (conv) => conv.sessionId === nuevaConv.sessionId,
-    );
+    setConversaciones((prev) => {
+      const yaExiste = prev.some(
+        (conv) => conv.sessionId === nuevaConv.sessionId,
+      );
 
-    if (yaExiste) {
-      setConversacionActiva(nuevaConv.sessionId);
-      return;
-    }
+      if (yaExiste) {
+        // Solo actualizar el nombre si llegó uno nuevo
+        if (!nuevaConv.nombreConversacion) return prev;
+        return prev.map((conv) =>
+          conv.sessionId === nuevaConv.sessionId
+            ? {
+                ...conv,
+                nombreConversacion: nuevaConv.nombreConversacion,
+                updatedAt: new Date().toISOString(),
+              }
+            : conv,
+        );
+      }
 
-    setConversaciones((prev) => [nuevaConv, ...prev]);
+      // Nueva de verdad → agregar al inicio
+      return [nuevaConv, ...prev];
+    });
+
     setConversacionActiva(nuevaConv.sessionId);
     setViewMode("chat");
   };
@@ -459,18 +512,23 @@ export function ChatContainer({
       if (sessionRes.success) {
         const { sessionId, userId } = sessionRes;
 
-        const nuevaConversacion: ConversacionSidebar = {
-          sessionId: sessionId,
-          userId: userId,
-          nombreConversacion: undefined,
-          estadoConversacion: "activa",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+        // ✅ Solo agregar si realmente no existe ya en la lista
+        setConversaciones((prev) => {
+          const yaExiste = prev.some((c) => c.sessionId === sessionId);
+          if (yaExiste) return prev; // no duplicar
 
-        setConversaciones((prev) => [nuevaConversacion, ...prev]);
+          const nuevaConversacion: ConversacionSidebar = {
+            sessionId,
+            userId,
+            nombreConversacion: undefined,
+            estadoConversacion: "activa",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          return [nuevaConversacion, ...prev];
+        });
+
         setConversacionActiva(sessionId);
-
         toast({
           variant: "success",
           title: "Nueva conversación iniciada",
@@ -589,18 +647,34 @@ export function ChatContainer({
               <History className="w-4 h-4 sm:w-5 sm:h-5 text-[#6841ea]" />
               <h2 className="font-semibold text-xs sm:text-sm">Historial</h2>
             </div>
-            {isMobile && (
+            <div className="flex items-center gap-1">
               <button
-                onClick={() => setSidebarOpen(false)}
+                onClick={refrescarHistorial}
+                disabled={sidebarCargando}
                 className={`p-1.5 rounded-lg transition-colors ${
                   theme === "dark"
                     ? "hover:bg-[#2a2a2a] text-gray-400"
                     : "hover:bg-gray-200 text-gray-500"
                 }`}
+                title="Recargar historial"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <RefreshCw
+                  className={`w-4 h-4 ${sidebarCargando ? "animate-spin" : ""}`}
+                />
               </button>
-            )}
+              {isMobile && (
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    theme === "dark"
+                      ? "hover:bg-[#2a2a2a] text-gray-400"
+                      : "hover:bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -635,9 +709,11 @@ export function ChatContainer({
                     >
                       <button
                         onClick={() => seleccionarConversacion(conv)}
-                        disabled={cargandoConversacion}
+                        disabled={cargandoConversacionId === conv.sessionId}
                         className={`w-full text-left p-2 sm:p-2.5 rounded-lg transition-all ${
-                          cargandoConversacion ? "opacity-50" : ""
+                          cargandoConversacionId === conv.sessionId
+                            ? "opacity-50"
+                            : ""
                         }`}
                       >
                         <div className="flex items-start gap-2 pr-8">
@@ -719,7 +795,7 @@ export function ChatContainer({
                         </DropdownMenu>
                       </div>
 
-                      {cargandoConversacion && (
+                      {cargandoConversacionId === conv.sessionId && (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                           <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
                         </div>
@@ -727,7 +803,7 @@ export function ChatContainer({
 
                       {conversacionActiva === conv.sessionId &&
                         isTyping &&
-                        !cargandoConversacion && (
+                        !cargandoConversacionId && (
                           <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                             <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-[#6841ea]" />
                           </div>
@@ -858,7 +934,7 @@ export function ChatContainer({
     ${isAdmin ? "ml-0" : isMobile ? "ml-0" : sidebarOpen ? "ml-64 sm:ml-72 md:ml-80" : "ml-0"}
   `}
       >
-        {/* 👇 AQUÍ ESTÁ EL CAMBIO: Si es admin, muestra el Reporte del Día en iframe */}
+        {/* Si es admin, muestra el Reporte del Día en iframe */}
         {colaborador.email === "jjohn@pprin.com" ? (
           <iframe
             src="/reporte-del-dia"
@@ -893,6 +969,15 @@ export function ChatContainer({
             engineOverride={engine}
             openPiPWindow={openPiPWindow}
             closePiPWindow={closePiPWindow}
+            esConversacionDeHoy={
+              conversaciones.find((c) => c.sessionId === conversacionActiva)
+                ? new Date(
+                    conversaciones.find(
+                      (c) => c.sessionId === conversacionActiva,
+                    )!.createdAt,
+                  ).toDateString() === new Date().toDateString()
+                : true // si no encontró (nueva conv), asumir que es de hoy
+            }
           />
         )}
       </div>

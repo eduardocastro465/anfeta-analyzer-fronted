@@ -13,7 +13,6 @@ import {
 export function restaurarMensajesConComponentes(
   mensajesHistorial: MensajeHistorial[],
   analisisRestaurado: AssistantAnalysis | null,
-  theme: "light" | "dark",
   displayName: string,
   email: string,
   onOpenReport?: () => void,
@@ -47,14 +46,13 @@ export function restaurarMensajesConComponentes(
     const tieneAnalisis = msg.analisis && msg.analisis.success;
 
     if (esAnalisisInicial && tieneAnalisis && analisisRestaurado) {
-      // ✅ RECONSTRUIR MENSAJES CON COMPONENTES ORIGINALES
+      // RECONSTRUIR MENSAJES CON COMPONENTES ORIGINALES
 
       // 1. Mensaje de bienvenida con info del usuario
       mensajesRestaurados.push({
         id: `${msg._id}-welcome`,
         type: "bot",
         content: messageTemplates.welcome.userInfo({
-          theme,
           displayName,
           email,
         }),
@@ -67,7 +65,6 @@ export function restaurarMensajesConComponentes(
         id: `${msg._id}-metrics`,
         type: "bot",
         content: messageTemplates.analysis.metrics({
-          theme,
           analysis: analisisRestaurado,
         }),
         timestamp: new Date(msg.timestamp),
@@ -97,7 +94,6 @@ export function restaurarMensajesConComponentes(
               actividadesConTareasPendientes={actividadesConTareas}
               totalTareasPendientes={totalTareas}
               esHoraReporte={false}
-              theme={theme}
               assistantAnalysis={analisisRestaurado}
               onOpenReport={onOpenReport}
               onStartVoiceMode={onStartVoiceMode}
@@ -109,12 +105,12 @@ export function restaurarMensajesConComponentes(
         mensajesRestaurados.push({
           id: `${msg._id}-no-tasks`,
           type: "bot",
-          content: <NoTasksMessage theme={theme} />,
+          content: <NoTasksMessage />,
           timestamp: new Date(msg.timestamp),
         });
       }
     } else {
-      // ✅ MENSAJE DE BOT NORMAL (sin análisis)
+      // MENSAJE DE BOT NORMAL (sin análisis)
       mensajesRestaurados.push({
         id: msg._id || `${Date.now()}-${Math.random()}`,
         type: "bot",

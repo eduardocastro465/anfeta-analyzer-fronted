@@ -77,6 +77,7 @@ interface ExtendedChatBotProps extends ChatBotProps {
   openPiPWindow?: () => void;
   closePiPWindow?: () => void;
   isPiPModeProp?: boolean;
+  esConversacionDeHoy?: boolean;
 }
 // ==================== COMPONENTE PRINCIPAL ====================
 
@@ -102,6 +103,7 @@ export function ChatBot({
   openPiPWindow,
   closePiPWindow,
   isPiPModeProp,
+  esConversacionDeHoy = true,
 }: ExtendedChatBotProps) {
   // ==================== REFS ====================
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -452,19 +454,20 @@ export function ChatBot({
         return hasPanel;
       });
 
-      if (reversedIndex === -1) {
-        // No hay panel existente → agregar uno nuevo
-        return [
-          ...prevMessages,
-          {
-            id: `panel-${Date.now()}`,
-            type: "bot" as Message["type"],
-            content: nuevoContenido,
-            timestamp: new Date(),
-            isWide: true,
-          },
-        ];
-      }
+      // if (reversedIndex === -1) {
+      //   // No hay panel existente → agregar uno nuevo
+      //   return [
+      //     ...prevMessages,
+      //     {
+      //       id: `panel-${Date.now()}`,
+      //       type: "bot" as Message["type"],
+      //       content: nuevoContenido,
+      //       timestamp: new Date(),
+      //       isWide: true,
+      //     },
+      //   ];
+      // }
+      if (reversedIndex === -1) return prevMessages;
 
       // Actualizar el panel existente
       const lastPanelIndex = prevMessages.length - 1 - reversedIndex;
@@ -925,6 +928,7 @@ export function ChatBot({
     const hayDatosRestauracion =
       (mensajesRestaurados && mensajesRestaurados.length > 1) ||
       analisisRestaurado;
+
     if (hayDatosRestauracion) {
       initializationRef.current = true;
       if (analisisRestaurado) {
@@ -938,6 +942,10 @@ export function ChatBot({
         setStep("ready");
         setIsTyping(false);
       }
+      if (mensajesRestaurados && mensajesRestaurados.length > 1) {
+        fetchAssistantAnalysis(false, false, true);
+      }
+
       return;
     }
     initializationRef.current = true;
@@ -967,6 +975,7 @@ export function ChatBot({
     init();
   }, []);
 
+  
   // ==================== CAMBIO DE TURNO ====================
   useEffect(() => {
     const intervalo = setInterval(() => {
@@ -993,7 +1002,6 @@ export function ChatBot({
     conversacionActiva,
     mensajesRestaurados,
     analisisRestaurado,
-    theme,
     displayName,
     email: colaborador.email,
     onStartVoiceMode: handleStartVoiceMode,
@@ -1005,21 +1013,23 @@ export function ChatBot({
     scrollRef,
   });
 
-  useEffect(() => {
-    if (!conversacionActiva || !assistantAnalysis || messages.length === 0)
-      return;
+  // useEffect(() => {
+  //   if (!conversacionActiva || !assistantAnalysis || messages.length === 0)
+  //     return;
+  //   if (!esConversacionDeHoy) return;
+  //   if (mensajesRestaurados && mensajesRestaurados.length > 1) return;
 
-    const yaHayPanel = messages.some(
-      (msg) =>
-        msg.isWide &&
-        React.isValidElement(msg.content) &&
-        (msg.content as any).type === TurnoPanel,
-    );
+  //   const yaHayPanel = messages.some(
+  //     (msg) =>
+  //       msg.isWide &&
+  //       React.isValidElement(msg.content) &&
+  //       (msg.content as any).type === TurnoPanel,
+  //   );
 
-    if (!yaHayPanel) {
-      actualizarPanelTurno(turnoActual, assistantAnalysis);
-    }
-  }, [conversacionActiva, assistantAnalysis]);
+  //   if (!yaHayPanel) {
+  //     actualizarPanelTurno(turnoActual, assistantAnalysis);
+  //   }
+  // }, [conversacionActiva, assistantAnalysis]);
   // ==================== AUTO-SCROLL ====================
   useEffect(() => {
     if (scrollRef.current)
@@ -1141,6 +1151,7 @@ export function ChatBot({
 
     // 3. Reset ALL voice state in one batch — no addMessage/speakText here
     stopVoice();
+    autoSendVoiceGuided.cancelVoiceRecording();
     voiceMode.setVoiceMode(false); // ← this is the gate for ChatInputBar
     voiceMode.setVoiceStep("idle");
     voiceMode.setExpectedInputType("none");
@@ -1151,20 +1162,21 @@ export function ChatBot({
     setFilteredActivitiesForVoice([]);
   };
 
-  const cancelVoiceMode = () => {
-    isManuallyCancellingRef.current = true;
-    voskGuidedModeRef.current = false;
-    stopVoice();
-    voiceRecognition.stopRecording();
-    cancelVoiceRecording();
-    voskRealtime.cancelRealtime();
-    voiceMode.cancelVoiceMode();
-    setSelectedTaskIds([]);
-    setFilteredActivitiesForVoice([]);
-    setTimeout(() => {
-      isManuallyCancellingRef.current = false;
-    }, 500);
-  };
+const cancelVoiceMode = () => {
+  isManuallyCancellingRef.current = true;
+  voskGuidedModeRef.current = false;
+  stopVoice();
+  voiceRecognition.stopRecording();
+  cancelVoiceRecording();
+  autoSendVoiceGuided.cancelVoiceRecording();
+  voskRealtime.cancelRealtime();
+  voiceMode.cancelVoiceMode();
+  setSelectedTaskIds([]);
+  setFilteredActivitiesForVoice([]);
+  setTimeout(() => {
+    isManuallyCancellingRef.current = false;
+  }, 500);
+};
 
   const confirmStartVoiceMode = () => {
     const activitiesToUse =
@@ -1479,7 +1491,7 @@ export function ChatBot({
   ) => {
     if (isRestoration) return;
 
-    addMessageWithTyping(
+    await addMessageWithTyping(
       "bot",
       messageTemplates.welcome.userInfo({
         displayName,
@@ -1489,39 +1501,32 @@ export function ChatBot({
       false,
     );
 
-    setTimeout(async () => {
-      addMessageWithTyping(
+    await addMessageWithTyping(
+      "bot",
+      messageTemplates.analysis.metrics({ analysis }),
+      600,
+      false,
+    );
+
+    const hayTareas = analysis.data.revisionesPorActividad.some(
+      (r) => r.tareasConTiempo.length > 0,
+    );
+
+    if (hayTareas) {
+      addMessage(
         "bot",
-        messageTemplates.analysis.metrics({ analysis }),
-        600,
-        false,
+        crearMensajePanel(
+          turnoActual,
+          analysis,
+          colaboradoresUnicosRef.current,
+        ),
+        undefined,
+        true,
       );
-
-      setTimeout(() => {
-        const hayTareas = analysis.data.revisionesPorActividad.some(
-          (r) => r.tareasConTiempo.length > 0,
-        );
-        if (hayTareas) {
-          setTimeout(() => {
-            // Usamos crearMensajePanel que produce un componente con useTheme() interno
-            addMessage(
-              "bot",
-              crearMensajePanel(
-                turnoActual,
-                analysis,
-                colaboradoresUnicosRef.current,
-              ),
-              undefined,
-              true,
-            );
-          }, 200);
-        } else {
-          addMessage("bot", messageTemplates.tasks.noTasksFound());
-        }
-      }, 1400);
-    }, 800);
+    } else {
+      addMessage("bot", messageTemplates.tasks.noTasksFound());
+    }
   };
-
   const fetchAssistantAnalysis = async (
     showAll = false,
     isRestoration = false,
@@ -1704,7 +1709,7 @@ export function ChatBot({
       } catch (error) {
         console.error("❌ Error en polling 10AM:", error);
       }
-    }, 10_000); // cada 10 segundos
+    }, 15_000); // cada 15 segundos
 
     return () => clearInterval(pollingInterval);
   }, [colaborador.email]);

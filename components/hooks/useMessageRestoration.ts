@@ -8,7 +8,6 @@ interface UseMessageRestorationProps {
   conversacionActiva?: string | null; // Opcional
   mensajesRestaurados?: MensajeHistorial[]; // Opcional
   analisisRestaurado?: AssistantAnalysis | null; // Opcional
-  theme: "light" | "dark";
   displayName: string;
   email: string;
   onOpenReport?: () => void;
@@ -31,7 +30,6 @@ interface UseMessageRestorationProps {
  *   conversacionActiva,
  *   mensajesRestaurados,
  *   analisisRestaurado,
- *   theme,
  *   displayName,
  *   email: colaborador.email,
  *   onOpenReport: () => setMostrarModalReporte(true),
@@ -49,7 +47,6 @@ export function useMessageRestoration({
   conversacionActiva,
   mensajesRestaurados,
   analisisRestaurado,
-  theme,
   displayName,
   email,
   onOpenReport,
@@ -92,7 +89,6 @@ export function useMessageRestoration({
     const mensajes = restaurarMensajesConComponentes(
       mensajesRestaurados,
       analisisRestaurado ?? null, // Convertir undefined a null
-      theme,
       displayName,
       email,
       onOpenReport,
@@ -131,7 +127,6 @@ export function useMessageRestoration({
     conversacionActiva,
     mensajesRestaurados,
     analisisRestaurado,
-    theme,
     displayName,
     email,
     onOpenReport,
