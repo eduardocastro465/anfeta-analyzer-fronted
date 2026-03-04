@@ -200,9 +200,9 @@ export function ChatBot({
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  const [horaInicioReporteMañana] = useState("2:00 AM");
-  const [horaFinReporteMañana] = useState("2:30 AM");
-  const [horaInicioReporte] = useState("2:31 AM");
+  const [horaInicioReporteMañana] = useState("9:00 AM");
+  const [horaFinReporteMañana] = useState("2:30 PM");
+  const [horaInicioReporte] = useState("2:31 PM");
   const [horaFinReporte] = useState("5:30 PM");
 
   const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
@@ -1802,7 +1802,7 @@ export function ChatBot({
       } catch (error) {
         console.error("❌ Error en polling 10AM:", error);
       }
-    }, 15_000); // cada 15 segundos
+    }, 25_000); // cada 25 segundos
 
     return () => clearInterval(pollingInterval);
   }, [colaborador.email]);
