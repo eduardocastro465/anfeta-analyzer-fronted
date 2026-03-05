@@ -60,10 +60,8 @@ import { useToast } from "@/hooks/use-toast";
 import { isReportTime } from "@/util/Timeutils";
 import { ChatThemeProvider } from "@/context/ThemeContext";
 import { TurnoPanel } from "@/components/TurnoPanel";
-import {
-  useVoiceEngine,
-  type VoiceEngine,
-} from "./Voiceengineselector";
+import { useVoiceEngine, type VoiceEngine } from "./Voiceengineselector";
+import { adaptarDatosAnalisis } from "@/util/adaptarAnalisis";
 
 // ==================== TIPOS LOCALES ====================
 interface ExtendedChatBotProps extends ChatBotProps {
@@ -127,11 +125,10 @@ export function ChatBot({
   const conversationHistory = useConversationHistory();
 
   const resolverIA = (transcript: string, sessionId: string | null) => {
-    return chatModeRef.current === "ia" && assistantAnalysisRef.current
+    return chatModeRef.current === "proyecto" && assistantAnalysisRef.current
       ? consultarIAProyecto(transcript, sessionId)
       : chatGeneralIA(transcript, sessionId);
   };
-
   const {
     speak: speakText,
     stop: stopVoice,
@@ -204,8 +201,13 @@ export function ChatBot({
   const [horaInicioReporte] = useState("2:31 PM");
   const [horaFinReporte] = useState("5:30 PM");
 
-  const [chatMode, setChatMode] = useState<"normal" | "ia">("ia");
-  const chatModeRef = useRef<"normal" | "ia">("ia");
+  const [chatMode, setChatMode] = useState<"proyecto" | "general">(() => {
+    const modo = preferencias?.modoAsistenteIA;
+    return modo === "proyecto" || modo === "general" ? modo : "proyecto";
+  });
+  const chatModeRef = useRef<"proyecto" | "general">(
+    preferencias?.modoAsistenteIA === "general" ? "general" : "proyecto",
+  );
   const [isPiPMode, setIsPiPMode] = useState(false);
   const [isInPiPWindow, setIsInPiPWindow] = useState(false);
 
@@ -273,6 +275,17 @@ export function ChatBot({
       changeRateHook(preferencias.velocidadVoz);
     if (preferencias?.idiomaVoz) changeLang(preferencias.idiomaVoz);
   }, [preferencias?.velocidadVoz, preferencias?.idiomaVoz]);
+
+  useEffect(() => {
+    const modo = preferencias?.modoAsistenteIA;
+    if (!modo) return;
+    const modoValido: "proyecto" | "general" =
+      modo === "proyecto" ? "proyecto" : "general";
+    if (modoValido !== chatModeRef.current) {
+      setChatMode(modoValido);
+      chatModeRef.current = modoValido;
+    }
+  }, [preferencias?.modoAsistenteIA]);
 
   // ==================== HELPERS ====================
   function getTurnoActual(): "mañana" | "tarde" {
@@ -349,71 +362,11 @@ export function ChatBot({
     return [...new Set(colaboradores)].filter(Boolean);
   };
 
-  const adaptarDatosAnalisis = (
-    data: any,
-  ): AssistantAnalysis & { colaboradoresInvolucrados?: any[] } => ({
-    success: data.success,
-    answer: data.answer,
-    provider: data.provider || "Gemini",
-    sessionId: data.sessionId,
-    proyectoPrincipal: data.proyectoPrincipal || "Sin proyecto principal",
-    colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
-    metrics: {
-      totalActividades: data.metrics?.totalActividades || 0,
-      actividadesConTiempoTotal: data.metrics?.actividadesConTiempoTotal || 0,
-      actividadesFinales: data.metrics?.actividadesFinales || 0,
-      tareasConTiempo: data.metrics?.tareasConTiempo || 0,
-      tareasAltaPrioridad: data.metrics?.tareasAltaPrioridad || 0,
-      tiempoEstimadoTotal: data.metrics?.tiempoEstimadoTotal || "0h 0m",
-    },
-    data: {
-      actividades: (data.data?.actividades || []).map((a: any) => ({
-        id: a.id,
-        titulo: a.titulo,
-        horario: a.horario,
-        status: a.status,
-        proyecto: a.proyecto,
-        colaboradores: a.colaboradores || [],
-        esHorarioLaboral: a.esHorarioLaboral || false,
-        tieneRevisionesConTiempo: a.tieneRevisionesConTiempo || false,
-      })),
-      revisionesPorActividad: (data.data?.revisionesPorActividad || []).map(
-        (act: any) => ({
-          actividadId: act.actividadId,
-          actividadTitulo: act.actividadTitulo,
-          actividadHorario: act.actividadHorario,
-          colaboradores: act.colaboradores || [],
-          assigneesOriginales: act.assigneesOriginales || [],
-          tareasConTiempo: (act.tareasConTiempo || []).map((t: any) => ({
-            id: t.id,
-            nombre: t.nombre,
-            terminada: t.terminada || false,
-            confirmada: t.confirmada || false,
-            reportada: t.reportada || false,
-            duracionMin: t.duracionMin || 0,
-            descripcion: t.descripcion || "",
-            resumen: t.resumen ?? t.explicacionVoz?.resumen ?? null,
-            fechaCreacion: t.fechaCreacion,
-            fechaFinTerminada: t.fechaFinTerminada || null,
-            diasPendiente: t.diasPendiente || 0,
-            prioridad: t.prioridad || "BAJA",
-            colaboradores: t.colaboradores || [],
-            explicacionVoz: t.explicacionVoz || null,
-          })),
-          totalTareasConTiempo: act.totalTareasConTiempo || 0,
-          tareasAltaPrioridad: act.tareasAltaPrioridad || 0,
-          tiempoTotal: act.tiempoTotal || 0,
-          tiempoFormateado: act.tiempoFormateado || "0h 0m",
-        }),
-      ),
-    },
-    multiActividad: data.multiActividad || false,
-  });
-
   const crearMensajePanel = (
     turno: "mañana" | "tarde",
     analysis: AssistantAnalysis,
     colabs: string[],
+    esHistorial = false,
   ): React.ReactNode => (
     <TurnoPanel
       key={`turno-panel-${turno}`}
@@ -429,6 +382,8 @@ export function ChatBot({
       stopVoice={stopVoice}
       isSpeaking={isSpeaking}
       speakText={speakText}
+      rate={rate}
+      esHistorial={esHistorial}
     />
   );
 
@@ -841,6 +796,7 @@ export function ChatBot({
     } else {
       await autoSendVoiceChat.cancelVoiceRecording();
     }
+    setUserInput("");
   };
   const {
     isRecording,
@@ -960,9 +916,8 @@ export function ChatBot({
         setStep("ready");
         setIsTyping(false);
       }
-      if (mensajesRestaurados && mensajesRestaurados.length > 1) {
-        fetchAssistantAnalysis(false, false, true);
-      }
+
+      fetchAssistantAnalysis(false, false, true);
 
       return;
     }
@@ -1028,90 +983,55 @@ export function ChatBot({
     setAssistantAnalysis,
     assistantAnalysisRef,
     scrollRef,
+    crearPanel: (analysis) =>
+      crearMensajePanel(
+        turnoActualRef.current,
+        analysis,
+        colaboradoresUnicosRef.current,
+        true, // siempre readonly al restaurar
+      ),
   });
 
   useEffect(() => {
     if (!conversacionActiva) return;
     if (!esConversacionDeHoy) return;
-    if (!assistantAnalysisRef.current) return;
-    if (messages.length <= 1) return;
     if (panelRefreshedForRef.current === conversacionActiva) return;
+    if (!assistantAnalysis) return; // ← STATE no ref, para re-ejecutar cuando llega
+    if (!mensajesRestaurados || mensajesRestaurados.length <= 1) return;
 
     panelRefreshedForRef.current = conversacionActiva;
 
     const timer = setTimeout(() => {
-      const analysis = assistantAnalysisRef.current;
-      if (!analysis) return;
+      const freshAnalysis = assistantAnalysisRef.current;
+      if (!freshAnalysis) return;
 
       const nuevoContenidoPanel = crearMensajePanel(
         turnoActualRef.current,
-        analysis,
+        freshAnalysis,
         colaboradoresUnicosRef.current,
       );
 
       setMessages((prev) => {
-        // Buscar si ya existe un TurnoPanel en el estado REAL (no closure)
-        const panelIndex = prev.findLastIndex(
-          (msg) =>
-            msg.isWide &&
-            React.isValidElement(msg.content) &&
-            (msg.content as any).type === TurnoPanel,
+        const yaHayPanelFresco = prev.some(
+          (msg) => msg.isWide && msg.id.startsWith("fresh-panel-"),
         );
-
-        if (panelIndex !== -1) {
-          // ✅ Ya existe panel (primer load o ya inyectado) → solo actualizar
-          const updated = [...prev];
-          updated[panelIndex] = {
-            ...updated[panelIndex],
-            content: nuevoContenidoPanel,
-            timestamp: new Date(),
-          };
-          return updated;
-        }
-
-        // ❌ No hay panel → venimos de una restauración sin componentes
-        // Separar mensajes reales (user + bot texto) de componentes viejos
-        const conversacionReal = prev.filter(
-          (msg) =>
-            msg.type === "user" ||
-            (msg.type === "bot" && typeof msg.content === "string"),
-        );
-
-        // Si no hay mensajes reales aún, esperar siguiente render
-        if (conversacionReal.length === 0) return prev;
+        if (yaHayPanelFresco) return prev;
 
         return [
+          ...prev,
           {
-            id: `restored-welcome-${Date.now()}`,
-            type: "bot" as const,
-            content: messageTemplates.welcome.userInfo({
-              displayName,
-              email: colaborador.email,
-            }),
-            timestamp: new Date(),
-            isWide: false,
-          },
-          {
-            id: `restored-metrics-${Date.now() + 1}`,
-            type: "bot" as const,
-            content: messageTemplates.analysis.metrics({ analysis }),
-            timestamp: new Date(),
-            isWide: false,
-          },
-          {
-            id: `restored-panel-${Date.now() + 2}`,
+            id: `fresh-panel-${Date.now()}`,
             type: "bot" as const,
             content: nuevoContenidoPanel,
             timestamp: new Date(),
             isWide: true,
           },
-          ...conversacionReal,
         ];
       });
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [conversacionActiva, messages.length, esConversacionDeHoy]);
+  }, [conversacionActiva, esConversacionDeHoy, assistantAnalysis]); // ← agregar assistantAnalysis
 
   // useEffect(() => {
   //   if (!conversacionActiva || !assistantAnalysis || messages.length === 0)
@@ -1692,12 +1612,13 @@ export function ChatBot({
 
   // ==================== CHAT ====================
   const toggleChatMode = () => {
-    const newMode = chatMode === "normal" ? "ia" : "normal";
+    const newMode = chatMode === "proyecto" ? "general" : "proyecto";
     chatModeRef.current = newMode;
     setChatMode(newMode);
+    onGuardarPreferencias?.({ ...preferencias, modoAsistenteIA: newMode });
     addMessage(
       "system",
-      newMode === "ia" ? (
+      newMode === "proyecto" ? (
         <div
           className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#6841ea]/10 border-[#6841ea]/20" : "bg-purple-50 border-purple-200"}`}
         >
@@ -1728,6 +1649,19 @@ export function ChatBot({
     try {
       e.preventDefault();
       if (!userInput.trim()) return;
+
+      if (engine === "vosk" ? voskRealtime.isRecording : isRecording) {
+        isManuallyCancellingRef.current = true;
+        if (engine === "vosk") {
+          voskRealtime.cancelRealtime();
+        } else {
+          autoSendVoiceChat.cancelVoiceRecording(); // ← sin await
+        }
+        setTimeout(() => {
+          isManuallyCancellingRef.current = false;
+        }, 500);
+      }
+
       const mensajeAEnviar = userInput.trim();
       addMessage("user", mensajeAEnviar);
       setUserInput("");
@@ -1821,6 +1755,12 @@ export function ChatBot({
     changeRateHook(newRate);
     onGuardarPreferencias?.({ ...preferencias, velocidadVoz: newRate });
   };
+
+  useEffect(() => {
+    if (assistantAnalysis) {
+      actualizarPanelTurno(turnoActual, assistantAnalysis);
+    }
+  }, [rate]);
 
   // ==================== RENDER ====================
   return (

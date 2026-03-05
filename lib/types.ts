@@ -568,4 +568,6 @@ export interface PanelReporteTareasTardeProps {
   stopVoice?: () => void;
   isSpeaking?: boolean;
   speakText?: (text: string) => void;
+  rate: number;
+  esHistorial?: boolean;
 }

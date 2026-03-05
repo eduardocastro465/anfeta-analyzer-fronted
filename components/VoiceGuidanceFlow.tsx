@@ -600,6 +600,11 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
               setVoiceStep={setVoiceStep}
               setCurrentListeningFor={setCurrentListeningFor}
               isPaused={isPaused}
+              cancelRecording={
+                voskRealtime?.isRecording
+                  ? () => voskRealtime.cancelRealtime()
+                  : safeAutoSendVoice.cancelVoiceRecording
+              }
             />
           )}
 

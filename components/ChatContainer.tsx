@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { validateSession, obtenerHistorialSidebar } from "@/lib/api";
+import { validateSession, obtenerHistorialSidebar, obtenerActividadesConRevisiones } from "@/lib/api";
 import type {
   AssistantAnalysis,
   ChatContainerProps,
@@ -49,6 +49,7 @@ import { obtenerMensajesConversacion } from "@/lib/historial.service";
 import { applyThemeToDom, resolveTheme } from "@/util/theme";
 import { AccountSettingsModal } from "./Accountsettingsmodal";
 import { VoiceEngine } from "./Voiceengineselector";
+import { adaptarDatosAnalisis } from "@/util/adaptarAnalisis";
 
 type ViewMode = "chat" | "reportes";
 
@@ -234,23 +235,11 @@ export function ChatContainer({
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
           );
           setConversaciones(conversacionesOrdenadas);
-          setConversacionActiva(sessionId);
 
           if (existe) {
-            await restaurarConversacion(sessionId);
-            toast({
-              variant: "info",
-              title: "Conversación restaurada",
-              description: "Continúa donde lo dejaste",
-            });
+            await restaurarConversacion(sessionId); // ← restaurarConversacion ya llama setConversacionActiva internamente
           } else {
-            setMensajesRestaurados([]);
-            setAnalisisRestaurado(null);
-            toast({
-              variant: "success",
-              title: "Nueva conversación",
-              description: "¡Comienza a chatear!",
-            });
+            setConversacionActiva(sessionId); // ← solo si es nueva conversación
           }
         } else {
           toast({
@@ -321,7 +310,6 @@ export function ChatContainer({
 
       const response = await obtenerMensajesConversacion(sessionId);
 
-      console.log("response", response);
       if (response.success && response.data) {
         const { data } = response;
 
@@ -333,7 +321,27 @@ export function ChatContainer({
         }
 
         setMensajesRestaurados(data.mensajes || []);
-        setAnalisisRestaurado(data.ultimoAnalisis || null);
+
+        if (!data.ultimoAnalisis) {
+          // No hay análisis en BD → buscar fresco
+          try {
+            const dataFresca = await obtenerActividadesConRevisiones({
+              email: colaborador.email,
+              showAll: true,
+            });
+            setAnalisisRestaurado(adaptarDatosAnalisis(dataFresca));
+          } catch {
+            setAnalisisRestaurado(null);
+          }
+        } else {
+          // Hay análisis en BD → usarlo
+          const analisisAdaptado = adaptarDatosAnalisis(data.ultimoAnalisis);
+          const analisisMensajeInicial = data.mensajes?.[0]?.analisis
+            ? adaptarDatosAnalisis(data.mensajes[0].analisis)
+            : null;
+          setAnalisisRestaurado(analisisAdaptado ?? analisisMensajeInicial);
+        }
+
         setConversacionActiva(sessionId);
 
         if (data.nombreConversacion) {

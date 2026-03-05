@@ -1,10 +1,7 @@
 import type { Message, AssistantAnalysis } from "@/lib/types";
 import type { MensajeHistorial } from "@/lib/interface/historial.interface";
 import { messageTemplates } from "@/components/chat/messageTemplates";
-import {
-  TasksPanel,
-  NoTasksMessage,
-} from "@/components/chat/PanelReporteTareasTarde";
+import { NoTasksMessage } from "@/components/chat/PanelReporteTareasTarde";
 
 /**
  * Convierte mensajes del historial a mensajes con componentes React
@@ -15,8 +12,7 @@ export function restaurarMensajesConComponentes(
   analisisRestaurado: AssistantAnalysis | null,
   displayName: string,
   email: string,
-  onOpenReport?: () => void,
-  onStartVoiceMode?: () => void,
+  crearPanel?: (analysis: AssistantAnalysis) => React.ReactNode,
 ): Message[] {
   if (!mensajesHistorial || mensajesHistorial.length === 0) {
     return [];
@@ -45,7 +41,7 @@ export function restaurarMensajesConComponentes(
     const esAnalisisInicial = msg.tipoMensaje === "analisis_inicial";
     const tieneAnalisis = msg.analisis && msg.analisis.success;
 
-    if (esAnalisisInicial && tieneAnalisis && analisisRestaurado) {
+    if (esAnalisisInicial && analisisRestaurado) {
       // RECONSTRUIR MENSAJES CON COMPONENTES ORIGINALES
 
       // 1. Mensaje de bienvenida con info del usuario
@@ -77,30 +73,16 @@ export function restaurarMensajesConComponentes(
       );
 
       if (hayTareas) {
-        const actividadesConTareas =
-          analisisRestaurado.data.revisionesPorActividad.filter(
-            (r) => r.tareasConTiempo.length > 0,
-          );
-        const totalTareas = actividadesConTareas.reduce(
-          (sum, r) => sum + r.tareasConTiempo.length,
-          0,
-        );
-
-        mensajesRestaurados.push({
-          id: `${msg._id}-tasks`,
-          type: "bot",
-          content: (
-            <TasksPanel
-              actividadesConTareasPendientes={actividadesConTareas}
-              totalTareasPendientes={totalTareas}
-              esHoraReporte={false}
-              assistantAnalysis={analisisRestaurado}
-              onOpenReport={onOpenReport}
-              onStartVoiceMode={onStartVoiceMode}
-            />
-          ),
-          timestamp: new Date(msg.timestamp),
-        });
+        if (crearPanel) {
+          mensajesRestaurados.push({
+            id: `historial-panel-${msg._id}-tasks`,
+            type: "bot",
+            content: crearPanel(analisisRestaurado),
+            timestamp: new Date(msg.timestamp),
+            isWide: true,
+          });
+        }
+        // sin crearPanel → el useEffect de conversacionActiva lo inserta
       } else {
         mensajesRestaurados.push({
           id: `${msg._id}-no-tasks`,

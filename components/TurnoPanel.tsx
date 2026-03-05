@@ -16,6 +16,8 @@ interface TurnoPanelProps {
   stopVoice: () => void;
   isSpeaking: boolean;
   speakText: (text: string) => void;
+  rate: number;
+  esHistorial?: boolean;
 }
 
 export function TurnoPanel({
@@ -29,11 +31,15 @@ export function TurnoPanel({
   stopVoice,
   isSpeaking,
   speakText,
+  rate,
+  esHistorial = false,
 }: TurnoPanelProps) {
   const theme = useTheme();
 
   // null = seguir lógica real del turno, "mañana"/"tarde" = override manual
-  const [turnoOverride, setTurnoOverride] = useState<"mañana" | "tarde" | null>(null);
+  const [turnoOverride, setTurnoOverride] = useState<"mañana" | "tarde" | null>(
+    null,
+  );
 
   const turnoEfectivo = turnoOverride ?? turno;
   const esMañana = turnoEfectivo === "mañana";
@@ -49,16 +55,28 @@ export function TurnoPanel({
       : "bg-purple-50 border-purple-200";
 
   const titleClasses = esMañana
-    ? theme === "dark" ? "text-blue-300" : "text-blue-700"
-    : theme === "dark" ? "text-purple-300" : "text-purple-700";
+    ? theme === "dark"
+      ? "text-blue-300"
+      : "text-blue-700"
+    : theme === "dark"
+      ? "text-purple-300"
+      : "text-purple-700";
 
   const subtitleClasses = esMañana
-    ? theme === "dark" ? "text-blue-200" : "text-blue-600"
-    : theme === "dark" ? "text-purple-200" : "text-purple-600";
+    ? theme === "dark"
+      ? "text-blue-200"
+      : "text-blue-600"
+    : theme === "dark"
+      ? "text-purple-200"
+      : "text-purple-600";
 
   const colChipClasses = esMañana
-    ? theme === "dark" ? "bg-blue-800/30 text-blue-200" : "bg-blue-100 text-blue-700"
-    : theme === "dark" ? "bg-purple-800/30 text-purple-200" : "bg-purple-100 text-purple-700";
+    ? theme === "dark"
+      ? "bg-blue-800/30 text-blue-200"
+      : "bg-blue-100 text-blue-700"
+    : theme === "dark"
+      ? "bg-purple-800/30 text-purple-200"
+      : "bg-purple-100 text-purple-700";
 
   const dividerClass = esMañana ? "border-blue-200/30" : "border-purple-200/30";
 
@@ -139,6 +157,7 @@ export function TurnoPanel({
       </div>
 
       {/* Panel de tareas según el turno efectivo */}
+
       {esMañana ? (
         <TasksPanelWithDescriptions
           assistantAnalysis={assistantAnalysis}
@@ -149,6 +168,7 @@ export function TurnoPanel({
           stopVoice={stopVoice}
           isSpeaking={isSpeaking}
           speakText={speakText}
+          esHistorial={esHistorial}
         />
       ) : (
         <PanelReporteTareasTarde
@@ -158,6 +178,11 @@ export function TurnoPanel({
           onStartVoiceMode={onStartVoiceMode}
           onStartVoiceModeWithTasks={onStartVoiceModeWithTasks}
           onReportCompleted={onReportCompleted}
+          stopVoice={stopVoice}
+          isSpeaking={isSpeaking}
+          speakText={speakText}
+          rate={rate}
+          esHistorial={esHistorial}
         />
       )}
     </div>

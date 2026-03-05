@@ -473,6 +473,7 @@ export const ListeningExplanationStep: React.FC<{
   isPaused: boolean;
   voskSilenceCountdown: number | null;
   isVoskEngine: boolean;
+  cancelRecording: () => void;
 }> = ({
   currentListeningFor,
   retryCount,
@@ -489,6 +490,7 @@ export const ListeningExplanationStep: React.FC<{
   isPaused,
   voskSilenceCountdown,
   isVoskEngine,
+  cancelRecording,
 }) => {
   const [isValidating, setIsValidating] = React.useState(false);
   const [countdown, setCountdown] = React.useState<number | null>(null);
@@ -699,6 +701,7 @@ export const ListeningExplanationStep: React.FC<{
           </Button>
           <Button
             onClick={() => {
+              cancelRecording();
               if (recognitionRef.current) recognitionRef.current.stop();
               setIsRecording(false);
               setIsListening(false);

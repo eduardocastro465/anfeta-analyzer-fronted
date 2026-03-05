@@ -18,7 +18,6 @@ import {
   Calendar,
   ChevronDown,
   X,
-  TrendingUp,
   Pencil,
 } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -36,6 +35,8 @@ export function PanelReporteTareasTarde({
   onStartVoiceModeWithTasks,
   onReportCompleted,
   actividadesDiarias = [],
+  rate,
+  esHistorial = false,
 }: PanelReporteTareasTardeProps) {
   const theme = useTheme();
 
@@ -60,11 +61,13 @@ export function PanelReporteTareasTarde({
   const currentUserEmail = userEmail || "";
 
   useEffect(() => {
+    if (esHistorial) return;
     if (!currentUserEmail) return;
     cargarTareasReportadas(false);
   }, [currentUserEmail]);
 
   useEffect(() => {
+    if (esHistorial) return;
     if (!currentUserEmail) return;
     const onCambios = () => cargarTareasReportadas(false);
     const onExplicacion = () => cargarTareasReportadas(false);
@@ -205,6 +208,7 @@ export function PanelReporteTareasTarde({
 
   const cargarTareasReportadas = useCallback(
     async (esForzado: boolean = false) => {
+      if (esHistorial) return;
       if (!currentUserEmail) return;
       if (actualizandoRef.current && !esForzado) return;
       setIsLoading(true);
@@ -249,6 +253,7 @@ export function PanelReporteTareasTarde({
       }
     },
     [
+      esHistorial,
       currentUserEmail,
       procesarTareasReportadas,
       mostrarAlertaMensaje,
@@ -524,22 +529,67 @@ export function PanelReporteTareasTarde({
       {/* Panel principal */}
       {hayTareas ? (
         <div
-          className={`w-full rounded-xl border overflow-hidden shadow-sm ${theme === "dark" ? "bg-[#1e1e1e] border-orange-900/50" : "bg-white border-orange-200"}`}
+          className={`w-full rounded-xl border overflow-hidden shadow-sm ${
+            esHistorial
+              ? theme === "dark"
+                ? "bg-[#1e1e1e] border-gray-700/50"
+                : "bg-white border-gray-200"
+              : theme === "dark"
+                ? "bg-[#1e1e1e] border-orange-900/50"
+                : "bg-white border-orange-200"
+          }`}
         >
           {/* Header */}
           <div
-            className={`px-3 py-2 border-b ${theme === "dark" ? "bg-orange-500/10 border-orange-900/40" : "bg-orange-500/6 border-orange-100"}`}
+            className={`px-3 py-2 border-b ${
+              esHistorial
+                ? theme === "dark"
+                  ? "bg-gray-800/40 border-gray-700/40"
+                  : "bg-gray-100 border-gray-200"
+                : theme === "dark"
+                  ? "bg-orange-500/10 border-orange-900/40"
+                  : "bg-orange-500/6 border-orange-100"
+            }`}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 min-w-0">
-                <Sunset className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                <Sunset
+                  className={`w-3.5 h-3.5 flex-shrink-0 ${esHistorial ? "text-gray-500" : "text-orange-500"}`}
+                />
                 <h4
-                  className={`font-bold text-xs uppercase tracking-wide truncate ${theme === "dark" ? "text-orange-200" : "text-orange-800"}`}
+                  className={`font-bold text-xs uppercase tracking-wide truncate ${
+                    esHistorial
+                      ? theme === "dark"
+                        ? "text-gray-500"
+                        : "text-gray-400"
+                      : theme === "dark"
+                        ? "text-orange-200"
+                        : "text-orange-800"
+                  }`}
                 >
                   Tareas Tarde
                 </h4>
+                {esHistorial && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium normal-case tracking-normal ${
+                      theme === "dark"
+                        ? "bg-gray-700 text-gray-400 border border-gray-600"
+                        : "bg-gray-200 text-gray-500 border border-gray-300"
+                    }`}
+                  >
+                    Solo lectura
+                  </span>
+                )}
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === "dark" ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-700"}`}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    esHistorial
+                      ? theme === "dark"
+                        ? "bg-gray-700/50 text-gray-500"
+                        : "bg-gray-100 text-gray-400"
+                      : theme === "dark"
+                        ? "bg-orange-500/20 text-orange-300"
+                        : "bg-orange-100 text-orange-700"
+                  }`}
                 >
                   {estadisticas.totalTareas}
                 </span>
@@ -550,23 +600,25 @@ export function PanelReporteTareasTarde({
                 </span>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
-                {mostrandoReportesDeOtros && (
+                {mostrandoReportesDeOtros && !esHistorial && (
                   <span
                     className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold hidden sm:inline-block ${theme === "dark" ? "bg-orange-500/30 text-orange-200" : "bg-orange-200 text-orange-800"}`}
                   >
                     De otros
                   </span>
                 )}
-                <button
-                  onClick={handleRecargarTareas}
-                  disabled={isLoading}
-                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${theme === "dark" ? "hover:bg-orange-500/20 text-orange-400" : "hover:bg-orange-100 text-orange-600"}`}
-                  title="Recargar"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
-                  />
-                </button>
+                {!esHistorial && (
+                  <button
+                    onClick={handleRecargarTareas}
+                    disabled={isLoading}
+                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${theme === "dark" ? "hover:bg-orange-500/20 text-orange-400" : "hover:bg-orange-100 text-orange-600"}`}
+                    title="Recargar"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
+                    />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -576,27 +628,30 @@ export function PanelReporteTareasTarde({
             {/* Info box */}
             <div
               className={`text-[11px] px-2.5 py-2 rounded-lg mb-2.5 border ${
-                theme === "dark"
-                  ? mostrandoReportesDeOtros
-                    ? "bg-orange-900/20 text-orange-200 border-orange-700/30"
-                    : "bg-blue-950/40 text-blue-200 border-blue-800/30"
-                  : mostrandoReportesDeOtros
-                    ? "bg-orange-50 text-orange-800 border-orange-200"
-                    : "bg-blue-50 text-blue-800 border-blue-200"
+                esHistorial
+                  ? theme === "dark"
+                    ? "bg-gray-800/40 text-gray-500 border-gray-700/40"
+                    : "bg-gray-50 text-gray-400 border-gray-200"
+                  : theme === "dark"
+                    ? mostrandoReportesDeOtros
+                      ? "bg-orange-900/20 text-orange-200 border-orange-700/30"
+                      : "bg-blue-950/40 text-blue-200 border-blue-800/30"
+                    : mostrandoReportesDeOtros
+                      ? "bg-orange-50 text-orange-800 border-orange-200"
+                      : "bg-blue-50 text-blue-800 border-blue-200"
               }`}
             >
               <div className="flex items-center gap-1.5 mb-1">
-                {mostrandoReportesDeOtros ? (
-                  <Users className="w-3 h-3 flex-shrink-0" />
-                ) : (
-                  <TrendingUp className="w-3 h-3 flex-shrink-0" />
-                )}
+                <FileText className="w-3 h-3 flex-shrink-0" />
                 <strong className="font-bold text-[11px]">
-                  {mostrandoReportesDeOtros
-                    ? "Trabajo colaborativo"
-                    : `Pendientes por reportar: ${estadisticas.totalNoReportadas}`}
+                  {esHistorial
+                    ? `Registro del día — ${estadisticas.totalTareas} tarea${estadisticas.totalTareas !== 1 ? "s" : ""}`
+                    : mostrandoReportesDeOtros
+                      ? "Trabajo colaborativo"
+                      : `Pendientes por reportar: ${estadisticas.totalNoReportadas}`}
                 </strong>
-                {!mostrandoReportesDeOtros &&
+                {!esHistorial &&
+                  !mostrandoReportesDeOtros &&
                   estadisticas.totalNoReportadas > 0 && (
                     <span
                       className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${theme === "dark" ? "bg-amber-500/20 text-amber-300" : "bg-amber-500/20 text-amber-800"}`}
@@ -606,7 +661,21 @@ export function PanelReporteTareasTarde({
                   )}
               </div>
               <p className="text-[11px] leading-relaxed opacity-90">
-                {mostrandoReportesDeOtros ? (
+                {esHistorial ? (
+                  <>
+                    <strong>Tú:</strong>{" "}
+                    {currentUserEmail
+                      ? currentUserEmail.split("@")[0]
+                      : "Usuario"}
+                    {estadisticas.totalReportadas > 0 && (
+                      <span
+                        className={`ml-2 ${theme === "dark" ? "text-gray-600" : "text-gray-400"}`}
+                      >
+                        · {estadisticas.totalReportadas} reportadas
+                      </span>
+                    )}
+                  </>
+                ) : mostrandoReportesDeOtros ? (
                   <>
                     <strong>Tú:</strong>{" "}
                     {currentUserEmail
@@ -629,7 +698,6 @@ export function PanelReporteTareasTarde({
                 )}
               </p>
             </div>
-
             {/* Lista de actividades */}
             <div className="space-y-2">
               {actividadesConTareas.map(
@@ -653,6 +721,7 @@ export function PanelReporteTareasTarde({
                       tareasReportadasMap={tareasReportadasMap}
                       currentUserEmail={currentUserEmail}
                       mostrandoReportesDeOtros={mostrandoReportesDeOtros}
+                      esHistorial={esHistorial}
                     />
                   );
                 },
@@ -672,6 +741,7 @@ export function PanelReporteTareasTarde({
             guardandoReporte={guardandoReporte}
             turno={turno}
             sessionId={assistantAnalysis?.sessionId ?? null}
+            rate={rate}
           />
 
           <PiePanelReporte
@@ -695,6 +765,7 @@ export function PanelReporteTareasTarde({
             estadisticasServidor={estadisticasServidor}
             turno={turno}
             onOpenReporteModal={handleAbrirModalReporte}
+            esHistorial={esHistorial}
           />
         </div>
       ) : (
@@ -721,6 +792,7 @@ interface ActivityItemProps {
   tareasReportadasMap: Map<string, any>;
   currentUserEmail: string;
   mostrandoReportesDeOtros?: boolean;
+  esHistorial?: boolean;
 }
 
 function ActivityItem({
@@ -733,6 +805,7 @@ function ActivityItem({
   tareasReportadasMap,
   currentUserEmail,
   mostrandoReportesDeOtros = false,
+  esHistorial = false,
 }: ActivityItemProps) {
   const theme = useTheme();
 
@@ -752,11 +825,27 @@ function ActivityItem({
 
   return (
     <div
-      className={`rounded-lg border overflow-hidden ${theme === "dark" ? "bg-[#232323] border-orange-900/25" : "bg-white border-orange-100 shadow-sm"}`}
+      className={`rounded-lg border overflow-hidden ${
+        esHistorial
+          ? theme === "dark"
+            ? "bg-[#202020] border-gray-700/30"
+            : "bg-gray-50 border-gray-200"
+          : theme === "dark"
+            ? "bg-[#232323] border-orange-900/25"
+            : "bg-white border-orange-100 shadow-sm"
+      }`}
     >
       {/* activity header */}
       <div
-        className={`px-2.5 py-2 ${theme === "dark" ? "border-b border-orange-900/15" : "border-b border-orange-50"}`}
+        className={`px-2.5 py-2 ${
+          esHistorial
+            ? theme === "dark"
+              ? "border-b border-gray-700/20"
+              : "border-b border-gray-100"
+            : theme === "dark"
+              ? "border-b border-orange-900/15"
+              : "border-b border-orange-50"
+        }`}
       >
         <div className="flex items-center gap-2">
           <div
@@ -767,12 +856,28 @@ function ActivityItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <h5
-                className={`font-bold text-xs leading-tight truncate ${theme === "dark" ? "text-orange-200" : "text-orange-900"}`}
+                className={`font-bold text-xs leading-tight truncate ${
+                  esHistorial
+                    ? theme === "dark"
+                      ? "text-gray-400"
+                      : "text-gray-600"
+                    : theme === "dark"
+                      ? "text-orange-200"
+                      : "text-orange-900"
+                }`}
               >
                 {actividad.titulo}
               </h5>
               <span
-                className={`text-[10px] font-semibold flex items-center gap-0.5 flex-shrink-0 px-1.5 py-0.5 rounded-md ${theme === "dark" ? "bg-orange-900/40 text-orange-300" : "bg-orange-100 text-orange-700"}`}
+                className={`text-[10px] font-semibold flex items-center gap-0.5 flex-shrink-0 px-1.5 py-0.5 rounded-md ${
+                  esHistorial
+                    ? theme === "dark"
+                      ? "bg-gray-700/40 text-gray-500"
+                      : "bg-gray-100 text-gray-500"
+                    : theme === "dark"
+                      ? "bg-orange-900/40 text-orange-300"
+                      : "bg-orange-100 text-orange-700"
+                }`}
               >
                 <Clock className="w-2.5 h-2.5" />
                 {actividad.horario}
@@ -852,6 +957,7 @@ function ActivityItem({
                       tareasSeleccionadas?.has?.(tarea.id) || false
                     }
                     onToggleSeleccion={() => onToggleTarea(tarea)}
+                    esHistorial={esHistorial}
                   />
                 );
               })}
@@ -895,6 +1001,7 @@ function ActivityItem({
                     esActividadIndividual={esActividadIndividual}
                     colaboradoresReales={colaboradoresReales}
                     currentUserEmail={currentUserEmail}
+                    esHistorial={esHistorial}
                   />
                 );
               })}
@@ -915,6 +1022,7 @@ interface TareaReportadaProps {
   currentUserEmail: string;
   estaSeleccionada?: boolean;
   onToggleSeleccion?: () => void;
+  esHistorial?: boolean;
 }
 
 function TareaReportada({
@@ -924,6 +1032,7 @@ function TareaReportada({
   currentUserEmail,
   estaSeleccionada = false,
   onToggleSeleccion,
+  esHistorial = false,
 }: TareaReportadaProps) {
   const theme = useTheme();
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
@@ -988,7 +1097,7 @@ function TareaReportada({
             {tarea.nombre}
           </p>
 
-          {esRealmenteMiReporte && (
+          {esRealmenteMiReporte && !esHistorial && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -1049,14 +1158,14 @@ function TareaReportada({
             )}
           </div>
 
-          {reporteInfo.texto && (
+          {(reporteInfo.queHizo || reporteInfo.texto) && (
             <div className="mt-1.5">
               <button
                 onClick={() => setMostrarDescripcion(!mostrarDescripcion)}
                 className={`flex items-center gap-1 text-[10px] font-semibold py-0.5 rounded-md transition-colors min-h-[28px] ${theme === "dark" ? "text-gray-400 hover:text-gray-200" : "text-gray-600 hover:text-gray-900"}`}
               >
                 <MessageSquare className="w-3 h-3" />
-                {mostrarDescripcion ? "Ocultar" : "Ver explicación"}
+                {mostrarDescripcion ? "Ocultar" : "Ver reporte"}
                 <ChevronDown
                   className={`w-3 h-3 transition-transform ${mostrarDescripcion ? "rotate-180" : ""}`}
                 />
@@ -1069,13 +1178,13 @@ function TareaReportada({
                     className={`font-semibold mb-0.5 text-[10px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
                   >
                     {esRealmenteMiReporte
-                      ? "Mi explicación:"
-                      : `Explicación de ${nombreFormateado}:`}
+                      ? "Mi reporte:"
+                      : `Reporte de ${nombreFormateado}:`}
                   </p>
                   <p
                     className={`italic ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
                   >
-                    "{reporteInfo.texto}"
+                    "{reporteInfo.queHizo || reporteInfo.texto}"
                   </p>
                   {reporteInfo.encontradoEn && (
                     <p
@@ -1103,6 +1212,7 @@ interface TareaPendienteProps {
   esActividadIndividual: boolean;
   colaboradoresReales: string[];
   currentUserEmail: string;
+  esHistorial?: boolean;
 }
 
 function TareaPendiente({
@@ -1112,6 +1222,7 @@ function TareaPendiente({
   esActividadIndividual,
   colaboradoresReales,
   currentUserEmail,
+  esHistorial = false,
 }: TareaPendienteProps) {
   const theme = useTheme();
 
@@ -1135,16 +1246,20 @@ function TareaPendiente({
   return (
     <div
       className={`px-2.5 py-2 rounded-lg border transition-all duration-150 ${
-        estaBloqueada
-          ? `opacity-50 ${theme === "dark" ? "bg-gray-900/50 border-gray-700" : "bg-gray-50 border-gray-200"}`
-          : estaSeleccionada
-            ? `border-orange-500 shadow-sm ${theme === "dark" ? "bg-orange-900/15" : "bg-orange-50"}`
-            : theme === "dark"
-              ? "bg-[#202020] border-[#333] active:bg-[#2a2a2a]"
-              : "bg-white border-gray-200 active:bg-orange-50/50"
+        esHistorial && !estaBloqueada
+          ? theme === "dark"
+            ? "bg-[#202020] border-[#333] opacity-60"
+            : "bg-gray-50 border-gray-200 opacity-60"
+          : estaBloqueada
+            ? `opacity-50 ${theme === "dark" ? "bg-gray-900/50 border-gray-700" : "bg-gray-50 border-gray-200"}`
+            : estaSeleccionada
+              ? `border-orange-500 shadow-sm ${theme === "dark" ? "bg-orange-900/15" : "bg-orange-50"}`
+              : theme === "dark"
+                ? "bg-[#202020] border-[#333] active:bg-[#2a2a2a]"
+                : "bg-white border-gray-200 active:bg-orange-50/50"
       }`}
       onClick={() => {
-        if (!estaBloqueada) onToggleSeleccion();
+        if (!estaBloqueada && !esHistorial) onToggleSeleccion();
       }}
       role={estaBloqueada ? undefined : "checkbox"}
       aria-checked={estaSeleccionada}
@@ -1202,9 +1317,15 @@ function TareaPendiente({
                 Explicada
               </span>
             ) : (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/25 flex items-center gap-0.5">
-                <Mic className="w-2.5 h-2.5" />
-                Pendiente
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border flex items-center gap-0.5 ${
+                  esHistorial
+                    ? "bg-gray-500/15 text-gray-500 border-gray-500/25"
+                    : "bg-amber-500/15 text-amber-500 border-amber-500/25"
+                }`}
+              >
+                <FileText className="w-2.5 h-2.5" />
+                {esHistorial ? "Sin reportar" : "Pendiente"}
               </span>
             )}
             <span
@@ -1312,6 +1433,7 @@ interface PiePanelReporteProps {
   estadisticasServidor?: any;
   turno?: "mañana" | "tarde";
   onOpenReporteModal?: () => void;
+  esHistorial?: boolean;
 }
 
 function PiePanelReporte({
@@ -1334,6 +1456,7 @@ function PiePanelReporte({
   estadisticasServidor = null,
   turno,
   onOpenReporteModal,
+  esHistorial,
 }: PiePanelReporteProps) {
   const theme = useTheme();
   const countSeleccionadas = tareasSeleccionadas?.size ?? 0;
@@ -1377,6 +1500,21 @@ function PiePanelReporte({
       </>
     );
   };
+
+  if (esHistorial) {
+    return (
+      <div
+        className={`px-3 py-2.5 border-t ${theme === "dark" ? "border-gray-700/35 bg-[#1a1a1a]" : "border-gray-200 bg-gray-50/40"}`}
+      >
+        <p
+          className={`text-[10px] text-center flex items-center justify-center gap-1.5 ${theme === "dark" ? "text-gray-600" : "text-gray-400"}`}
+        >
+          <FileText className="w-3 h-3" />
+          Registro histórico — solo lectura
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1610,6 +1748,7 @@ export function TasksPanel({
   onSeleccionarTodas = () => {},
   onDeseleccionarTodas = () => {},
   onExplicarTareasSeleccionadas = () => {},
+  esHistorial = false,
 }: any) {
   const theme = useTheme();
   const todosColaboradores = useMemo(() => {
@@ -1632,6 +1771,7 @@ export function TasksPanel({
           onDeseleccionarTodas={onDeseleccionarTodas}
           onExplicarTareasSeleccionadas={onExplicarTareasSeleccionadas}
           todosColaboradores={todosColaboradores}
+          esHistorial={esHistorial}
         />
       </div>
     </div>
