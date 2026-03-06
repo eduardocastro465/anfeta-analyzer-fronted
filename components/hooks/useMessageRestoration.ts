@@ -18,6 +18,7 @@ interface UseMessageRestorationProps {
   setAssistantAnalysis: (analysis: AssistantAnalysis | null) => void;
   assistantAnalysisRef: React.MutableRefObject<AssistantAnalysis | null>;
   scrollRef: React.RefObject<HTMLDivElement | null>; // Acepta null
+  crearPanel?: (analysis: AssistantAnalysis) => React.ReactNode;
 }
 
 /**
@@ -57,6 +58,7 @@ export function useMessageRestoration({
   setAssistantAnalysis,
   assistantAnalysisRef,
   scrollRef,
+  crearPanel,
 }: UseMessageRestorationProps) {
   // Ref para evitar procesar la misma conversación múltiples veces
   const restorationProcessedRef = useRef<string | null>(null);
@@ -91,8 +93,7 @@ export function useMessageRestoration({
       analisisRestaurado ?? null, // Convertir undefined a null
       displayName,
       email,
-      onOpenReport,
-      onStartVoiceMode,
+      crearPanel,
     );
 
     // ========== PASO 2: ACTUALIZAR ESTADO ==========
@@ -131,6 +132,7 @@ export function useMessageRestoration({
     email,
     onOpenReport,
     onStartVoiceMode,
+    crearPanel,
     setMessages,
     setStep,
     setIsTyping,

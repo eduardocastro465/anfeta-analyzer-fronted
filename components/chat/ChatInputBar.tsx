@@ -15,7 +15,7 @@ interface ChatInputBarProps {
   canUserType: boolean;
   theme: "light" | "dark";
   inputRef: React.RefObject<HTMLInputElement | null>;
-  chatMode?: "normal" | "ia";
+  chatMode?: "proyecto" | "general";
   onStartRecording: () => void;
   onCancelRecording: () => void;
   onToggleChatMode?: () => void;
@@ -36,25 +36,24 @@ export function ChatInputBar({
   canUserType,
   theme,
   inputRef,
-  chatMode = "normal",
+  chatMode = "proyecto",
   isLoadingIA = false,
   onToggleChatMode,
   isSpeaking = false,
 }: ChatInputBarProps) {
   // Validar si el usuario puede escribir
-  const isInteractionDisabled =
-    !canUserType || isSpeaking || isLoadingIA || isTranscribing;
+  const isInteractionDisabled = !canUserType || isLoadingIA || isTranscribing;
   const hasTopStatus =
-    isRecording || isTranscribing || isSpeaking || chatMode === "ia";
+    isRecording || isTranscribing || isSpeaking || chatMode === "proyecto";
   const [isPendingClick, setIsPendingClick] = useState(false);
 
   const dark = theme === "dark";
 
   const getPlaceholder = () => {
     if (isTranscribing) return "Transcribiendo...";
-    if (isSpeaking) return "Asistente hablando...";
+    if (isSpeaking) return "Asistente hablando..."; // solo visual, no bloquea
     if (!canUserType) return "Analizando...";
-    if (chatMode === "ia") return "Pregunta sobre tus tareas...";
+    if (chatMode === "proyecto") return "Pregunta sobre tus tareas...";
     return "Escribe tu mensaje...";
   };
 
@@ -73,6 +72,12 @@ export function ChatInputBar({
     }
   }, [isLoadingIA, isRecording, isTranscribing]);
 
+  useEffect(() => {
+    if (userInput.length > 0) {
+      setIsPendingClick(false);
+    }
+  }, [userInput]);
+
   const handleMicClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (isRecording) {
@@ -82,8 +87,6 @@ export function ChatInputBar({
       onStartRecording();
     }
   };
-
-  const showLoadingAnim = isPendingClick || isLoadingIA;
 
   return (
     <div
@@ -211,7 +214,7 @@ export function ChatInputBar({
 
           {/* Modo IA */}
           <div
-            className={`absolute inset-0 flex items-center transition-opacity duration-200 ${chatMode === "ia" && !isRecording && !isTranscribing && !isSpeaking ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+            className={`absolute inset-0 flex items-center transition-opacity duration-200 ${chatMode === "proyecto" && !isRecording && !isTranscribing && !isSpeaking ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
           >
             <div
               className={`w-full px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 sm:gap-3 ${dark ? "bg-[#6841ea]/10 border border-[#6841ea]/20" : "bg-purple-50 border border-purple-200"}`}
@@ -254,12 +257,12 @@ export function ChatInputBar({
               title={
                 isSpeaking
                   ? "Espera a que termine de hablar"
-                  : chatMode === "ia"
+                  : chatMode === "proyecto"
                     ? "Desactivar IA"
                     : "Activar IA"
               }
               className={`h-10 w-10 sm:h-11 sm:w-11 p-0 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                chatMode === "ia"
+                chatMode === "proyecto"
                   ? "bg-[#6841ea] hover:bg-[#5a36d4] text-white"
                   : dark
                     ? "bg-[#2a2a2a] hover:bg-[#353535] text-gray-400 hover:text-white border border-[#353535]"
@@ -273,12 +276,7 @@ export function ChatInputBar({
           <Button
             type="button"
             onClick={handleMicClick}
-            disabled={
-              isTranscribing ||
-              isSpeaking ||
-              isLoadingIA ||
-              isInteractionDisabled
-            }
+            disabled={isTranscribing || isLoadingIA || !canUserType}
             title={isRecording ? "Cancelar grabación" : "Grabar audio"}
             className={`relative h-10 w-10 sm:h-11 sm:w-11 rounded-full p-0 transition-shadow duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
               isRecording
@@ -286,7 +284,7 @@ export function ChatInputBar({
                 : "bg-gradient-to-br from-[#6841ea] to-[#5a36d4] hover:shadow-lg hover:shadow-[#6841ea]/40"
             }`}
           >
-            {showLoadingAnim ? (
+            {isPendingClick ? (
               <>
                 <span className="absolute inset-0 rounded-full border-2 border-white/20 border-t-white animate-spin" />
                 <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-white/40 relative z-10" />

@@ -165,15 +165,26 @@ export function useVoskRealtime({
           sampleRate: SAMPLE_RATE,
         },
       });
+
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return null;
+      }
+
       streamRef.current = stream;
 
       const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        audioCtx.close();
+        return null;
+      }
       audioCtxRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
-    processor.onaudioprocess = (e) => {
+      processor.onaudioprocess = (e) => {
         if (cancelledRef.current || isStopping.current) return;
 
         const input = e.inputBuffer.getChannelData(0);

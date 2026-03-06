@@ -35,6 +35,7 @@ interface ReporteActividadesModalProps {
   actividadesConTareas?: any[];
   tareasReportadasMap?: Map<string, any>;
   sessionId?: string | null;
+  rate?: number;
 }
 
 type PasoModal =
@@ -67,6 +68,7 @@ export function ReporteActividadesModal({
   actividadesConTareas = [],
   tareasReportadasMap = new Map(),
   sessionId,
+  rate,
 }: ReporteActividadesModalProps) {
   const isDark = theme === "dark";
 
@@ -105,7 +107,15 @@ export function ReporteActividadesModal({
   const voskFinalCallbackRef = useRef<(text: string) => void>(() => {});
 
   // ==================== HOOKS DE VOZ ====================
-  const { speak: speakText, stop: stopVoice } = useVoiceSynthesis();
+  const {
+    speak: speakText,
+    stop: stopVoice,
+    changeRate,
+  } = useVoiceSynthesis(rate ?? 1.2);
+
+  useEffect(() => {
+    if (rate != null) changeRate(rate);
+  }, [rate]);
 
   const {
     status: voskStatus,
@@ -245,21 +255,19 @@ export function ReporteActividadesModal({
       return tareas;
     }
     return actividadesDiarias.flatMap((actividad) =>
-      actividad.pendientes
-        .filter((p) => p.descripcion && p.descripcion.trim().length > 0)
-        .map((p) => ({
-          pendienteId: p.pendienteId,
-          nombre: p.nombre,
-          descripcion: p.descripcion || "",
-          duracionMin: p.duracionMin,
-          terminada: p.terminada,
-          motivoNoCompletado: p.motivoNoCompletado || null,
-          actividadId: actividad.actividadId,
-          completadoLocal: false,
-          motivoLocal: "",
-          actividadTitulo: actividad.titulo,
-          actividadHorario: `${actividad.horaInicio} - ${actividad.horaFin}`,
-        })),
+      actividad.pendientes.map((p) => ({
+        pendienteId: p.pendienteId,
+        nombre: p.nombre,
+        descripcion: p.descripcion || "",
+        duracionMin: p.duracionMin,
+        terminada: p.terminada,
+        motivoNoCompletado: p.motivoNoCompletado || null,
+        actividadId: actividad.actividadId,
+        completadoLocal: false,
+        motivoLocal: "",
+        actividadTitulo: actividad.titulo,
+        actividadHorario: `${actividad.horaInicio} - ${actividad.horaFin}`,
+      })),
     );
   }, [
     tareasSeleccionadas,
