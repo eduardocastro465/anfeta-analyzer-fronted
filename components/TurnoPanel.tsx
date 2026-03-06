@@ -18,6 +18,7 @@ interface TurnoPanelProps {
   speakText: (text: string) => void;
   rate: number;
   esHistorial?: boolean;
+  onRefrescarDatos?: () => void;
 }
 
 export function TurnoPanel({
@@ -33,6 +34,7 @@ export function TurnoPanel({
   speakText,
   rate,
   esHistorial = false,
+  onRefrescarDatos,
 }: TurnoPanelProps) {
   const theme = useTheme();
 
@@ -169,6 +171,7 @@ export function TurnoPanel({
           isSpeaking={isSpeaking}
           speakText={speakText}
           esHistorial={esHistorial}
+          onRefrescarDatos={onRefrescarDatos}
         />
       ) : (
         <PanelReporteTareasTarde

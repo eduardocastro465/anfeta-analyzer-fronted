@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
+import { applyThemeToDom } from "@/util/theme";
 
 interface LoginFormProps {
   onLogin: (colaborador: Colaborador, actividades: Actividad[]) => void;
@@ -34,7 +35,12 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const savedTheme = localStorage.getItem("tema");
+    const isDark =
+      savedTheme === "dark" ||
+      ((!savedTheme || savedTheme === "AUTO") &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+
     setTheme(isDark ? "dark" : "light");
     document.documentElement.classList.toggle("dark", isDark);
 
@@ -78,7 +84,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
+    applyThemeToDom(newTheme);
   };
 
   const loadColaboradores = async () => {
@@ -152,10 +158,10 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   // Mostrar pantalla de carga mientras se verifica la sesión
   if (isCheckingSession) {
     return (
-      <div className="min-h-screen bg-white dark:bg-neutral-900 font-['Arial'] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-[#6841ea] mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-neutral-900">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 animate-spin text-[#6841ea]" />
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Verificando sesión...
           </p>
         </div>
@@ -320,9 +326,18 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                 {isLoggingIn ? (
                   <div className="w-full h-11 rounded-lg bg-[#6841ea] flex items-center justify-center">
                     <div className="flex space-x-1">
-                      <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      <span
+                        className="w-2 h-2 bg-white rounded-full animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      ></span>
+                      <span
+                        className="w-2 h-2 bg-white rounded-full animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      ></span>
+                      <span
+                        className="w-2 h-2 bg-white rounded-full animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      ></span>
                     </div>
                   </div>
                 ) : (

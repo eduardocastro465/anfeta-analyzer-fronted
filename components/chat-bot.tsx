@@ -113,7 +113,6 @@ export function ChatBot({
   const welcomeSentRef = useRef(false);
   const actualizarDatosRef = useRef<() => Promise<void>>(async () => {});
   const panelRefreshedForRef = useRef<string | null>(null);
-  const ultimoChecksumRef = useRef<string | null>(null);
   // ==================== HOOKS ====================
   const router = useRouter();
   const { toast } = useToast();
@@ -234,11 +233,18 @@ export function ChatBot({
     panelRefreshedForRef.current = null;
   }, [conversacionActiva]);
 
+  
+  useEffect(() => {
+    if (engine === "vosk" && voskStatus === "idle") {
+      voskRealtime.loadModel();
+    }
+  }, []);
   useEffect(() => {
     if (voiceMode.voiceMode && engine === "vosk" && voskStatus === "idle") {
       voskRealtime.loadModel();
     }
   }, [voiceMode.voiceMode, engine]);
+
 
   useEffect(() => {
     if (theme === "dark") {
@@ -380,6 +386,9 @@ export function ChatBot({
       onStartVoiceModeWithTasks={handleStartVoiceModeWithTasks}
       onReportCompleted={async () => {
         await fetchAssistantAnalysis(turno === "mañana", false, true);
+      }}
+      onRefrescarDatos={async () => {
+        await verificarCambiosAnfeta();
       }}
       stopVoice={stopVoice}
       isSpeaking={isSpeaking}
@@ -1553,6 +1562,7 @@ export function ChatBot({
     showAll = false,
     isRestoration = false,
     silentUpdate = false,
+    consultarAlApi = false,
   ) => {
     if (fetchingAnalysisRef.current) return;
     fetchingAnalysisRef.current = true;
@@ -1564,6 +1574,7 @@ export function ChatBot({
       const data = await obtenerActividadesConRevisiones({
         email: colaborador.email,
         showAll,
+        consultarAlApi,
       });
       const colabs = extraerColaboradores(data);
       setColaboradoresUnicos(colabs);

@@ -38,6 +38,7 @@ interface TasksPanelWithDescriptionsProps {
   isSpeaking?: boolean;
   speakText?: (text: string) => void;
   esHistorial?: boolean;
+  onRefrescarDatos?: () => void;
 }
 
 export function TasksPanelWithDescriptions({
@@ -50,6 +51,7 @@ export function TasksPanelWithDescriptions({
   isSpeaking = false,
   speakText = () => {},
   esHistorial = false,
+  onRefrescarDatos,
 }: TasksPanelWithDescriptionsProps) {
   const theme = useTheme();
 
@@ -62,6 +64,7 @@ export function TasksPanelWithDescriptions({
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(
     null,
   );
+  const [refreshing, setRefreshing] = useState(false);
   const currentUserEmail = userEmail || "";
   const lastDataHashRef = useRef<string>("");
   const renderCountRef = useRef(0);
@@ -219,6 +222,22 @@ export function TasksPanelWithDescriptions({
     [onStartVoiceModeWithTasks],
   );
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.race([
+        onRefrescarDatos?.(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 5000),
+        ),
+      ]);
+    } catch {
+      // timeout o error, no importa
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className="w-full animate-in slide-in-from-bottom-2 duration-300">
       {/* Alerta flotante */}
@@ -286,11 +305,27 @@ export function TasksPanelWithDescriptions({
                 )}
               </h4>
               {ultimaActualizacion && !esHistorial && (
-                <span
-                  className={`text-[10px] hidden sm:inline ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
-                >
-                  {ultimaActualizacion.toLocaleTimeString()}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span
+                    className={`text-[10px] hidden sm:inline ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
+                  >
+                    {ultimaActualizacion.toLocaleTimeString()}
+                  </span>
+                  {onRefrescarDatos && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      className={`h-5 w-5 p-0 ${theme === "dark" ? "text-gray-500 hover:text-gray-200 hover:bg-[#2a2a2a]" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}
+                      title="Forzar actualización desde API"
+                    >
+                      <RefreshCw
+                        className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+                      />
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">

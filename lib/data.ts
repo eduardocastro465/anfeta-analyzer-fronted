@@ -15,13 +15,12 @@ export function getColaboradores(): Colaborador[] {
     firstName: extractNameFromEmail(email),
     lastName: "",
     nombre: extractNameFromEmail(email),
+    collaboratorId: `colaborador-${index}`,
   }))
 }
 
-// Helper to extract name from email (e.g., "jjohn@pprin.com" -> "John")
 function extractNameFromEmail(email: string): string {
   const localPart = email.split("@")[0]
-  // Remove first letter if duplicated (jjohn -> john, eedwi -> edwi, aandr -> andr)
   const cleanName = localPart.replace(/^(.)\1/, "$1")
   return cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
 }

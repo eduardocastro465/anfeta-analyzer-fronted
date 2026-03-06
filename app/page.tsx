@@ -86,38 +86,6 @@ export default function Home() {
     window.location.href = "/reporte-del-dia";
   };
 
-  // 🔹 Loader
-  if (isLoading) {
-    const savedTheme =
-      typeof window !== "undefined"
-        ? (localStorage.getItem("tema") ?? "AUTO")
-        : "AUTO";
-    const prefersDark =
-      typeof window !== "undefined"
-        ? window.matchMedia("(prefers-color-scheme: dark)").matches
-        : false;
-    const isDark =
-      savedTheme === "dark" || (savedTheme === "AUTO" && prefersDark);
-
-    return (
-      <div
-        className={`flex h-screen flex-col items-center justify-center gap-4 transition-colors ${
-          isDark ? "bg-[#0f0f0f] text-gray-300" : "bg-gray-50 text-gray-600"
-        }`}
-      >
-        {/* Spinner */}
-        <div
-          className={`w-10 h-10 rounded-full border-4 border-t-transparent animate-spin ${
-            isDark ? "border-blue-500" : "border-blue-400"
-          }`}
-        />
-        <p className="text-sm font-medium tracking-wide animate-pulse">
-          Cargando sesión...
-        </p>
-      </div>
-    );
-  }
-
   // 🔹 Login
   if (!isLoggedIn || !currentColaborador) {
     return <LoginForm onLogin={handleLogin} />;
