@@ -113,6 +113,11 @@ export function ChatBot({
   const welcomeSentRef = useRef(false);
   const actualizarDatosRef = useRef<() => Promise<void>>(async () => {});
   const panelRefreshedForRef = useRef<string | null>(null);
+  const autoSendTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAutoSendPending, setIsAutoSendPending] = useState(false);
+  const autoSendCancelledRef = useRef(false);
+  const transcriptJustSetRef = useRef(false);
+
   // ==================== HOOKS ====================
   const router = useRouter();
   const { toast } = useToast();
@@ -147,9 +152,9 @@ export function ChatBot({
     useVoiceEngine({
       onVoskPartial: (text) => {
         // Solo actualizar el input del chat si NO estamos en modo guiado
-        if (!voskGuidedModeRef.current) {
-          setUserInput(text);
-        }
+        if (voskGuidedModeRef.current) return;
+        if (botRespondingRef.current || isSpeaking) return;
+        setUserInput(text);
       },
       onVoskFinal: async (transcript) => {
         if (voskGuidedModeRef.current) {
@@ -157,26 +162,12 @@ export function ChatBot({
           await processVoiceExplanation(transcript);
           return;
         }
-        // Chat general
-        setUserInput("");
         if (!transcript.trim()) return;
-        addMessage("user", transcript);
-        setIsTyping(true);
-        setIsLoadingIA(true);
-        try {
-          const sessionId =
-            conversacionActiva || assistantAnalysis?.sessionId || null;
-          const response = await resolverIA(transcript, sessionId);
-          if (response.respuesta) {
-            addMessage("bot", response.respuesta);
-            speakText(response.respuesta);
-          }
-        } catch {
-          addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
-        } finally {
-          setIsLoadingIA(false);
-          setIsTyping(false);
-        }
+        if (botRespondingRef.current || isSpeaking) return;
+        voskIsRecordingRef.current = false;
+        transcriptJustSetRef.current = true;
+        setUserInput(transcript);
+        inputRef.current?.blur();
       },
     });
 
@@ -228,6 +219,10 @@ export function ChatBot({
 
   const colaboradoresUnicosRef = useRef<string[]>([]);
   const turnoActualRef = useRef<"mañana" | "tarde">(turnoActual);
+  const AUTO_SEND_DELAY_MS = 4000; // 4 segundos
+  const [autoSendCountdown, setAutoSendCountdown] = useState(0);
+  const voskIsRecordingRef = useRef(false);
+  const botRespondingRef = useRef(false);
 
   useEffect(() => {
     panelRefreshedForRef.current = null;
@@ -433,20 +428,6 @@ export function ChatBot({
         });
         return hasPanel;
       });
-
-      // if (reversedIndex === -1) {
-      //   // No hay panel existente → agregar uno nuevo
-      //   return [
-      //     ...prevMessages,
-      //     {
-      //       id: `panel-${Date.now()}`,
-      //       type: "bot" as Message["type"],
-      //       content: nuevoContenido,
-      //       timestamp: new Date(),
-      //       isWide: true,
-      //     },
-      //   ];
-      // }
       if (reversedIndex === -1) return prevMessages;
 
       // Actualizar el panel existente
@@ -597,46 +578,9 @@ export function ChatBot({
     startRecording: audioRecorder.startRecording,
     enableRealtimeTranscription: true,
     onTranscriptionComplete: async (transcript) => {
-      addMessage("user", transcript);
-      setIsTyping(true);
-      setIsLoadingIA(true);
-      try {
-        const sessionId =
-          conversacionActiva || assistantAnalysis?.sessionId || null;
-
-        const response = await resolverIA(transcript, sessionId);
-
-        if (response.respuesta) {
-          addMessage("bot", response.respuesta);
-          speakText(response.respuesta);
-          if (response.sessionId && !conversacionActiva) {
-            onNuevaConversacion?.({
-              sessionId: response.sessionId,
-              userId: colaborador.email,
-              estadoConversacion: "activa",
-              createdAt: new Date().toISOString(),
-              nombreConversacion:
-                response.nombreConversacion || "Nueva conversación",
-            });
-          }
-          if (
-            response.sessionId &&
-            conversacionActiva &&
-            response.nombreConversacion
-          ) {
-            onActualizarNombre?.(
-              response.sessionId,
-              response.nombreConversacion,
-            );
-          }
-        }
-      } catch {
-        speakText("Lo siento, hubo un error al procesar tu mensaje.");
-        addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
-      } finally {
-        setIsLoadingIA(false);
-        setIsTyping(false);
-      }
+      transcriptJustSetRef.current = true;
+      setUserInput(transcript);
+      setTimeout(() => inputRef.current?.focus(), 50);
     },
     onError: (error) => {
       if (isManuallyCancellingRef.current) return;
@@ -653,6 +597,15 @@ export function ChatBot({
       });
     },
   });
+
+  const handleCancelAutoSend = () => {
+    autoSendCancelledRef.current = true;
+    if (autoSendTimerRef.current) {
+      clearTimeout(autoSendTimerRef.current);
+      autoSendTimerRef.current = null;
+    }
+    setIsAutoSendPending(false);
+  };
 
   // ==================== AUTO-SEND VOICE: MODO GUIADO ====================
   const autoSendVoiceGuided = useAutoSendVoice({
@@ -741,7 +694,7 @@ export function ChatBot({
                 );
               }
             }
-          }, 2000);
+          }, 3000);
         } else {
           voiceMode.setRetryCount((prev) => prev + 1);
           speakText(
@@ -780,6 +733,7 @@ export function ChatBot({
 
   const handleStartRecording = async () => {
     if (engine === "vosk") {
+      voskIsRecordingRef.current = true;
       // Asegurarse que el socket esté conectado antes de iniciar
       if (!wsService.estaConectado()) {
         wsService.conectar(colaborador.email);
@@ -787,21 +741,25 @@ export function ChatBot({
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       await voskRealtime.startRealtime();
+      setTimeout(() => inputRef.current?.focus(), 100);
     } else {
       await autoSendVoiceChat.startVoiceRecording();
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
 
   const handleStopRecording = async () => {
     if (engine === "vosk") {
-      await voskRealtime.stopRealtime(); // ← detiene Y envía via onVoskFinal
+      voskIsRecordingRef.current = false;
+      await voskRealtime.stopRealtime();
     } else {
-      await autoSendVoiceChat.cancelVoiceRecording();
+      await autoSendVoiceChat.processAndSendAudio();
     }
   };
 
   const handleCancelRecording = async () => {
     if (engine === "vosk") {
+      voskIsRecordingRef.current = false;
       voskRealtime.cancelRealtime();
     } else {
       await autoSendVoiceChat.cancelVoiceRecording();
@@ -810,10 +768,124 @@ export function ChatBot({
   };
 
   useEffect(() => {
-    if (engine !== "vosk" && !autoSendVoiceChat.isRecording) {
+    if (
+      engine !== "vosk" &&
+      !autoSendVoiceChat.isRecording &&
+      !autoSendVoiceChat.isTranscribing
+    ) {
       setUserInput(autoSendVoiceChat.transcript);
     }
-  }, [autoSendVoiceChat.transcript, autoSendVoiceChat.isRecording]);
+  }, [
+    autoSendVoiceChat.transcript,
+    autoSendVoiceChat.isRecording,
+    autoSendVoiceChat.isTranscribing,
+  ]);
+
+  const userInputRef = useRef(userInput);
+  useEffect(() => {
+    userInputRef.current = userInput;
+  }, [userInput]);
+
+  useEffect(() => {
+    if (autoSendVoiceChat.isRecording || autoSendVoiceChat.isTranscribing)
+      return;
+    if (voskIsRecordingRef.current) return;
+    if (botRespondingRef.current) return;
+    if (!userInput.trim()) return;
+    if (!transcriptJustSetRef.current) return;
+
+    transcriptJustSetRef.current = false;
+
+    if (autoSendTimerRef.current) {
+      clearTimeout(autoSendTimerRef.current);
+      autoSendTimerRef.current = null;
+    }
+
+    autoSendCancelledRef.current = false;
+    setIsAutoSendPending(true);
+    setAutoSendCountdown(Math.ceil(AUTO_SEND_DELAY_MS / 1000));
+
+    const countdownInterval = setInterval(() => {
+      setAutoSendCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    autoSendTimerRef.current = setTimeout(() => {
+      clearInterval(countdownInterval);
+      if (autoSendCancelledRef.current) {
+        autoSendCancelledRef.current = false;
+        setIsAutoSendPending(false);
+        return;
+      }
+
+      setIsAutoSendPending(false);
+      autoSendTimerRef.current = null;
+
+      const input = userInputRef.current.trim();
+      if (!input) return;
+
+      setUserInput("");
+      addMessage("user", input);
+      setIsTyping(true);
+      setIsLoadingIA(true);
+
+      const sessionId =
+        conversacionActiva || assistantAnalysis?.sessionId || null;
+      resolverIA(input, sessionId)
+        .then((response) => {
+          if (response?.respuesta) {
+            addMessage("bot", response.respuesta);
+            speakText(response.respuesta);
+            if (response.sessionId && !conversacionActiva) {
+              onNuevaConversacion?.({
+                sessionId: response.sessionId,
+                userId: colaborador.email,
+                estadoConversacion: "activa",
+                createdAt: new Date().toISOString(),
+                nombreConversacion:
+                  response.nombreConversacion || "Nueva conversación",
+              });
+            }
+            if (
+              response.sessionId &&
+              conversacionActiva &&
+              response.nombreConversacion
+            ) {
+              onActualizarNombre?.(
+                response.sessionId,
+                response.nombreConversacion,
+              );
+            }
+          } else {
+            addMessage("bot", "Lo siento, no pude procesar tu mensaje.");
+          }
+        })
+        .catch(() => {
+          addMessage("bot", "Lo siento, hubo un error al procesar tu mensaje.");
+        })
+        .finally(() => {
+          setIsLoadingIA(false);
+          setIsTyping(false);
+        });
+    }, AUTO_SEND_DELAY_MS);
+
+    return () => {
+      if (autoSendTimerRef.current) {
+        clearTimeout(autoSendTimerRef.current);
+        autoSendTimerRef.current = null;
+      }
+      setIsAutoSendPending(false);
+    };
+  }, [
+    userInput,
+    autoSendVoiceChat.isRecording,
+    autoSendVoiceChat.isTranscribing,
+  ]);
 
   const {
     isRecording,
@@ -1050,23 +1122,6 @@ export function ChatBot({
     return () => clearTimeout(timer);
   }, [conversacionActiva, esConversacionDeHoy, assistantAnalysis]); // ← agregar assistantAnalysis
 
-  // useEffect(() => {
-  //   if (!conversacionActiva || !assistantAnalysis || messages.length === 0)
-  //     return;
-  //   if (!esConversacionDeHoy) return;
-  //   if (mensajesRestaurados && mensajesRestaurados.length > 1) return;
-
-  //   const yaHayPanel = messages.some(
-  //     (msg) =>
-  //       msg.isWide &&
-  //       React.isValidElement(msg.content) &&
-  //       (msg.content as any).type === TurnoPanel,
-  //   );
-
-  //   if (!yaHayPanel) {
-  //     actualizarPanelTurno(turnoActual, assistantAnalysis);
-  //   }
-  // }, [conversacionActiva, assistantAnalysis]);
   // ==================== AUTO-SCROLL ====================
   useEffect(() => {
     if (scrollRef.current)
@@ -1662,17 +1717,25 @@ export function ChatBot({
     );
   };
 
-  const handleUserInput = async (e: React.FormEvent) => {
+  const handleUserInput = async (e: React.FormEvent, value?: string) => {
     try {
       e.preventDefault();
-      if (!userInput.trim()) return;
+      transcriptJustSetRef.current = false;
+      if (autoSendTimerRef.current) {
+        clearTimeout(autoSendTimerRef.current);
+        autoSendTimerRef.current = null;
+      }
+      setIsAutoSendPending(false);
+      const inputValue =
+        value?.trim() || userInput.trim() || userInputRef.current.trim();
+      if (!inputValue) return;
 
       if (engine === "vosk" ? voskRealtime.isRecording : isRecording) {
         isManuallyCancellingRef.current = true;
         if (engine === "vosk") {
           voskRealtime.cancelRealtime();
         } else {
-          autoSendVoiceChat.cancelVoiceRecording(); // ← sin await
+          autoSendVoiceChat.cancelVoiceRecording();
         }
         setTimeout(() => {
           isManuallyCancellingRef.current = false;
@@ -1681,15 +1744,18 @@ export function ChatBot({
 
       const mensajeAEnviar = isRecording
         ? autoSendVoiceChat.transcript.trim()
-        : userInput.trim();
+        : inputValue; // <- usar inputValue en lugar de userInput.trim()
 
       if (!mensajeAEnviar) return;
+      autoSendVoiceChat.cleanup();
       setUserInput("");
       addMessage("user", mensajeAEnviar);
       setIsTyping(true);
       setIsLoadingIA(true);
       const sessionId =
         conversacionActiva || assistantAnalysis?.sessionId || null;
+
+      botRespondingRef.current = true;
       const response = await resolverIA(mensajeAEnviar, sessionId);
 
       if (response?.respuesta) {
@@ -1725,6 +1791,7 @@ export function ChatBot({
         description: "Ocurrió un error al contactar al asistente.",
       });
     } finally {
+      botRespondingRef.current = false;
       setIsLoadingIA(false);
       setIsTyping(false);
     }
@@ -1890,18 +1957,6 @@ export function ChatBot({
             />
           </div>
         </div>
-
-        {/* <div className="relative h-0 flex justify-center overflow-visible z-10">
-          <div className="absolute -top-10">
-            <VoiceEngineSelector
-              engine={engine}
-              onEngineChange={setEngine}
-              voskStatus={voskStatus}
-              theme={theme}
-            />
-          </div>
-        </div> */}
-
         <ChatInputBar
           userInput={userInput}
           setUserInput={(v) => setUserInput(v)}
@@ -1922,7 +1977,12 @@ export function ChatBot({
           isSpeaking={isSpeaking}
           onToggleChatMode={toggleChatMode}
           onStopRecording={handleStopRecording}
-          voiceTranscript={autoSendVoiceChat.transcript}
+          voiceTranscript={
+            engine === "vosk" ? userInput : autoSendVoiceChat.transcript
+          }
+          isAutoSendPending={isAutoSendPending}
+          onCancelAutoSend={handleCancelAutoSend}
+          autoSendCountdown={autoSendCountdown}
         />
 
         {/* Diálogo de éxito */}

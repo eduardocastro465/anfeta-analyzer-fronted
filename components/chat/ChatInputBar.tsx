@@ -1,5 +1,6 @@
 // components/chat/ChatInputBar.tsx
-import React, { useEffect, useState } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Mic, Bot, Volume2, X } from "lucide-react";
@@ -7,7 +8,7 @@ import { Send, Mic, Bot, Volume2, X } from "lucide-react";
 interface ChatInputBarProps {
   userInput: string;
   setUserInput: (value: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (e: React.FormEvent, value?: string) => void;
   onVoiceClick: () => void;
   isRecording: boolean;
   isTranscribing?: boolean;
@@ -23,6 +24,9 @@ interface ChatInputBarProps {
   isSpeaking?: boolean;
   onStopRecording?: () => void;
   voiceTranscript?: string;
+  isAutoSendPending?: boolean;
+  onCancelAutoSend?: () => void;
+  autoSendCountdown?: number;
 }
 
 export function ChatInputBar({
@@ -42,12 +46,21 @@ export function ChatInputBar({
   onToggleChatMode,
   isSpeaking = false,
   voiceTranscript = "",
+  isAutoSendPending = false,
+  onStopRecording,
+  onCancelAutoSend,
+  autoSendCountdown,
 }: ChatInputBarProps) {
+  // UseRef
+  const isTypingRef = useRef(false);
+
   // Validar si el usuario puede escribir
   const isInteractionDisabled = !canUserType || isLoadingIA || isTranscribing;
   const hasTopStatus =
     isRecording || isTranscribing || isSpeaking || chatMode === "proyecto";
   const [isPendingClick, setIsPendingClick] = useState(false);
+  const [localInput, setLocalInput] = useState(userInput);
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const dark = theme === "dark";
 
@@ -68,6 +81,37 @@ export function ChatInputBar({
     return "bg-green-600";
   };
 
+  const handleMicClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsPendingClick(false);
+    if (isRecording) {
+      if (voiceTranscript.trim()) {
+        onStopRecording?.();
+      } else {
+        onCancelRecording();
+      }
+    } else {
+      setIsPendingClick(true);
+      onStartRecording();
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    isTypingRef.current = true;
+    setLocalInput(val);
+
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      isTypingRef.current = false;
+      setUserInput(val);
+    }, 0);
+  };
+
+  useEffect(() => {
+    if (isTypingRef.current) return;
+    setLocalInput(userInput);
+  }, [userInput]);
   useEffect(() => {
     if (isLoadingIA || isRecording || isTranscribing) {
       setIsPendingClick(false);
@@ -75,20 +119,14 @@ export function ChatInputBar({
   }, [isLoadingIA, isRecording, isTranscribing]);
 
   useEffect(() => {
-    if (userInput.length > 0) {
-      setIsPendingClick(false);
+    if (userInput === "") {
+      setLocalInput("");
+      isTypingRef.current = false;
+      return;
     }
+    if (isTypingRef.current) return;
+    setLocalInput(userInput);
   }, [userInput]);
-
-  const handleMicClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (isRecording) {
-      onCancelRecording();
-    } else {
-      setIsPendingClick(true); // ← animación inmediata
-      onStartRecording();
-    }
-  };
 
   return (
     <div
@@ -245,16 +283,47 @@ export function ChatInputBar({
         )}
         {/* Form */}
         <form
-          onSubmit={onSubmit}
+          onSubmit={(e) => onSubmit(e, localInput)}
           className="flex gap-1.5 sm:gap-2 items-center"
         >
           <Input
             ref={inputRef}
             type="text"
             placeholder={getPlaceholder()}
-            value={isRecording ? "" : userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            disabled={isInteractionDisabled && !isRecording}
+            readOnly={isRecording}
+            value={isRecording ? "" : localInput}
+            onChange={handleChange}
+            onMouseDown={() => {
+              if (isAutoSendPending) {
+                onCancelAutoSend?.();
+              }
+            }}
+            // onFocus={() => {
+            //   if (isAutoSendPending) {
+            //     onCancelAutoSend?.();
+            //   }
+            // }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (isRecording) {
+                  if (voiceTranscript.trim()) {
+                    onStopRecording?.();
+                  } else {
+                    onCancelRecording();
+                  }
+                } else if (isAutoSendPending) {
+                  onCancelAutoSend?.();
+                  onSubmit(e as unknown as React.FormEvent, localInput);
+                } else if (localInput.trim()) {
+                  onCancelAutoSend?.();
+                  onSubmit(e as unknown as React.FormEvent, localInput);
+                }
+              }
+            }}
+            disabled={
+              isInteractionDisabled && !isAutoSendPending && !isRecording
+            }
             className={`flex-1 h-10 sm:h-11 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6841ea] focus:border-[#6841ea] transition-all ${
               dark
                 ? "bg-[#2a2a2a] text-white placeholder:text-gray-500 border-[#353535] hover:border-[#6841ea] disabled:bg-[#1a1a1a] disabled:text-gray-600 disabled:cursor-not-allowed"
@@ -289,7 +358,9 @@ export function ChatInputBar({
           <Button
             type="button"
             onClick={handleMicClick}
-            disabled={isTranscribing || isLoadingIA || !canUserType}
+            disabled={
+              isTranscribing || isLoadingIA || isSpeaking || !canUserType
+            }
             title={isRecording ? "Cancelar grabación" : "Grabar audio"}
             className={`relative h-10 w-10 sm:h-11 sm:w-11 rounded-full p-0 transition-shadow duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
               isRecording
@@ -314,15 +385,30 @@ export function ChatInputBar({
           <Button
             type="submit"
             disabled={
-              (!userInput.trim() && !voiceTranscript.trim()) ||
-              isInteractionDisabled
+              (!userInput.trim() && !isAutoSendPending) ||
+              (isInteractionDisabled && !isAutoSendPending)
             }
             title={
-              isSpeaking ? "Espera a que termine de hablar" : "Enviar mensaje"
+              isAutoSendPending ? "Click para enviar ahora" : "Enviar mensaje"
             }
-            className="h-10 w-10 sm:h-11 sm:w-11 p-0 bg-[#6841ea] hover:bg-[#5a36d4] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className={`h-10 w-10 sm:h-11 sm:w-11 p-0 text-white rounded-lg transition-all relative overflow-hidden
+    ${
+      isAutoSendPending
+        ? "bg-green-500 hover:bg-green-600"
+        : "bg-[#6841ea] hover:bg-[#5a36d4] disabled:opacity-50 disabled:cursor-not-allowed"
+    }`}
           >
-            <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+            {isAutoSendPending ? (
+              <>
+                <span className="absolute inset-0 bg-white/20 animate-pulse" />
+                <Send className="w-4 h-4 sm:w-5 sm:h-5 relative z-10" />
+                <span className="absolute bottom-0.5 right-0.5 bg-white text-green-600 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center z-20 leading-none">
+                  {autoSendCountdown}
+                </span>
+              </>
+            ) : (
+              <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+            )}
           </Button>
         </form>
       </div>

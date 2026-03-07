@@ -52,6 +52,7 @@ interface UseAutoSendVoiceReturn {
   transcript: string;
   startVoiceRecording: () => Promise<void>;
   cancelVoiceRecording: () => Promise<void>;
+  processAndSendAudio: () => Promise<void>;
   cleanup: () => void;
 }
 
@@ -347,7 +348,6 @@ export function useAutoSendVoice({
     } finally {
       setIsTranscribing(false);
       isProcessingRef.current = false;
-      setTimeout(() => setTranscript(""), 500);
     }
   }, [
     silenceThreshold,
@@ -556,6 +556,7 @@ export function useAutoSendVoice({
     transcript,
     startVoiceRecording,
     cancelVoiceRecording,
+    processAndSendAudio,
     cleanup,
   };
 }
