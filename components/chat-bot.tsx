@@ -37,6 +37,8 @@ import {
   CheckCircle2,
   Brain,
   Check,
+  Zap,
+  Cpu,
 } from "lucide-react";
 import { getDisplayName } from "@/util/utils-chat";
 import { useVoiceSynthesis } from "@/components/hooks/use-voice-synthesis";
@@ -150,6 +152,7 @@ export function ChatBot({
 
   const { engine, setEngine, transcriptionService, voskRealtime, voskStatus } =
     useVoiceEngine({
+      initialEngine: engineOverride ?? "groq",
       onVoskPartial: (text) => {
         // Solo actualizar el input del chat si NO estamos en modo guiado
         if (voskGuidedModeRef.current) return;
@@ -232,12 +235,7 @@ export function ChatBot({
     if (engine === "vosk" && voskStatus === "idle") {
       voskRealtime.loadModel();
     }
-  }, []);
-  useEffect(() => {
-    if (voiceMode.voiceMode && engine === "vosk" && voskStatus === "idle") {
-      voskRealtime.loadModel();
-    }
-  }, [voiceMode.voiceMode, engine]);
+  }, [engine]);
 
   useEffect(() => {
     if (theme === "dark") {
@@ -265,11 +263,6 @@ export function ChatBot({
   useEffect(() => {
     onVoskStatusChange?.(voskStatus);
   }, [voskStatus]);
-  useEffect(() => {
-    if (engineOverride && engineOverride !== engine) {
-      setEngine(engineOverride);
-    }
-  }, [engineOverride]);
 
   useEffect(() => {
     if (preferencias?.velocidadVoz != null)
@@ -287,7 +280,11 @@ export function ChatBot({
       chatModeRef.current = modoValido;
     }
   }, [preferencias?.modoAsistenteIA]);
-
+  useEffect(() => {
+    if (engineOverride && engineOverride !== engine) {
+      setEngine(engineOverride);
+    }
+  }, [engineOverride]);
   // ==================== HELPERS ====================
   function getTurnoActual(): "mañana" | "tarde" {
     if (isReportTime(horaInicioReporteMañana, horaFinReporteMañana))
@@ -387,6 +384,9 @@ export function ChatBot({
       isSpeaking={isSpeaking}
       speakText={speakText}
       rate={rate}
+      engine={engine}
+      transcriptionService={transcriptionService}
+      audioRecorder={audioRecorder}
       esHistorial={esHistorial}
     />
   );
@@ -444,6 +444,7 @@ export function ChatBot({
 
   // ==================== WEBSOCKET ====================
   const actualizarDatosPorWebSocket = async () => {
+    if (fetchingAnalysisRef.current) return;
     try {
       const data = await obtenerActividadesConRevisiones({
         email: colaborador.email,
@@ -472,7 +473,14 @@ export function ChatBot({
   useEffect(() => {
     if (!colaborador?.email) return;
     wsService.conectar(colaborador.email);
-
+    wsService.setOnConnectionError((message) => {
+      toast({
+        variant: "destructive",
+        title: "Sin conexión en tiempo real",
+        description: message,
+        duration: 5000,
+      });
+    });
     const onCambiosTareas = () => {
       toast({
         title: "Actualizando datos",
@@ -493,6 +501,7 @@ export function ChatBot({
       wsService.off("explicacion_guardada", onExplicacionGuardada); // solo el suyo
     };
   }, [colaborador?.email]);
+
   // ==================== MODO VOZ - NAVEGACIÓN ====================
   const speakActivityByIndex = (activityIndex: number) => {
     const activitiesToUse =
@@ -615,7 +624,7 @@ export function ChatBot({
     startRecording: audioRecorder.startRecording,
     silenceThreshold: 3000,
     speechThreshold: 10,
-    enableRealtimeTranscription: false, // true para habilitar la transcripción en tiempo real (consume mucho mas tokens)
+    enableRealtimeTranscription: true, // true para habilitar la transcripción en tiempo real (consume mucho mas tokens)
     onTranscriptionComplete: async (transcript) => {
       const trimmedTranscript = cleanExplanationTranscript(transcript);
       const validation = validateExplanationLength(trimmedTranscript);
@@ -1637,6 +1646,9 @@ export function ChatBot({
         showAll,
         consultarAlApi,
       });
+
+      console.log("data", data);
+
       const colabs = extraerColaboradores(data);
       setColaboradoresUnicos(colabs);
       colaboradoresUnicosRef.current = colabs;
@@ -1644,7 +1656,11 @@ export function ChatBot({
       assistantAnalysisRef.current = adaptedData;
       setAssistantAnalysis(adaptedData);
       setStep("ready");
-      if (!silentUpdate) showAssistantAnalysis(adaptedData, isRestoration);
+      if (silentUpdate) {
+        actualizarPanelTurno(turnoActualRef.current, adaptedData);
+      } else {
+        showAssistantAnalysis(adaptedData, isRestoration);
+      }
     } catch (error) {
       if (!silentUpdate) {
         setIsTyping(false);
@@ -1832,7 +1848,10 @@ export function ChatBot({
         setAssistantAnalysis(adaptedData);
         actualizarPanelTurno(turnoActualRef.current, adaptedData);
       } catch (error) {
-        console.error("❌ Error en polling 10AM:", error);
+        if (error instanceof TypeError && error.message === "Failed to fetch") {
+          return;
+        }
+        console.error("Error en polling:", error);
       }
     }, 15_000); // cada 15 segundos
 
@@ -1856,6 +1875,11 @@ export function ChatBot({
     }
   }, [rate]);
 
+  useEffect(() => {
+    if (assistantAnalysis) {
+      actualizarPanelTurno(turnoActual, assistantAnalysis);
+    }
+  }, [engine]);
   // ==================== RENDER ====================
   return (
     <ChatThemeProvider value={theme}>
@@ -1900,12 +1924,13 @@ export function ChatBot({
               : activitiesWithTasks
           }
           autoSendVoice={{
-            // ← AGREGAR ESTO
             isRecording: autoSendVoiceGuided.isRecording,
             isTranscribing: autoSendVoiceGuided.isTranscribing,
             audioLevel: autoSendVoiceGuided.audioLevel,
+            silenceCountdown: autoSendVoiceGuided.silenceCountdown,
             startVoiceRecording: autoSendVoiceGuided.startVoiceRecording,
             cancelVoiceRecording: autoSendVoiceGuided.cancelVoiceRecording,
+            processVoiceRecording: autoSendVoiceGuided.processAndSendAudio,
           }}
           taskExplanations={voiceMode.taskExplanations}
           voiceTranscript={autoSendVoiceGuided.transcript}
@@ -1923,7 +1948,6 @@ export function ChatBot({
           processVoiceExplanation={processVoiceExplanation}
           stopRecording={voiceRecognition.stopRecording}
           retryExplanation={retryExplanation}
-          sendExplanationsToBackend={sendExplanationsToBackend}
           recognitionRef={voiceRecognition.recognitionRef}
           setIsRecording={() => {}}
           isVoskEngine={engine === "vosk"} // ← AGREGAR
@@ -1957,34 +1981,69 @@ export function ChatBot({
             />
           </div>
         </div>
-        <ChatInputBar
-          userInput={userInput}
-          setUserInput={(v) => setUserInput(v)}
-          onSubmit={handleUserInput}
-          onVoiceClick={handleStartRecording}
-          isRecording={
-            engine === "vosk" ? voskRealtime.isRecording : isRecording
-          }
-          canUserType={canUserType}
-          theme={theme}
-          onStartRecording={handleStartRecording}
-          onCancelRecording={handleCancelRecording}
-          isTranscribing={engine === "vosk" ? false : isTranscribing}
-          audioLevel={audioLevel}
-          isLoadingIA={isLoadingIA}
-          inputRef={inputRef}
-          chatMode={chatMode}
-          isSpeaking={isSpeaking}
-          onToggleChatMode={toggleChatMode}
-          onStopRecording={handleStopRecording}
-          voiceTranscript={
-            engine === "vosk" ? userInput : autoSendVoiceChat.transcript
-          }
-          isAutoSendPending={isAutoSendPending}
-          onCancelAutoSend={handleCancelAutoSend}
-          autoSendCountdown={autoSendCountdown}
-        />
-
+        <div className="relative">
+          {/* Engine indicator */}
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-10">
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border ${
+                engine === "groq"
+                  ? theme === "dark"
+                    ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                    : "bg-orange-50 border-orange-200 text-orange-600"
+                  : theme === "dark"
+                    ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                    : "bg-blue-50 border-blue-200 text-blue-600"
+              }`}
+            >
+              {engine === "groq" ? (
+                <Zap className="w-2.5 h-2.5" />
+              ) : (
+                <Cpu className="w-2.5 h-2.5" />
+              )}
+              {engine === "groq" ? "Groq" : "Vosk"}
+              {engine === "vosk" && (
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    voskStatus === "ready"
+                      ? "bg-emerald-400"
+                      : voskStatus === "loading"
+                        ? "bg-blue-400 animate-pulse"
+                        : voskStatus === "error"
+                          ? "bg-red-500"
+                          : "bg-gray-400"
+                  }`}
+                />
+              )}
+            </div>
+          </div>
+          <ChatInputBar
+            userInput={userInput}
+            setUserInput={(v) => setUserInput(v)}
+            onSubmit={handleUserInput}
+            onVoiceClick={handleStartRecording}
+            isRecording={
+              engine === "vosk" ? voskRealtime.isRecording : isRecording
+            }
+            canUserType={canUserType}
+            theme={theme}
+            onStartRecording={handleStartRecording}
+            onCancelRecording={handleCancelRecording}
+            isTranscribing={engine === "vosk" ? false : isTranscribing}
+            audioLevel={audioLevel}
+            isLoadingIA={isLoadingIA}
+            inputRef={inputRef}
+            chatMode={chatMode}
+            isSpeaking={isSpeaking}
+            onToggleChatMode={toggleChatMode}
+            onStopRecording={handleStopRecording}
+            voiceTranscript={
+              engine === "vosk" ? userInput : autoSendVoiceChat.transcript
+            }
+            isAutoSendPending={isAutoSendPending}
+            onCancelAutoSend={handleCancelAutoSend}
+            autoSendCountdown={autoSendCountdown}
+          />
+        </div>
         {/* Diálogo de éxito */}
         <AlertDialog
           open={showSuccessDialog}

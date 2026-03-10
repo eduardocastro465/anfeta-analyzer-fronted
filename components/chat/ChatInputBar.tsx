@@ -135,7 +135,7 @@ export function ChatInputBar({
       <div className="max-w-5xl mx-auto px-2 sm:px-3 py-2">
         {/* Status area */}
         <div
-          className={`${hasTopStatus ? "h-10 sm:h-12 mb-1.5" : "h-0 mb-0"} relative overflow-hidden transition-all duration-200 ease-in-out`}
+          className={`${hasTopStatus ? "h-10 sm:h-12" : "h-0 mb-0"} relative overflow-hidden transition-all duration-200 ease-in-out`}
         >
           {/* Grabando */}
           <div

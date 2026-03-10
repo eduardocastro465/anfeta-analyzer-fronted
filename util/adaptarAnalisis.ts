@@ -11,9 +11,6 @@ export const adaptarDatosAnalisis = (
   colaboradoresInvolucrados: data.colaboradoresInvolucrados || [],
   metrics: {
     totalActividades: data.metrics?.totalActividades || 0,
-    actividadesConTiempoTotal: data.metrics?.actividadesConTiempoTotal || 0,
-    actividadesFinales: data.metrics?.actividadesFinales || 0,
-    // ← soporta ambos nombres de campo (API nueva y legacy)
     tareasConTiempo:
       data.metrics?.tareasConTiempo ??
       data.metrics?.pendientesConTiempo ??

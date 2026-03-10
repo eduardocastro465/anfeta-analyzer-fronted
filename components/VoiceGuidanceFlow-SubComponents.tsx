@@ -474,6 +474,7 @@ export const ListeningExplanationStep: React.FC<{
   voskSilenceCountdown: number | null;
   isVoskEngine: boolean;
   cancelRecording: () => void;
+  
 }> = ({
   currentListeningFor,
   retryCount,

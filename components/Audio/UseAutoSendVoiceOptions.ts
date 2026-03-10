@@ -54,6 +54,7 @@ interface UseAutoSendVoiceReturn {
   cancelVoiceRecording: () => Promise<void>;
   processAndSendAudio: () => Promise<void>;
   cleanup: () => void;
+  silenceCountdown: number | null;
 }
 
 export function useAutoSendVoice({
@@ -87,6 +88,7 @@ export function useAutoSendVoice({
   const mimeTypeRef = useRef<string>("");
   const transcriptRef = useRef("");
   const isTranscribingRealtimeRef = useRef(false);
+  const [silenceCountdown, setSilenceCountdown] = useState<number | null>(null);
 
   // ==================== SINCRONIZACIÓN STATE <-> REF ====================
   useEffect(() => {
@@ -109,40 +111,6 @@ export function useAutoSendVoice({
     },
     [],
   );
-
-  // const startRealtimeWhisper = useCallback(() => {
-  //   if (!enableRealtimeTranscription) return;
-
-  //   realtimeChunksRef.current = [];
-
-  //   realtimeIntervalRef.current = setInterval(async () => {
-  //     if (!isRecordingRef.current || realtimeChunksRef.current.length === 0)
-  //       return;
-
-  //     const chunks = [...realtimeChunksRef.current];
-  //     realtimeChunksRef.current = [];
-
-  //     const chunkBlob = new Blob(chunks, {
-  //       type: mimeTypeRef.current || "audio/webm",
-  //     });
-
-  //     // ✅ Mínimo 10KB — chunks muy pequeños causan 400 en Groq
-  //     if (chunkBlob.size < 10000) {
-  //       // Devolver los chunks al buffer para acumular más
-  //       realtimeChunksRef.current = [...chunks, ...realtimeChunksRef.current];
-  //       return;
-  //     }
-
-  //     try {
-  //       const partialTranscript = await transcriptionService(chunkBlob);
-  //       if (partialTranscript?.trim()) {
-  //         setTranscript((prev) => (prev + " " + partialTranscript).trim());
-  //       }
-  //     } catch {
-  //       // silencioso
-  //     }
-  //   }, 3000); // ✅ Subir a 3 segundos para acumular más audio
-  // }, [enableRealtimeTranscription, transcriptionService]);
 
   const startRealtimeWhisper = useCallback(() => {
     if (!enableRealtimeTranscription) return;
@@ -367,9 +335,25 @@ export function useAutoSendVoice({
       clearTimeout(silenceTimerRef.current);
     }
 
-    silenceTimerRef.current = setTimeout(() => {
-      processAndSendAudio();
-    }, silenceThreshold);
+    // silenceTimerRef.current = setTimeout(() => {
+    //   processAndSendAudio();
+    // }, silenceThreshold);
+    setSilenceCountdown(Math.ceil(silenceThreshold / 1000));
+  const countInterval = setInterval(() => {
+    setSilenceCountdown((prev) => {
+      if (prev === null || prev <= 1) {
+        clearInterval(countInterval);
+        return null;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+
+   silenceTimerRef.current = setTimeout(() => {
+    clearInterval(countInterval);
+    setSilenceCountdown(null);
+    processAndSendAudio();
+  }, silenceThreshold);
   }, [silenceThreshold, processAndSendAudio]);
 
   // ==================== DETECCIÓN DE NIVEL DE AUDIO ====================
@@ -558,5 +542,6 @@ export function useAutoSendVoice({
     cancelVoiceRecording,
     processAndSendAudio,
     cleanup,
+    silenceCountdown
   };
 }

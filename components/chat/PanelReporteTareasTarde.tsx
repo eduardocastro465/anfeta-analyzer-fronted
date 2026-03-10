@@ -36,6 +36,9 @@ export function PanelReporteTareasTarde({
   onReportCompleted,
   actividadesDiarias = [],
   rate,
+  engine,
+  transcriptionService,
+  audioRecorder,
   esHistorial = false,
 }: PanelReporteTareasTardeProps) {
   const theme = useTheme();
@@ -742,6 +745,9 @@ export function PanelReporteTareasTarde({
             turno={turno}
             sessionId={assistantAnalysis?.sessionId ?? null}
             rate={rate}
+            engine={engine}
+            transcriptionService={transcriptionService}
+            audioRecorder={audioRecorder}
           />
 
           <PiePanelReporte
@@ -1035,6 +1041,16 @@ function TareaReportada({
   esHistorial = false,
 }: TareaReportadaProps) {
   const theme = useTheme();
+
+  console.log("TareaReportada:", {
+    id: tarea.id,
+    nombre: tarea.nombre,
+    queHizo: tarea.queHizo,
+    reporteInfo_texto: reporteInfo?.texto?.substring(0, 50),
+    reporteInfo_explicacion: reporteInfo?.explicacion?.substring(0, 50),
+    reporteInfo_raw: reporteInfo?._raw,
+  });
+
   const [mostrarDescripcion, setMostrarDescripcion] = useState(false);
   if (!reporteInfo) return null;
 
@@ -1158,7 +1174,7 @@ function TareaReportada({
             )}
           </div>
 
-          {(reporteInfo.queHizo || reporteInfo.texto) && (
+          {tarea.queHizo?.trim() && (
             <div className="mt-1.5">
               <button
                 onClick={() => setMostrarDescripcion(!mostrarDescripcion)}
@@ -1184,7 +1200,7 @@ function TareaReportada({
                   <p
                     className={`italic ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
                   >
-                    "{reporteInfo.queHizo || reporteInfo.texto}"
+                    "{tarea.queHizo?.trim()}"
                   </p>
                   {reporteInfo.encontradoEn && (
                     <p
@@ -1226,22 +1242,26 @@ function TareaPendiente({
 }: TareaPendienteProps) {
   const theme = useTheme();
 
+  console.log("TareaPendiente:", {
+    id: tarea.id,
+    nombre: tarea.nombre,
+    queHizo: tarea.queHizo,
+    descripcion: tarea.descripcion?.substring(0, 50),
+    explicacionVoz: tarea.explicacionVoz,
+  });
+
   const emailDueñoMañana = tarea.explicacionVoz?.emailUsuario || null;
   const estaBloqueadaPorOtro = !!(
     emailDueñoMañana && emailDueñoMañana !== currentUserEmail
   );
-  const tieneDescripcion = !!(
-    tarea.descripcion &&
-    typeof tarea.descripcion === "string" &&
-    tarea.descripcion.trim().length > 0
-  );
+
   const tieneQueHizo = !!(
     tarea.queHizo &&
     typeof tarea.queHizo === "string" &&
     tarea.queHizo.trim().length > 0
   );
   const estaBloqueada = estaBloqueadaPorOtro;
-  const estaExplicada = tieneDescripcion && tieneQueHizo;
+  const estaExplicada = tieneQueHizo;
 
   return (
     <div
@@ -1335,15 +1355,6 @@ function TareaPendiente({
             </span>
           </div>
 
-          {tieneDescripcion && (
-            <p
-              className={`text-[10px] mb-1 leading-relaxed ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}
-            >
-              <FileText className="w-2.5 h-2.5 inline mr-1 opacity-60" />
-              {tarea.descripcion.substring(0, 80)}
-              {tarea.descripcion.length > 80 && "…"}
-            </p>
-          )}
           {tieneQueHizo && (
             <p
               className={`text-[10px] mb-1 leading-relaxed ${theme === "dark" ? "text-green-400" : "text-green-600"}`}

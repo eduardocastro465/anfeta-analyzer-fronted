@@ -33,6 +33,8 @@ interface ExtendedVoiceGuidanceFlowProps extends VoiceGuidanceFlowProps {
     audioLevel: number;
     startVoiceRecording: () => Promise<void>;
     cancelVoiceRecording: () => Promise<void>;
+    processVoiceRecording?: () => Promise<void>;
+    silenceCountdown: number | null;
   };
   voskRealtime?: {
     transcript: string;
@@ -77,6 +79,7 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
   autoSendVoice,
   voskRealtime,
   voskStatus = "idle",
+  isVoskEngine = false,
 }) => {
   // CREAR UN VALOR POR DEFECTO SEGURO PARA autoSendVoice
   const safeAutoSendVoice = useMemo(
@@ -88,9 +91,15 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
         startVoiceRecording: async () => {
           console.warn("autoSendVoice.startVoiceRecording no está disponible");
         },
-        cancelVoiceRecording: () => {
+        cancelVoiceRecording: async () => {
           console.warn("autoSendVoice.cancelVoiceRecording no está disponible");
         },
+        processVoiceRecording: async () => {
+          console.warn(
+            "autoSendVoice.processVoiceRecording no está disponible",
+          );
+        },
+        silenceCountdown: null,
       },
     [autoSendVoice],
   );
@@ -583,20 +592,28 @@ export const VoiceGuidanceFlow: React.FC<ExtendedVoiceGuidanceFlowProps> = ({
             <ListeningExplanationStep
               currentListeningFor={currentListeningFor}
               retryCount={retryCount}
-              voiceTranscript={voskRealtime?.transcript || voiceTranscript}
+              voiceTranscript={
+                isVoskEngine
+                  ? (voskRealtime?.transcript ?? "")
+                  : voiceTranscript
+              }
               isVoskRecording={voskRealtime?.isRecording ?? false}
               theme={theme}
               stopRecording={
-                voskRealtime?.isRecording
-                  ? () => voskRealtime.stopRealtime()
-                  : safeAutoSendVoice.cancelVoiceRecording
+                isVoskEngine // ← usa el prop real
+                  ? () => voskRealtime!.stopRealtime()
+                  : () => safeAutoSendVoice.processVoiceRecording?.() // ← procesa con Groq
               }
               processVoiceExplanation={processVoiceExplanation}
               recognitionRef={recognitionRef}
               setIsRecording={setIsRecording}
               setIsListening={setIsListening}
-              voskSilenceCountdown={voskRealtime?.silenceCountdown ?? null}
-              isVoskEngine={!!voskRealtime}
+              voskSilenceCountdown={
+                isVoskEngine
+                  ? (voskRealtime?.silenceCountdown ?? null)
+                  : (safeAutoSendVoice.silenceCountdown ?? null)
+              }
+              isVoskEngine={isVoskEngine}
               setVoiceStep={setVoiceStep}
               setCurrentListeningFor={setCurrentListeningFor}
               isPaused={isPaused}

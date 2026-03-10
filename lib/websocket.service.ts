@@ -5,6 +5,8 @@ export class WebSocketService {
   private socket: Socket | null = null;
   // private anfetaSocket: Socket | null = null; // segunda conexión
   private listeners: Map<string, Function[]> = new Map();
+  private onConnectionError?: (message: string) => void;
+  private connectionErrorNotified = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -13,6 +15,10 @@ export class WebSocketService {
    * Conecta al WebSocket del servidor
    * @param email - Email del usuario para identificar la sala
    */
+
+  setOnConnectionError(callback: (message: string) => void) {
+    this.onConnectionError = callback;
+  }
   conectar(email: string) {
     if (this.socket?.connected) {
       console.log("WebSocket ya conectado");
@@ -34,8 +40,8 @@ export class WebSocketService {
 
     // Evento de conexión exitosa
     this.socket.on("connect", () => {
+      this.connectionErrorNotified = false;
       this.reconnectAttempts = 0;
-
       // Registrar usuario en su sala personal
       if (email) {
         this.socket?.emit("registrar", email);
@@ -71,41 +77,18 @@ export class WebSocketService {
     // Manejar errores
     this.socket.on("connect_error", (error) => {
       console.error("Error de conexion WebSocket:", error.message);
+      if (this.onConnectionError && !this.connectionErrorNotified) {
+        this.connectionErrorNotified = true;
+        this.onConnectionError?.(
+          "No se pudo conectar al servidor. Algunas actualizaciones en tiempo real no estarán disponibles.",
+        );
+      }
     });
 
     this.socket.on("error", (error) => {
       console.error("Error WebSocket:", error);
     });
   }
-
-  // conectarAnfeta(token: string, deviceId: string) {
-  //   if (this.anfetaSocket?.connected) return;
-
-  //   this.anfetaSocket = io(process.env.NEXT_PUBLIC_ANFETA_URL, {
-  //     auth: { token, deviceId, meta: { platform: "web" } },
-  //     transports: ["websocket", "polling"],
-  //     reconnection: true,
-  //   });
-
-  //   this.anfetaSocket.on("connect", () => {
-  //     console.log("Anfeta conectado");
-  //   });
-
-  //   [
-  //     "actividad_actualizada",
-  //     "actividad_creada",
-  //     "actividad_eliminada",
-  //   ].forEach((evento) => {
-  //     this.anfetaSocket?.on(evento, (data) => {
-  //       const listeners = this.listeners.get(evento) || [];
-  //       listeners.forEach((cb) => cb(data));
-  //     });
-  //   });
-
-  //   this.anfetaSocket.on("connect_error", (err) => {
-  //     console.error("Anfeta error:", err.message);
-  //   });
-  // }
 
   /**
    * Registra un listener para un evento específico

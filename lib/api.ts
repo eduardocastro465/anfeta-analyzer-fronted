@@ -536,11 +536,12 @@ export async function verificarCambiosAnfeta() {
 
     return await response.json();
   } catch (error) {
-    console.log("Error de conexión:", error);
-    return { success: false };
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      return { success: false, cambios: false, serverOffline: true };
+    }
+    return { success: false, cambios: false };
   }
 }
-
 
 export async function obtenerActividadesDesdeDB() {
   try {
@@ -568,16 +569,13 @@ export async function obtenerActividadesDesdeDB() {
 
 export async function obtenerPreferenciasUsuario() {
   try {
-    const response = await fetch(
-      `${BASE_URL_BACK}/auth/preferencias`,
-      {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const response = await fetch(`${BASE_URL_BACK}/auth/preferencias`, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
 
     if (!response.ok) {
       throw new Error("Error al obtener preferencias");
@@ -592,20 +590,60 @@ export async function obtenerPreferenciasUsuario() {
 
 export async function guardarPreferenciasUsuario(preferencias: any) {
   try {
-    const response = await fetch(
-      `${BASE_URL_BACK}/auth/preferencias`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(preferencias),
+    const response = await fetch(`${BASE_URL_BACK}/auth/preferencias`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(preferencias),
+    });
 
     if (!response.ok) {
       throw new Error("Error al guardar preferencias");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Error de conexión:", error);
+    return { success: false };
+  }
+}
+
+export async function obtenerKeysUsuario() {
+  try {
+    const response = await fetch(`${BASE_URL_BACK}/auth/keys`, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Error al obtener keys");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Error de conexión:", error);
+    return { success: false };
+  }
+}
+
+export async function guardarKeysUsuario(keys: any) {
+  try {
+    const response = await fetch(`${BASE_URL_BACK}/auth/keys`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(keys),
+    });
+
+    if (!response.ok) {
+      throw new Error("Error al guardar keys");
     }
 
     return await response.json();

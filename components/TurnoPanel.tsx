@@ -19,6 +19,12 @@ interface TurnoPanelProps {
   rate: number;
   esHistorial?: boolean;
   onRefrescarDatos?: () => void;
+  engine?: "vosk" | "groq";
+  transcriptionService?: (blob: Blob) => Promise<string>;
+  audioRecorder?: {
+    startRecording: (onChunk?: (chunk: Blob) => void) => Promise<MediaStream>;
+    stopRecording: () => Promise<Blob>;
+  };
 }
 
 export function TurnoPanel({
@@ -35,6 +41,9 @@ export function TurnoPanel({
   rate,
   esHistorial = false,
   onRefrescarDatos,
+  engine,
+  transcriptionService,
+  audioRecorder,
 }: TurnoPanelProps) {
   const theme = useTheme();
 
@@ -185,6 +194,9 @@ export function TurnoPanel({
           isSpeaking={isSpeaking}
           speakText={speakText}
           rate={rate}
+          engine={engine}
+          transcriptionService={transcriptionService}
+          audioRecorder={audioRecorder}
           esHistorial={esHistorial}
         />
       )}

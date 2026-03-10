@@ -93,13 +93,6 @@ export interface TaskReport {
   completada: boolean;
 }
 
-export interface ReporteCompleto {
-  colaborador: Colaborador;
-  fecha: string;
-  tareas: TaskReport[];
-  totalTiempo: number;
-}
-
 export interface UsersApiResponse {
   items: Colaborador[];
 }
@@ -115,40 +108,6 @@ interface HistorialMensaje {
   contenido: string;
   timestamp: string;
   _id: string;
-}
-
-export interface HistorialSessionResponse {
-  success: boolean;
-  data: {
-    _id: string;
-    userId: string;
-    sessionId: string;
-    __v: number;
-    createdAt: string;
-    estadoAnterior: string | null;
-    estadoConversacion: string;
-    mensajes: HistorialMensaje[];
-    updatedAt: string;
-  } | null;
-  proyectos: {
-    _id: string;
-    userId: string;
-    nombre: string;
-    actividades: Array<{
-      ActividadId: string;
-      estado: string;
-      pendientes: Array<{
-        pendienteId: string;
-        nombre: string;
-        descripcion: string;
-        estado: string;
-        _id: string;
-      }>;
-      _id: string;
-    }>;
-    createdAt: string;
-    updatedAt: string;
-  } | null;
 }
 
 export interface PendienteDiario {
@@ -201,6 +160,7 @@ export interface TareaConTiempo {
   terminada: boolean;
   confirmada: boolean;
   descripcion?: string;
+  queHizo?: string;
   resumen?: string | null;
   duracionMin: number;
   fechaCreacion: string;
@@ -217,16 +177,6 @@ export interface TareaConTiempo {
     resumen?: string | null;
     razonIA: string;
   } | null;
-}
-
-export interface ActividadBase {
-  id: string;
-  titulo: string;
-  horario: string;
-  status: string;
-  proyecto: string;
-  esHorarioLaboral: boolean;
-  tieneRevisionesConTiempo: boolean;
 }
 
 export interface Message {
@@ -254,8 +204,6 @@ export interface AssistantAnalysis {
   proyectoPrincipal: string;
   metrics: {
     totalActividades: number;
-    actividadesConTiempoTotal: number;
-    actividadesFinales: number;
     tareasConTiempo: number;
     tareasAltaPrioridad: number;
     tiempoEstimadoTotal: string;
@@ -266,8 +214,6 @@ export interface AssistantAnalysis {
       titulo: string;
       horario: string;
       status: string;
-      proyecto: string;
-      esHorarioLaboral: boolean;
       tieneRevisionesConTiempo: boolean;
       colaboradores?: string[];
     }>;
@@ -290,6 +236,7 @@ export interface AssistantAnalysis {
         prioridad: string;
         reportada: boolean;
         colaboradores?: string[];
+        assigneesOriginales?: string[];
         explicacionVoz?: {
           emailUsuario: string;
           fechaRegistro: string;
@@ -303,11 +250,10 @@ export interface AssistantAnalysis {
       tiempoTotal: number;
       tiempoFormateado: string;
       colaboradores?: string[];
-      assigneesOriginales?: string[];
     }>;
   };
   multiActividad: boolean;
-  colaboradoresInvolucrados?: string[]; // AÑADIDO: Para TasksPanel
+  colaboradoresInvolucrados?: string[];
 }
 
 export interface TaskExplanation {
@@ -323,7 +269,6 @@ export interface TaskExplanation {
 
 export interface ChatBotProps {
   colaborador: Colaborador;
-  actividades?: any[];
   onLogout: () => void;
   theme?: "light" | "dark";
   onToggleTheme?: () => void;
@@ -333,9 +278,6 @@ export interface ChatBotProps {
   onNuevaConversacion?: (conv: ConversacionSidebar) => void;
   onActualizarNombre?: (sessionId: string, nombre: string) => void;
   onActualizarTyping?: (isTyping: boolean) => void;
-  memoriasUsuario?: string[];
-  showLogoutDialog?: boolean;
-  setShowLogoutDialog?: (show: boolean) => void;
   onViewReports?: () => void;
   preferencias?: any;
   onGuardarPreferencias?: (nuevasPrefs: any) => void;
@@ -401,16 +343,12 @@ export interface VoiceGuidanceFlowProps {
   skipTask: () => void;
   stopRecording: () => void;
   retryExplanation: () => void;
-  sendExplanationsToBackend: () => void;
   recognitionRef: React.MutableRefObject<any>;
   setIsRecording: (recording: boolean) => void;
   setIsListening: (listening: boolean) => void;
   setVoiceStep: (step: VoiceModeStep) => void;
   processVoiceExplanation?: (transcript: string) => void;
   setCurrentListeningFor: (text: string) => void;
-  setCurrentActivityIndex?: (index: number) => void;
-  setCurrentTaskIndex?: (index: number) => void;
-  setTaskExplanations?: (value: any[] | ((prev: any[]) => any[])) => void;
 }
 
 export interface ExtendedVoiceGuidanceFlowProps extends VoiceGuidanceFlowProps {
@@ -459,90 +397,6 @@ export type ConversacionSidebar = {
   updatedAt?: string;
 };
 
-// AÑADIDO: Tipo para TasksPanel
-export interface TasksPanelProps {
-  actividadesConTareasPendientes: Array<{
-    actividadId: string;
-    actividadTitulo: string;
-    actividadHorario: string;
-    tareasConTiempo: Array<{
-      id: string;
-      nombre: string;
-      terminada: boolean;
-      confirmada: boolean;
-      duracionMin: number;
-      fechaCreacion: string;
-      fechaFinTerminada: string | null;
-      diasPendiente: number;
-      prioridad: string;
-      resumen?: string | null;
-      colaboradores?: string[];
-    }>;
-    totalTareasConTiempo: number;
-    tareasAltaPrioridad: number;
-    tiempoTotal: number;
-    tiempoFormateado: string;
-    colaboradores?: string[];
-  }>;
-  totalTareasPendientes: number;
-  esHoraReporte: boolean;
-  theme: "light" | "dark";
-  assistantAnalysis: AssistantAnalysis;
-  onOpenReport?: () => void;
-  onStartVoiceMode?: () => void;
-  // Props para manejar selección
-  tareasSeleccionadas?: Set<string>;
-  onToggleTarea?: (tareaId: string) => void;
-  onSeleccionarTodas?: () => void;
-  onDeseleccionarTodas?: () => void;
-  // Función para explicar tareas seleccionadas
-  onExplicarTareasSeleccionadas?: () => void;
-}
-
-// AÑADIDO: Tipo para NoTasksMessage
-export interface NoTasksMessageProps {
-  theme: "light" | "dark";
-}
-
-// AÑADIDO: Tipo para ActivityItem
-export interface ActivityItemProps {
-  revision: any;
-  actividad: any;
-  index: number;
-  theme: "light" | "dark";
-  tareasSeleccionadas: Set<string>;
-  onToggleTarea: (tareaId: string) => void;
-  todosColaboradores: string[];
-}
-
-// AÑADIDO: Tipo para TaskItem
-export interface TaskItemProps {
-  tarea: any;
-  theme: "light" | "dark";
-  estaSeleccionada: boolean;
-  onToggleSeleccion: () => void;
-}
-
-// AÑADIDO: Tipo para TasksPanelFooter
-export interface TasksPanelFooterProps {
-  totalTareasPendientes: number;
-  esHoraReporte: boolean;
-  theme: "light" | "dark";
-  onOpenReport?: () => void;
-  onStartVoiceMode?: () => void;
-  todosColaboradores: string[];
-  // Nuevos props
-  tareasSeleccionadas: Set<string>;
-  onSeleccionarTodas: () => void;
-  onDeseleccionarTodas: () => void;
-  onExplicarTareasSeleccionadas: () => void;
-}
-
-// AÑADIDO: Tipo para TypingIndicator
-export interface TypingIndicatorProps {
-  theme: "light" | "dark";
-}
-
 export interface RevisionProcesada {
   actividadId: string;
   actividadTitulo: string;
@@ -569,5 +423,11 @@ export interface PanelReporteTareasTardeProps {
   isSpeaking?: boolean;
   speakText?: (text: string) => void;
   rate: number;
+  engine?: "vosk" | "groq";
+  transcriptionService?: (blob: Blob) => Promise<string>;
+  audioRecorder?: {
+    startRecording: (onChunk?: (chunk: Blob) => void) => Promise<MediaStream>;
+    stopRecording: () => Promise<Blob>;
+  };
   esHistorial?: boolean;
 }

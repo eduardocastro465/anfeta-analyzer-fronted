@@ -6,6 +6,7 @@ import { transcribirAudioCliente } from "@/lib/transcription";
 export type VoiceEngine = "groq" | "vosk";
 
 interface UseVoiceEngineOptions {
+  initialEngine?: VoiceEngine;
   onVoskPartial?: (text: string) => void;
   onVoskFinal?: (text: string) => void;
   onVoskError?: (error: Error) => void;
@@ -21,11 +22,12 @@ interface UseVoiceEngineReturn {
 
 // ==================== HOOK ====================
 export function useVoiceEngine({
+  initialEngine = "groq",
   onVoskPartial,
   onVoskFinal,
   onVoskError,
 }: UseVoiceEngineOptions = {}): UseVoiceEngineReturn {
-  const [engine, setEngineState] = useState<VoiceEngine>("vosk");
+  const [engine, setEngineState] = useState<VoiceEngine>(initialEngine);
 
   const voskRealtime = useVoskRealtime({
     onPartial: onVoskPartial,

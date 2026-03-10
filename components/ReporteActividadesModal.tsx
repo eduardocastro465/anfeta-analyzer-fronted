@@ -22,6 +22,7 @@ import type { ActividadDiaria } from "@/lib/types";
 import { guardarReporteTarde } from "@/lib/api";
 import { useVoiceSynthesis } from "@/components/hooks/use-voice-synthesis";
 import { useVoskRealtime } from "@/components/hooks/useVoskRealtime";
+import { useAutoSendVoice } from "./Audio/UseAutoSendVoiceOptions";
 
 interface ReporteActividadesModalProps {
   isOpen: boolean;
@@ -36,6 +37,12 @@ interface ReporteActividadesModalProps {
   tareasReportadasMap?: Map<string, any>;
   sessionId?: string | null;
   rate?: number;
+  engine?: "vosk" | "groq";
+  transcriptionService?: (blob: Blob) => Promise<string>;
+  audioRecorder?: {
+    startRecording: (onChunk?: (chunk: Blob) => void) => Promise<MediaStream>;
+    stopRecording: () => Promise<Blob>;
+  };
 }
 
 type PasoModal =
@@ -69,6 +76,9 @@ export function ReporteActividadesModal({
   tareasReportadasMap = new Map(),
   sessionId,
   rate,
+  engine,
+  transcriptionService,
+  audioRecorder,
 }: ReporteActividadesModalProps) {
   const isDark = theme === "dark";
 
@@ -150,6 +160,36 @@ export function ReporteActividadesModal({
     return id;
   }, []);
 
+  const [currentEngine, setCurrentEngine] = useState<"vosk" | "groq">(
+    engine ?? "vosk",
+  );
+
+  useEffect(() => {
+    if (engine && engine !== currentEngine) {
+      setCurrentEngine(engine);
+    }
+  }, [engine]);
+
+  const isGroq = currentEngine === "groq";
+
+  const autoSendVoice = useAutoSendVoice({
+    transcriptionService: transcriptionService ?? (async () => ""),
+    startRecording:
+      audioRecorder?.startRecording ?? (async () => new MediaStream()),
+    stopRecording: audioRecorder?.stopRecording ?? (async () => new Blob()),
+    enableRealtimeTranscription: true,
+    silenceThreshold: 3000,
+    onTranscriptionComplete: (text) => {
+      if (!isModalOpenRef.current) return;
+      voskFinalCallbackRef.current(text); // ← reutiliza el mismo callback
+    },
+    onError: (err) => {
+      if (!isModalOpenRef.current) return;
+      setErrorValidacion(err.message);
+      safeTimeout(() => setErrorValidacion(null), 3000);
+    },
+  });
+
   // ==================== SYNC REFS ====================
   useEffect(() => {
     isModalOpenRef.current = isOpen;
@@ -180,12 +220,27 @@ export function ReporteActividadesModal({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (isGroq) {
+      startRecordingRef.current = () => autoSendVoice.startVoiceRecording();
+      cancelRecordingRef.current = () => autoSendVoice.cancelVoiceRecording();
+    } else {
+      startRecordingRef.current = () => startRealtime();
+      cancelRecordingRef.current = () => cancelRealtime();
+    }
+  }, [
+    isGroq,
+    startRealtime,
+    cancelRealtime,
+    autoSendVoice.startVoiceRecording,
+    autoSendVoice.cancelVoiceRecording,
+  ]);
+  useEffect(() => {
     voskFinalCallbackRef.current = handleVoskFinal;
   }, [handleVoskFinal]);
 
   useEffect(() => {
-    if (isOpen && voskStatus === "idle") loadModel().catch(() => {});
-  }, [isOpen, voskStatus, loadModel]);
+    if (isOpen && !isGroq && voskStatus === "idle") loadModel().catch(() => {});
+  }, [isOpen, isGroq, voskStatus, loadModel]);
 
   // ─── FIX #3: resetear TODO el estado al abrir ───────────────────────────
   useEffect(() => {
@@ -539,10 +594,15 @@ export function ReporteActividadesModal({
     pendingTimeoutsRef.current.forEach(clearTimeout);
     pendingTimeoutsRef.current = [];
 
+    if (isGroq) {
+      autoSendVoice.cancelVoiceRecording();
+    } else {
+      stopRealtime();
+      cancelRecordingRef.current();
+    }
+
     isProcessingRef.current = false;
     intentosAclaracionRef.current = 0;
-    stopRealtime();
-    cancelRecordingRef.current();
     stopVoiceRef.current();
     onOpenChange(false);
     setPaso("inicial");
@@ -622,6 +682,14 @@ export function ReporteActividadesModal({
   }, [isOpen]);
 
   // ==================== MIC PANEL ====================
+
+  const activeIsRecording = isGroq ? autoSendVoice.isRecording : isRecording;
+  const activeTranscript = isGroq ? autoSendVoice.transcript : voskTranscript;
+  const activeCountdown = isGroq
+    ? autoSendVoice.silenceCountdown
+    : silenceCountdown;
+  const activeIsTranscribing = isGroq ? autoSendVoice.isTranscribing : false;
+
   const MicPanel = ({
     color = "primary",
   }: {
@@ -676,7 +744,7 @@ export function ReporteActividadesModal({
         <div className="flex items-center gap-4">
           {/* Mic icon with pulse rings */}
           <div className="relative w-14 h-14 flex-shrink-0">
-            {isRecording && (
+            {activeIsRecording && (
               <>
                 <span
                   className={`absolute inset-0 rounded-full border-2 ${styles.ringColor} animate-ping opacity-30`}
@@ -689,7 +757,7 @@ export function ReporteActividadesModal({
             <div
               className={`w-14 h-14 rounded-full flex items-center justify-center border-2 ${styles.bg} ${styles.border}`}
             >
-              {isRecording ? (
+              {activeIsRecording ? (
                 <Mic className={`w-6 h-6 ${styles.iconColor}`} />
               ) : (
                 <MicOff
@@ -703,11 +771,13 @@ export function ReporteActividadesModal({
             <p
               className={`text-sm font-semibold ${isDark ? "text-white" : "text-gray-900"}`}
             >
-              {voskStatus === "loading"
+              {!isGroq && voskStatus === "loading"
                 ? "Cargando modelo..."
-                : isRecording
-                  ? "Escuchando..."
-                  : "Preparando..."}
+                : activeIsTranscribing
+                  ? "Transcribiendo..."
+                  : activeIsRecording
+                    ? "Escuchando..."
+                    : "Preparando..."}
             </p>
             <p
               className={`text-xs mt-0.5 ${isDark ? "text-gray-400" : "text-gray-500"}`}
@@ -718,7 +788,7 @@ export function ReporteActividadesModal({
             </p>
 
             {/* ─── FIX #8: audio bars sin Math.random() — solo CSS animation ── */}
-            {isRecording && (
+            {activeIsRecording && (
               <div className="flex items-end gap-0.5 mt-2 h-4">
                 {[...Array(12)].map((_, i) => (
                   <div
@@ -737,7 +807,7 @@ export function ReporteActividadesModal({
         </div>
 
         {/* Live transcript */}
-        {voskTranscript && isRecording && (
+        {activeTranscript && activeIsRecording && (
           <div
             className={`rounded-xl border px-4 py-3 text-sm leading-relaxed ${styles.transcriptBg}`}
           >
@@ -746,19 +816,19 @@ export function ReporteActividadesModal({
             >
               En vivo
             </span>
-            <span className="italic">{voskTranscript}</span>
+            <span className="italic">{activeTranscript}</span>
           </div>
         )}
 
         {/* Silence countdown */}
-        {silenceCountdown !== null && (
+        {activeCountdown !== null && (
           <div
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full border text-xs font-bold ${styles.countdownBg}`}
           >
             <div
               className={`w-1.5 h-1.5 rounded-full ${styles.dotColor} animate-ping`}
             />
-            Enviando en {silenceCountdown}s...
+            Enviando en {activeCountdown}s...
           </div>
         )}
       </div>
@@ -909,8 +979,18 @@ export function ReporteActividadesModal({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Vosk status pill */}
+              {isGroq ? (
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                    isDark
+                      ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  }`}
+                >
+                  <Zap className="w-2.5 h-2.5" />
+                  Groq
+                </span>
+              ) : (
                 <span
                   className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
                     voskStatus === "ready"
@@ -937,28 +1017,27 @@ export function ReporteActividadesModal({
                       ? "Cargando..."
                       : "Vosk"}
                 </span>
-
-                {paso !== "inicial" && paso !== "completado" && (
-                  <span
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${isDark ? "bg-white/5 text-gray-400" : "bg-gray-100 text-gray-600"}`}
-                  >
-                    {indiceActual + 1} / {totalTareas}
-                  </span>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Progress bar */}
-            {paso !== "inicial" && paso !== "completado" && (
+            <div className="mt-3 space-y-1">
+              <div className="flex justify-between items-center">
+                <span
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${isDark ? "bg-white/5 text-gray-400" : "bg-gray-100 text-gray-600"}`}
+                >
+                  {indiceActual + 1} / {totalTareas}
+                </span>
+              </div>
               <div
-                className={`mt-3 h-1 rounded-full overflow-hidden ${isDark ? "bg-white/10" : "bg-gray-100"}`}
+                className={`h-1 rounded-full overflow-hidden ${isDark ? "bg-white/10" : "bg-gray-100"}`}
               >
                 <div
                   className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-700 ease-out rounded-full"
                   style={{ width: `${progreso}%` }}
                 />
               </div>
-            )}
+            </div>
           </DialogHeader>
 
           {/* ── BODY ── */}
@@ -1023,54 +1102,56 @@ export function ReporteActividadesModal({
                 </div>
 
                 {/* Vosk status */}
-                <div
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-xs ${
-                    voskStatus === "ready"
-                      ? isDark
-                        ? "bg-emerald-950/30 border-emerald-800/40 text-emerald-400"
-                        : "bg-emerald-50 border-emerald-200 text-emerald-700"
-                      : voskStatus === "loading"
+                {!isGroq && (
+                  <div
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-xs ${
+                      voskStatus === "ready"
                         ? isDark
-                          ? "bg-amber-950/30 border-amber-800/40 text-amber-400"
-                          : "bg-amber-50 border-amber-200 text-amber-700"
-                        : voskStatus === "error"
+                          ? "bg-emerald-950/30 border-emerald-800/40 text-emerald-400"
+                          : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : voskStatus === "loading"
                           ? isDark
-                            ? "bg-red-950/30 border-red-800/40 text-red-400"
-                            : "bg-red-50 border-red-200 text-red-600"
-                          : isDark
-                            ? "bg-white/5 border-white/10 text-gray-500"
-                            : "bg-gray-50 border-gray-200 text-gray-500"
-                  }`}
-                >
-                  {voskStatus === "loading" ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-                  ) : voskStatus === "ready" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                  ) : voskStatus === "error" ? (
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  ) : (
-                    <Zap className="w-3.5 h-3.5 flex-shrink-0" />
-                  )}
-                  <span className="font-medium">
-                    {voskStatus === "loading"
-                      ? "Cargando modelo Vosk (~30 MB)..."
-                      : voskStatus === "ready"
-                        ? "Modelo listo · Procesamiento 100% local"
-                        : voskStatus === "error"
-                          ? "Error al cargar Vosk"
-                          : "Preparando Vosk..."}
-                  </span>
-                </div>
-
+                            ? "bg-amber-950/30 border-amber-800/40 text-amber-400"
+                            : "bg-amber-50 border-amber-200 text-amber-700"
+                          : voskStatus === "error"
+                            ? isDark
+                              ? "bg-red-950/30 border-red-800/40 text-red-400"
+                              : "bg-red-50 border-red-200 text-red-600"
+                            : isDark
+                              ? "bg-white/5 border-white/10 text-gray-500"
+                              : "bg-gray-50 border-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {voskStatus === "loading" ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                    ) : voskStatus === "ready" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                    ) : voskStatus === "error" ? (
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    ) : (
+                      <Zap className="w-3.5 h-3.5 flex-shrink-0" />
+                    )}
+                    <span className="font-medium">
+                      {voskStatus === "loading"
+                        ? "Cargando modelo Vosk (~30 MB)..."
+                        : voskStatus === "ready"
+                          ? "Modelo listo · Procesamiento 100% local"
+                          : voskStatus === "error"
+                            ? "Error al cargar Vosk"
+                            : "Preparando Vosk..."}
+                    </span>
+                  </div>
+                )}
                 {totalTareas > 0 && (
                   <Button
                     onClick={iniciarReporte}
                     disabled={
-                      voskStatus === "loading" || voskStatus === "error"
+                      !isGroq &&
+                      (voskStatus === "loading" || voskStatus === "error")
                     }
                     className="w-full h-11 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 disabled:opacity-50 disabled:shadow-none transition-all"
                   >
-                    {voskStatus === "loading" ? (
+                    {!isGroq && voskStatus === "loading" ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
                         Cargando Vosk...
@@ -1334,7 +1415,10 @@ export function ReporteActividadesModal({
                 </div>
 
                 <Button
-                  onClick={() => onOpenChange(false)}
+                  onClick={async () => {
+                    await onGuardarReporte();
+                    onOpenChange(false);
+                  }}
                   className="w-full h-10 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-600 text-white"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" /> Cerrar
