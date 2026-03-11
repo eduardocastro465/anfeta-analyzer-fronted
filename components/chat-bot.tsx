@@ -378,7 +378,7 @@ export function ChatBot({
         await fetchAssistantAnalysis(turno === "mañana", false, true);
       }}
       onRefrescarDatos={async () => {
-        await verificarCambiosAnfeta();
+        await fetchAssistantAnalysis(false, false, true, true);
       }}
       stopVoice={stopVoice}
       isSpeaking={isSpeaking}
@@ -1625,7 +1625,12 @@ export function ChatBot({
         true,
       );
     } else {
-      addMessage("bot", messageTemplates.tasks.noTasksFound());
+      addMessage(
+        "bot",
+        messageTemplates.tasks.noTasksFound({
+          onRefrescar: () => fetchAssistantAnalysis(false, false, false, true),
+        }),
+      );
     }
   };
   const fetchAssistantAnalysis = async (

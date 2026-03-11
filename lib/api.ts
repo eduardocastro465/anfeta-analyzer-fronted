@@ -615,6 +615,7 @@ export async function obtenerKeysUsuario() {
     const response = await fetch(`${BASE_URL_BACK}/auth/keys`, {
       method: "GET",
       credentials: "include",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
       },

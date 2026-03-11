@@ -71,6 +71,7 @@ export function TasksPanelWithDescriptions({
 
   useEffect(() => {
     if (assistantAnalysis?.data?.revisionesPorActividad?.length > 0) {
+      console.log("assistantAnalysis", assistantAnalysis);
       setUltimaActualizacion(new Date());
     }
   }, [assistantAnalysis]);

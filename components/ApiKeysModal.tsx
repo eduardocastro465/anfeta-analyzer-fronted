@@ -141,20 +141,12 @@ export function ApiKeysModal({
   const tieneKeys =
     (keysIniciales?.groq?.filter((k) => k.trim()).length ?? 0) > 0;
 
-  const [groqKeys, setGroqKeys] = useState<string[]>(
-    tieneKeys ? keysIniciales!.groq : ["", ""],
-  );
-  const [mostrarGroq, setMostrarGroq] = useState<boolean[]>(
-    tieneKeys ? keysIniciales!.groq.map(() => true) : [false, false],
-  );
-  const [groqEstados, setGroqEstados] = useState<EstadoKey[]>(
-    tieneKeys ? keysIniciales!.groq.map(() => "idle") : ["idle", "idle"],
-  );
-  const [gemini, setGemini] = useState(keysIniciales?.gemini ?? "");
+  const [groqKeys, setGroqKeys] = useState<string[]>(["", ""]);
+  const [mostrarGroq, setMostrarGroq] = useState<boolean[]>([false, false]);
+  const [groqEstados, setGroqEstados] = useState<EstadoKey[]>(["idle", "idle"]);
+  const [gemini, setGemini] = useState("");
+  const [mostrarGemini, setMostrarGemini] = useState(false);
   const [geminiEstado, setGeminiEstado] = useState<EstadoKey>("idle");
-  const [mostrarGemini, setMostrarGemini] = useState(
-    !!keysIniciales?.gemini?.trim(),
-  );
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [tabActiva, setTabActiva] = useState<"groq" | "gemini">("groq");
@@ -206,6 +198,11 @@ export function ApiKeysModal({
     setMostrarGemini(!!keysIniciales?.gemini?.trim());
     setGeminiEstado("idle");
     setError("");
+    setShowWarning(false);
+    setTabActiva("groq");
+    setPasoActivo(0);
+    setShowHint(true);
+    setLightboxAbierto(false);
   }, [open, keysIniciales]);
 
   useEffect(() => {

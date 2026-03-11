@@ -77,6 +77,7 @@ export default function Home() {
       setIsLoggedIn(false);
       setCurrentColaborador(null);
       setUserActividades([]);
+      setPreferencias({ tema: "AUTO", velocidadVoz: 1, idiomaVoz: "es-MX" });
     }
   };
 
@@ -94,6 +95,7 @@ export default function Home() {
   // 🔹 Chat
   return (
     <ChatContainer
+      key={currentColaborador.email}
       colaborador={currentColaborador}
       actividades={userActividades}
       onLogout={handleLogout}
