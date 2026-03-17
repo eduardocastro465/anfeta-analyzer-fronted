@@ -55,7 +55,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-sans antialiased" suppressHydrationWarning>
+      <body
+        className={`
+            font-['Arial'] `} suppressHydrationWarning>
         <ServiceWorkerRegister />
         {children}
         <Toaster />

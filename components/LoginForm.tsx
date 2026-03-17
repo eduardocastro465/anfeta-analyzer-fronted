@@ -29,7 +29,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   );
   const [isLoadingColaboradores, setIsLoadingColaboradores] = useState(true);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
-  const [isLoggingIn, setIsLoggingIn] = useState(false); // Nuevo estado para el login
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const { toast } = useToast();
@@ -112,6 +112,8 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   }, [selectedId, colaboradores]);
 
   const handleAcceder = async () => {
+    setIsLoggingIn(true);
+
     try {
       const user = await SignIn(colaboradorInfo?.email || "");
 
@@ -121,7 +123,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           description: "Debes elegir un colaborador antes de continuar.",
           variant: "warning",
         });
-
+        setIsLoggingIn(false);
         return;
       }
 
@@ -131,6 +133,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       onLogin(colaboradorInfo, []);
     } catch (error: any) {
       console.error("Error en login:", error);
+      setIsLoggingIn(false);
 
       if (error.message === "NETWORK_ERROR") {
         toast({
@@ -256,7 +259,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                   <select
                     value={selectedId}
                     onChange={(e) => setSelectedId(e.target.value)}
-                    disabled={isLoggingIn} // Deshabilitar durante el login
+                    disabled={isLoggingIn}
                     className="w-full h-12 px-3 bg-white/70 dark:bg-neutral-800/70 backdrop-blur-sm border-0 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#6841ea] shadow-sm appearance-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="" className="text-gray-400">
@@ -352,8 +355,8 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                       Iniciar Sesión
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </span>
-                  </button>
-                )}
+                </button>
+                  )}
               </div>
             )}
           </div>

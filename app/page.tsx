@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   obtenerPreferenciasUsuario,
   guardarPreferenciasUsuario,
@@ -15,7 +15,6 @@ export default function Home() {
   const [currentColaborador, setCurrentColaborador] =
     useState<Colaborador | null>(null);
   const [userActividades, setUserActividades] = useState<Actividad[]>([]);
-
   const [preferencias, setPreferencias] = useState({
     tema: "AUTO",
     velocidadVoz: 1,
@@ -96,7 +95,12 @@ export default function Home() {
   };
 
   if (!isLoggedIn || !currentColaborador) {
-    return <LoginForm onLogin={handleLogin} />;
+    return (
+      <div   className={`
+            font-['Arial'] `} style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+        <LoginForm onLogin={handleLogin} />
+      </div>
+    );
   }
 
   return (

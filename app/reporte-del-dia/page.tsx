@@ -3,13 +3,13 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import LoadingScreen from "./components/LoadingScreen";
-
 import ErrorScreen from "./components/ErrorScreen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  RefreshCw, 
-  Search, 
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  RefreshCw,
+  Search,
   ChevronDown,
   ChevronUp,
   Filter,
@@ -27,7 +27,21 @@ import {
   PauseCircle,
   VolumeX,
   Settings,
-  LogOut
+  LogOut,
+  Brain,
+  Calendar,
+  List,
+  Mail,
+  Phone,
+  Briefcase,
+  Check,
+  Sun,
+  CalendarDays,
+  CalendarRange,
+  Circle,
+  Activity,
+  Clock as HistoryIcon,
+  ArrowLeft
 } from "lucide-react";
 import {
   useActividadesData,
@@ -36,8 +50,9 @@ import {
 import { Actividad, Tarea } from "./components/types";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
+import DashboardAnalytics from "./components/DashboardAnalytics";
 
-// Hook personalizado para SÍNTESIS DE VOZ
+// ==================== HOOK DE SÍNTESIS DE VOZ ====================
 const useSpeechSynthesis = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -45,7 +60,7 @@ const useSpeechSynthesis = () => {
   const [error, setError] = useState<string | null>(null);
   const [voces, setVoces] = useState<SpeechSynthesisVoice[]>([]);
   const [vozSeleccionada, setVozSeleccionada] = useState<string>("");
-  
+
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
@@ -56,13 +71,13 @@ const useSpeechSynthesis = () => {
         setError("Tu navegador no soporta síntesis de voz.");
       } else {
         synthesisRef.current = window.speechSynthesis;
-        
+
         const cargarVoces = () => {
           if (synthesisRef.current) {
             const vocesDisponibles = synthesisRef.current.getVoices();
             setVoces(vocesDisponibles);
-            
-            const vozEspanol = vocesDisponibles.find(v => 
+
+            const vozEspanol = vocesDisponibles.find(v =>
               v.lang.includes('es') || v.lang.includes('ES')
             );
             if (vozEspanol) {
@@ -70,11 +85,11 @@ const useSpeechSynthesis = () => {
             }
           }
         };
-        
+
         if (window.speechSynthesis.onvoiceschanged !== undefined) {
           window.speechSynthesis.onvoiceschanged = cargarVoces;
         }
-        
+
         cargarVoces();
       }
     }
@@ -180,16 +195,16 @@ const useSpeechSynthesis = () => {
   };
 };
 
-// Modal de confirmación de lectura
-const ModalConfirmacionLectura = ({ 
-  isOpen, 
-  onClose, 
+// ==================== MODAL DE CONFIRMACIÓN DE LECTURA ====================
+const ModalConfirmacionLectura = ({
+  isOpen,
+  onClose,
   onConfirm,
   actividad,
   tareas
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
   onConfirm: (tareasSeleccionadas: Tarea[]) => void;
   actividad: Actividad | null;
   tareas: Tarea[];
@@ -248,242 +263,298 @@ const ModalConfirmacionLectura = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-      <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-[#2a2a2a]">
-          <div className="flex items-center gap-4">
-            <div className="p-2 bg-[#6841ea]/10 rounded-lg">
-              <Volume2 className="w-5 h-5 text-[#6841ea]" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.2 }}
+        className="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl"
+      >
+        {/* Header */}
+        <div className="relative border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-500/10 rounded-lg">
+                <Volume2 className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-white/90">
+                    Confirmar lectura
+                  </h2>
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-indigo-500/10 text-indigo-400 rounded-full border border-indigo-500/20">
+                    {tareasSeleccionadas.size}/{totalTareasConExplicacion}
+                  </span>
+                </div>
+                <p className="text-xs text-white/40 mt-0.5">
+                  {actividad.titulo} · {new Date(actividad.fecha).toLocaleDateString('es-MX')}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Confirmar lectura por voz
-                <span className="ml-2 text-xs bg-[#6841ea]/20 text-[#6841ea] px-2 py-0.5 rounded-full">
-                  {tareasSeleccionadas.size} de {totalTareasConExplicacion}
-                </span>
-              </h2>
-              <p className="text-sm text-gray-400">
-                {actividad.titulo} · {actividad.fecha}
-              </p>
-            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-[#2a2a2a] rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-400" />
-          </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
-          <div className="bg-[#111] rounded-lg p-3">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-4">
-                <span className="text-gray-400">Total tareas:</span>
-                <span className="text-white font-medium">{tareas.length}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-gray-400">Con explicación:</span>
-                <span className="text-[#6841ea] font-medium">{totalTareasConExplicacion}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-gray-400">Seleccionadas:</span>
-                <span className="text-[#6841ea] font-medium">{tareasSeleccionadas.size}</span>
-              </div>
+        <div className="p-4 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white/[0.02] rounded-lg p-3">
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Total</p>
+              <p className="text-lg font-semibold text-white/90">{tareas.length}</p>
+            </div>
+            <div className="bg-white/[0.02] rounded-lg p-3">
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Con IA</p>
+              <p className="text-lg font-semibold text-indigo-400">{totalTareasConExplicacion}</p>
+            </div>
+            <div className="bg-white/[0.02] rounded-lg p-3">
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Selección</p>
+              <p className="text-lg font-semibold text-indigo-400">{tareasSeleccionadas.size}</p>
             </div>
           </div>
 
-          <div className="bg-[#111] rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-2">Instrucciones</h3>
-            <ul className="space-y-2 text-sm text-gray-400">
-              <li className="flex items-start gap-2">
-                <span className="text-[#6841ea] mt-1">•</span>
-                <span>Se leerán <span className="text-white font-medium">{tareasSeleccionadas.size}</span> tareas con explicaciones disponibles</span>
+          {/* Instrucciones */}
+          <div className="bg-white/[0.02] rounded-lg p-3">
+            <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Instrucciones</h3>
+            <ul className="space-y-1.5">
+              <li className="flex items-start gap-2 text-xs text-white/40">
+                <CheckCircle className="w-3.5 h-3.5 text-indigo-400/40 mt-0.5 flex-shrink-0" />
+                <span>Se leerán <span className="text-white/60 font-medium">{tareasSeleccionadas.size}</span> tareas con explicaciones</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-[#6841ea] mt-1">•</span>
+              <li className="flex items-start gap-2 text-xs text-white/40">
+                <CheckCircle className="w-3.5 h-3.5 text-indigo-400/40 mt-0.5 flex-shrink-0" />
                 <span>Puedes seleccionar/deseleccionar tareas específicas</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-[#6841ea] mt-1">•</span>
+              <li className="flex items-start gap-2 text-xs text-white/40">
+                <CheckCircle className="w-3.5 h-3.5 text-indigo-400/40 mt-0.5 flex-shrink-0" />
                 <span>La lectura se realizará en orden, puedes pausar y reanudar</span>
               </li>
             </ul>
           </div>
 
+          {/* Header de tareas */}
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-300">Tareas a leer</h3>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
+            <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider">
+              Tareas disponibles
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
                 onClick={seleccionarTodas}
                 disabled={totalTareasConExplicacion === 0}
-                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]"
+                className="text-[10px] px-2 py-1 text-indigo-400/60 hover:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Seleccionar todas
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
+              </button>
+              <button
                 onClick={limpiarSeleccion}
-                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]"
+                className="text-[10px] px-2 py-1 text-white/40 hover:text-white/60 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
               >
                 Limpiar
-              </Button>
+              </button>
             </div>
           </div>
 
-          <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+          {/* Lista de tareas */}
+          <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
             {tareas.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No hay tareas en esta actividad
+              <div className="text-center py-8">
+                <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <AlertCircle className="w-5 h-5 text-white/20" />
+                </div>
+                <p className="text-xs text-white/40">No hay tareas en esta actividad</p>
               </div>
             ) : (
               tareas.map((tarea, index) => {
                 const tieneExplicacion = tarea.tieneExplicacion === true;
                 const estaSeleccionada = tareasSeleccionadas.has(tarea.pendienteId);
-                
+
                 return (
-                  <div
+                  <motion.div
                     key={tarea.pendienteId}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.02 }}
+                    onClick={() => tieneExplicacion && toggleTarea(tarea.pendienteId)}
                     className={`
-                      border rounded-lg transition-all duration-200
-                      ${tieneExplicacion 
+                      group relative rounded-lg border transition-all duration-200 cursor-pointer
+                      ${tieneExplicacion
                         ? estaSeleccionada
-                          ? 'border-[#6841ea]/50 bg-[#6841ea]/5'
-                          : 'border-[#2a2a2a] bg-[#111] hover:border-[#3a3a3a]'
-                        : 'border-[#2a2a2a] bg-[#111]/50 opacity-50'
+                          ? 'bg-indigo-500/5 border-indigo-500/30'
+                          : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.03] hover:border-white/10'
+                        : 'bg-white/[0.01] border-white/5 opacity-40 cursor-not-allowed'
                       }
                     `}
                   >
                     <div className="p-3">
                       <div className="flex items-start gap-3">
-                        <div className="pt-0.5">
+                        {/* Checkbox */}
+                        <div className="relative flex items-center justify-center w-4 h-4 mt-0.5">
                           <input
                             type="checkbox"
                             checked={estaSeleccionada}
-                            onChange={() => toggleTarea(tarea.pendienteId)}
+                            onChange={() => {}}
                             disabled={!tieneExplicacion}
-                            className="w-4 h-4 rounded border-[#3a3a3a] bg-[#0a0a0a] text-[#6841ea] focus:ring-[#6841ea]"
+                            className="absolute opacity-0 w-4 h-4 cursor-pointer"
                           />
+                          <div className={`
+                            w-4 h-4 rounded border transition-all duration-200 flex items-center justify-center
+                            ${tieneExplicacion
+                              ? estaSeleccionada
+                                ? 'bg-indigo-500 border-indigo-500'
+                                : 'border-white/20 group-hover:border-white/40'
+                              : 'border-white/10'
+                            }
+                          `}>
+                            {estaSeleccionada && (
+                              <Check className="w-3 h-3 text-white" />
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex-shrink-0 w-6 h-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center">
-                          <span className="text-xs font-medium text-gray-400">{index + 1}</span>
+                        {/* Número de tarea */}
+                        <div className={`
+                          w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-medium
+                          ${tieneExplicacion
+                            ? estaSeleccionada
+                              ? 'bg-indigo-500/20 text-indigo-400'
+                              : 'bg-white/5 text-white/40'
+                            : 'bg-white/5 text-white/20'
+                          }
+                        `}>
+                          {index + 1}
                         </div>
 
-                        <div className="flex-1">
+                        {/* Contenido */}
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-white">
+                            <span className={`
+                              text-xs font-medium truncate max-w-[200px]
+                              ${tieneExplicacion
+                                ? estaSeleccionada
+                                  ? 'text-white'
+                                  : 'text-white/80'
+                                : 'text-white/40'
+                              }
+                            `}>
                               {tarea.nombre}
                             </span>
                             {tarea.prioridad && (
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
-                                tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
-                                'bg-blue-500/10 text-blue-400'
-                              }`}>
+                              <span className={`
+                                text-[8px] px-1.5 py-0.5 rounded-full
+                                ${tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                                  tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                                    'bg-blue-500/10 text-blue-400'}
+                              `}>
                                 {tarea.prioridad}
                               </span>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
+                          {/* Metadatos */}
+                          <div className="flex items-center gap-2 text-[10px] text-white/30">
                             {tarea.duracionMin > 0 && (
                               <>
-                                <span className="flex items-center gap-1">
+                                <span className="flex items-center gap-0.5">
                                   <Clock className="w-3 h-3" />
                                   {tarea.duracionMin} min
                                 </span>
-                                <span>•</span>
+                                <span className="w-1 h-1 rounded-full bg-white/20" />
                               </>
                             )}
-                            <span className={tarea.terminada ? 'text-green-400' : 'text-yellow-400'}>
+                            <span className={tarea.terminada ? 'text-green-400/60' : 'text-yellow-400/60'}>
                               {tarea.terminada ? 'Completada' : 'Pendiente'}
                             </span>
-                            {tieneExplicacion && (
-                              <>
-                                <span>•</span>
-                                <span className="text-[#6841ea] flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" />
-                                  Con explicación
-                                </span>
-                              </>
-                            )}
                           </div>
 
+                          {/* Preview de explicación */}
                           {tarea.explicacionActual && (
-                            <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3 mt-2">
-                              <p className="text-sm text-gray-300 mb-2">
-                                {tarea.explicacionActual.texto.length > 150
-                                  ? tarea.explicacionActual.texto.substring(0, 150) + '...'
-                                  : tarea.explicacionActual.texto
-                                }
+                            <div className="mt-2 pt-2 border-t border-white/5">
+                              <p className="text-[10px] text-white/40 leading-relaxed line-clamp-2">
+                                {tarea.explicacionActual.texto}
                               </p>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-500">
-                                  {tarea.explicacionActual.email?.split('@')[0] || 'Usuario'}
+                              <div className="flex items-center gap-2 mt-1 text-[8px]">
+                                <span className="text-white/30">
+                                  {tarea.explicacionActual.email?.split('@')[0]}
                                 </span>
-                                <span className="text-gray-600">
-                                  {new Date(tarea.explicacionActual.fecha).toLocaleDateString('es-ES')}
+                                <span className="w-1 h-1 rounded-full bg-white/20" />
+                                <span className="text-white/30">
+                                  {new Date(tarea.explicacionActual.fecha).toLocaleDateString()}
                                 </span>
                               </div>
                             </div>
                           )}
                         </div>
+
+                        {/* Badge IA */}
+                        {tieneExplicacion && (
+                          <div className="flex items-center gap-1 text-[8px] px-1.5 py-0.5 bg-indigo-500/10 text-indigo-400/60 rounded-full">
+                            <Brain className="w-2.5 h-2.5" />
+                            <span>IA</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 p-5 border-t border-[#2a2a2a] bg-[#111]">
-          <div className="flex items-center gap-2 text-sm text-gray-400">
-            <Volume2 className="w-4 h-4 text-[#6841ea]" />
-            <span>Se leerán {tareasSeleccionadas.size} tarea{tareasSeleccionadas.size !== 1 ? 's' : ''}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              className="h-10 px-4 text-sm text-gray-400 hover:text-white border border-[#2a2a2a]"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleConfirm}
-              disabled={tareasSeleccionadas.size === 0}
-              className={`
-                h-10 px-5 text-sm font-medium
-                ${tareasSeleccionadas.size > 0
-                  ? 'bg-[#6841ea] hover:bg-[#7a4cf5] text-white'
-                  : 'bg-[#2a2a2a] text-gray-500 cursor-not-allowed'
-                }
-              `}
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Iniciar lectura ({tareasSeleccionadas.size})
-            </Button>
+        {/* Footer */}
+        <div className="border-t border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs">
+              <div className="w-6 h-6 bg-indigo-500/10 rounded-lg flex items-center justify-center">
+                <Volume2 className="w-3 h-3 text-indigo-400" />
+              </div>
+              <span className="text-white/40">
+                {tareasSeleccionadas.size} tarea{tareasSeleccionadas.size !== 1 ? 's' : ''} seleccionada{tareasSeleccionadas.size !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                className="px-3 py-1.5 text-xs font-medium text-white/40 hover:text-white/60 bg-transparent hover:bg-white/5 rounded-lg transition-colors border border-white/5"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={tareasSeleccionadas.size === 0}
+                className={`
+                  px-4 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 flex items-center gap-2
+                  ${tareasSeleccionadas.size > 0
+                    ? 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                    : 'bg-white/5 text-white/20 cursor-not-allowed'
+                  }
+                `}
+              >
+                <Play className="w-3 h-3" />
+                Iniciar lectura ({tareasSeleccionadas.size})
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
 
-// Modal de lectura en vivo
-const ModalLecturaVivo = ({ 
-  isOpen, 
-  onClose, 
+// ==================== MODAL DE LECTURA DE TAREAS ====================
+const ModalLecturaTareas = ({
+  isOpen,
+  onClose,
   tareas,
   onCompletado
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
   tareas: Tarea[];
   onCompletado: () => void;
 }) => {
@@ -491,7 +562,7 @@ const ModalLecturaVivo = ({
   const [velocidad, setVelocidad] = useState(1);
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const { toast } = useToast();
-  
+
   const speech = useSpeechSynthesis();
 
   useEffect(() => {
@@ -502,16 +573,41 @@ const ModalLecturaVivo = ({
         speech.hablar(textoALeer, velocidad);
       }
     }
-  }, [tareaActual, isOpen, tareas]);
+  }, [tareaActual, isOpen, tareas, speech.isSpeaking, velocidad]);
 
   if (!isOpen) return null;
-  
+
   if (tareas.length === 0) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-        <div className="bg-[#0a0a0a] border border-red-500/30 rounded-xl p-6">
-          <p className="text-white">No hay tareas para leer</p>
-          <Button onClick={onClose} className="mt-4">Cerrar</Button>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/30">
+        <div className="bg-[#0a0a0a] border border-yellow-500/30 rounded-xl p-5 max-w-md">
+          <div className="text-center">
+            <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-white mb-1">No hay tareas</h3>
+            <p className="text-xs text-gray-400 mb-3">No hay tareas disponibles para leer.</p>
+            <Button onClick={onClose} size="sm" className="bg-[#6841ea] hover:bg-[#7a4cf5] h-8 text-xs px-3">
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!speech.isSupported) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/30">
+        <div className="bg-[#0a0a0a] border border-yellow-500/30 rounded-xl w-full max-w-md p-5">
+          <div className="text-center">
+            <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-white mb-1">Navegador no compatible</h3>
+            <p className="text-xs text-gray-400 mb-3">
+              {speech.error || "Tu navegador no soporta síntesis de voz."}
+            </p>
+            <Button onClick={onClose} size="sm" className="bg-[#6841ea] hover:bg-[#7a4cf5] h-8 text-xs px-3">
+              Entendido
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -548,7 +644,7 @@ const ModalLecturaVivo = ({
 
   const siguienteTarea = () => {
     speech.detener();
-    
+
     if (tareaActual < tareas.length - 1) {
       setTareaActual(tareaActual + 1);
     } else {
@@ -584,73 +680,62 @@ const ModalLecturaVivo = ({
     }
   };
 
-  if (!speech.isSupported) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-        <div className="bg-[#0a0a0a] border border-yellow-500/30 rounded-xl w-full max-w-md p-6">
-          <div className="text-center">
-            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">Navegador no compatible</h3>
-            <p className="text-sm text-gray-400 mb-4">
-              {speech.error || "Tu navegador no soporta síntesis de voz."}
-            </p>
-            <Button onClick={onClose} className="bg-[#6841ea] hover:bg-[#7a4cf5]">
-              Entendido
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const irATarea = (index: number) => {
+    speech.detener();
+    setTareaActual(index);
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/30">
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl w-full max-w-3xl shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-[#2a2a2a]">
-          <div className="flex items-center gap-4">
-            <div className={`p-2 ${speech.isSpeaking ? 'bg-[#6841ea]/20' : 'bg-[#1a1a1a]'} rounded-lg`}>
-              <Volume2 className={`w-5 h-5 ${speech.isSpeaking ? 'text-[#6841ea]' : 'text-gray-500'}`} />
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-[#2a2a2a]">
+          <div className="flex items-center gap-3">
+            <div className={`p-1.5 ${speech.isSpeaking ? 'bg-[#6841ea]/20' : 'bg-[#1a1a1a]'} rounded-lg`}>
+              <Volume2 className={`w-4 h-4 ${speech.isSpeaking ? 'text-[#6841ea]' : 'text-gray-500'}`} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">
-                Lectura por voz
+              <h2 className="text-base font-semibold text-white">
+                Lectura de Tareas
               </h2>
-              <p className="text-sm text-gray-400">
+              <p className="text-xs text-gray-400">
                 Tarea {tareaActual + 1} de {tareas.length}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setMostrarConfig(!mostrarConfig)}
               className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
             >
-              <Settings className="w-5 h-5 text-gray-400" />
+              <Settings className="w-4 h-4 text-gray-400" />
             </button>
             <button
               onClick={onClose}
               className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
             >
-              <X className="w-5 h-5 text-gray-400" />
+              <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
         </div>
 
-        <div className="h-1 bg-[#1a1a1a]">
-          <div 
+        {/* Progress bar */}
+        <div className="h-0.5 bg-[#1a1a1a]">
+          <div
             className="h-full bg-[#6841ea] transition-all duration-300"
             style={{ width: `${progreso}%` }}
           />
         </div>
 
+        {/* Config panel */}
         {mostrarConfig && (
-          <div className="p-5 border-b border-[#2a2a2a] bg-[#111]">
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Configuración de voz</h3>
-            <div className="space-y-3">
+          <div className="p-3 border-b border-[#2a2a2a] bg-[#111]">
+            <h3 className="text-xs font-medium text-gray-300 mb-2">Configuración de voz</h3>
+            <div className="space-y-2">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Velocidad</label>
                 <div className="flex items-center gap-2">
-                  <VolumeX className="w-4 h-4 text-gray-500" />
+                  <VolumeX className="w-3 h-3 text-gray-500" />
                   <input
                     type="range"
                     min="0.5"
@@ -658,9 +743,9 @@ const ModalLecturaVivo = ({
                     step="0.1"
                     value={velocidad}
                     onChange={(e) => cambiarVelocidad(parseFloat(e.target.value))}
-                    className="flex-1 h-2 bg-[#1a1a1a] rounded-lg appearance-none cursor-pointer"
+                    className="flex-1 h-1.5 bg-[#1a1a1a] rounded-lg appearance-none cursor-pointer"
                   />
-                  <Volume2 className="w-4 h-4 text-gray-500" />
+                  <Volume2 className="w-3 h-3 text-gray-500" />
                   <span className="text-xs text-white w-12">{velocidad.toFixed(1)}x</span>
                 </div>
               </div>
@@ -671,7 +756,7 @@ const ModalLecturaVivo = ({
                   <select
                     value={speech.vozSeleccionada}
                     onChange={(e) => speech.cambiarVoz(e.target.value)}
-                    className="w-full h-9 text-sm bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 text-gray-300"
+                    className="w-full h-8 text-xs bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-2 text-gray-300"
                   >
                     {speech.voces.map((voz) => (
                       <option key={voz.name} value={voz.name}>
@@ -685,109 +770,272 @@ const ModalLecturaVivo = ({
           </div>
         )}
 
-        <div className="p-5 space-y-4">
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-4">
-            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">TAREA ACTUAL</h3>
-            <p className="text-base font-medium text-white mb-2">{tareaAct.nombre}</p>
-            {tareaAct.explicacionActual && (
-              <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3 mt-2">
-                <p className="text-xs text-gray-500 mb-1">Explicación:</p>
-                <p className="text-sm text-gray-300">{tareaAct.explicacionActual.texto}</p>
+        {/* Contenido principal en dos columnas */}
+        <div className="flex flex-col md:flex-row p-3 gap-3">
+          {/* Columna izquierda - Tarea actual y controles */}
+          <div className="flex-1 space-y-3">
+            {/* Tarea actual */}
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">TAREA ACTUAL</h3>
+                <span className="text-xs bg-[#1a1a1a] text-gray-400 px-2 py-0.5 rounded-full">
+                  #{tareaActual + 1}
+                </span>
+              </div>
+
+              {/* Título y prioridad */}
+              <div className="flex items-center gap-2 mb-2">
+                <p className="text-sm font-medium text-white">{tareaAct.nombre}</p>
+                {tareaAct.prioridad && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${tareaAct.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                      tareaAct.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                        'bg-blue-500/10 text-blue-400'
+                    }`}>
+                    {tareaAct.prioridad}
+                  </span>
+                )}
+              </div>
+
+              {/* Estado de la tarea */}
+              <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
+                {tareaAct.duracionMin > 0 && (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {tareaAct.duracionMin} min
+                    </span>
+                    <span>•</span>
+                  </>
+                )}
+                <span className={tareaAct.terminada ? 'text-green-400' : 'text-yellow-400'}>
+                  {tareaAct.terminada ? '✓ Completada' : '⏳ Pendiente'}
+                </span>
+              </div>
+
+              {/* Explicación */}
+              {tareaAct.explicacionActual && (
+                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Explicación:</p>
+                  <p className="text-xs text-gray-300 leading-relaxed">{tareaAct.explicacionActual.texto}</p>
+                  {tareaAct.explicacionActual.fecha && (
+                    <p className="text-[10px] text-gray-500 mt-2 text-right">
+                      {new Date(tareaAct.explicacionActual.fecha).toLocaleString('es-MX')}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Estado de lectura */}
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</span>
+                {speech.isSpeaking && !speech.isPaused && (
+                  <span className="flex items-center gap-1 text-xs text-[#6841ea]">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#6841ea] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#6841ea]"></span>
+                    </span>
+                    Leyendo...
+                  </span>
+                )}
+                {speech.isPaused && (
+                  <span className="text-xs text-yellow-400">Pausado</span>
+                )}
+              </div>
+              <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-2 min-h-[40px]">
+                <p className="text-xs text-gray-400">
+                  {speech.isSpeaking
+                    ? (speech.isPaused ? "Lectura pausada" : "Reproduciendo...")
+                    : "Listo para leer"}
+                </p>
+              </div>
+            </div>
+
+            {speech.error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+                <p className="text-xs text-red-400 text-center">{speech.error}</p>
               </div>
             )}
-          </div>
 
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</span>
-              {speech.isSpeaking && !speech.isPaused && (
-                <span className="flex items-center gap-2 text-xs text-[#6841ea]">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#6841ea] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#6841ea]"></span>
-                  </span>
-                  Leyendo...
-                </span>
-              )}
-              {speech.isPaused && (
-                <span className="text-xs text-yellow-400">Pausado</span>
-              )}
-            </div>
-            <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3 min-h-[60px]">
-              <p className="text-sm text-gray-400">
-                {speech.isSpeaking 
-                  ? (speech.isPaused ? "Lectura pausada" : "Hablando...") 
-                  : "Listo para leer"}
-              </p>
-            </div>
-          </div>
-
-          {speech.error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-              <p className="text-xs text-red-400 text-center">{speech.error}</p>
-            </div>
-          )}
-
-          <div className="flex items-center justify-center gap-3">
-            <Button
-              onClick={tareaAnterior}
-              disabled={tareaActual === 0}
-              variant="ghost"
-              className="h-10 px-4 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-            >
-              ← Anterior
-            </Button>
-
-            <Button
-              onClick={repetirTarea}
-              variant="ghost"
-              className="h-10 w-10 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]"
-              title="Repetir tarea actual"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-
-            <Button
-              onClick={pausarReanudar}
-              disabled={!speech.isSpeaking}
-              variant="ghost"
-              className="h-10 w-10 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-            >
-              {speech.isPaused ? <Play className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
-            </Button>
-
-            <Button
-              onClick={detenerLectura}
-              disabled={!speech.isSpeaking}
-              variant="ghost"
-              className="h-10 w-10 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-            >
-              <StopCircle className="w-4 h-4" />
-            </Button>
-
-            <Button
-              onClick={siguienteTarea}
-              variant="ghost"
-              className="h-10 px-4 text-gray-400 hover:text-white border border-[#2a2a2a]"
-            >
-              {tareaActual < tareas.length - 1 ? 'Siguiente →' : 'Finalizar'}
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-center gap-2 pt-2">
-            {[0.75, 1, 1.25, 1.5].map((v) => (
-              <button
-                key={v}
-                onClick={() => cambiarVelocidad(v)}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  velocidad === v
-                    ? 'bg-[#6841ea] text-white'
-                    : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
-                }`}
+            {/* Controles de navegación */}
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                onClick={tareaAnterior}
+                disabled={tareaActual === 0}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
               >
-                {v}x
-              </button>
-            ))}
+                ← Anterior
+              </Button>
+
+              <Button
+                onClick={repetirTarea}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]"
+                title="Repetir tarea actual"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </Button>
+
+              <Button
+                onClick={pausarReanudar}
+                disabled={!speech.isSpeaking}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
+              >
+                {speech.isPaused ? <Play className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
+              </Button>
+
+              <Button
+                onClick={detenerLectura}
+                disabled={!speech.isSpeaking}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
+              >
+                <StopCircle className="w-3.5 h-3.5" />
+              </Button>
+
+              <Button
+                onClick={siguienteTarea}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]"
+              >
+                {tareaActual < tareas.length - 1 ? 'Siguiente →' : 'Finalizar'}
+              </Button>
+            </div>
+
+            {/* Velocidad rápida */}
+            <div className="flex items-center justify-center gap-1 pt-1">
+              {[0.75, 1, 1.25, 1.5, 2].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => cambiarVelocidad(v)}
+                  className={`px-1.5 py-0.5 text-xs rounded transition-colors ${velocidad === v
+                      ? 'bg-[#6841ea] text-white'
+                      : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
+                    }`}
+                >
+                  {v}x
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Columna derecha - Listado de tareas */}
+          <div className="w-full md:w-72 lg:w-80 bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-medium text-gray-300 flex items-center gap-1">
+                <List className="w-3.5 h-3.5" />
+                Listado de tareas
+              </h3>
+              <span className="text-xs bg-[#1a1a1a] text-gray-400 px-1.5 py-0.5 rounded-full">
+                {tareaActual + 1}/{tareas.length}
+              </span>
+            </div>
+
+            <div className="space-y-1.5 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
+              {tareas.map((tarea, index) => {
+                const esPasada = index < tareaActual;
+                const esActual = index === tareaActual;
+                const esFutura = index > tareaActual;
+
+                return (
+                  <motion.div
+                    key={tarea.pendienteId}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.02 }}
+                    onClick={() => irATarea(index)}
+                    className={`
+                      flex items-start gap-2 p-2 rounded-lg cursor-pointer
+                      transition-all duration-300 group border
+                      ${esActual
+                        ? 'bg-[#6841ea]/20 border-[#6841ea]/50 shadow-sm shadow-[#6841ea]/10'
+                        : 'hover:bg-[#1a1a1a] border-transparent hover:border-[#2a2a2a]'
+                      }
+                    `}
+                  >
+                    {/* Indicador de estado */}
+                    <div className="relative mt-1">
+                      <div className={`
+                        w-2 h-2 rounded-full transition-all duration-300
+                        ${esActual ? 'bg-[#6841ea]' : ''}
+                        ${esPasada ? 'bg-gray-600' : ''}
+                        ${esFutura ? 'bg-gray-400' : ''}
+                      `} />
+                      {esActual && (
+                        <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-75" />
+                      )}
+                    </div>
+
+                    {/* Contenido de la tarea */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <p className={`
+                          text-xs font-medium truncate max-w-[120px] transition-all duration-300
+                          ${esPasada ? 'text-gray-500' : ''}
+                          ${esActual ? 'text-white' : 'text-gray-300'}
+                          ${esFutura ? 'text-gray-300' : ''}
+                        `}>
+                          {tarea.nombre}
+                        </p>
+                        <span className={`
+                          text-[8px] px-1 py-0.5 rounded-full whitespace-nowrap transition-all duration-300
+                          ${esPasada ? 'bg-gray-800 text-gray-500' : ''}
+                          ${esActual ? 'bg-[#6841ea]/20 text-[#6841ea]' : ''}
+                          ${esFutura ? 'bg-[#1a1a1a] text-gray-600' : ''}
+                        `}>
+                          {esPasada && 'Leída'}
+                          {esActual && 'Actual'}
+                          {esFutura && 'Pendiente'}
+                        </span>
+                      </div>
+
+                      {/* Prioridad y duración */}
+                      <div className="flex items-center gap-1 mb-1">
+                        {tarea.prioridad && (
+                          <span className={`
+                            text-[8px] px-1 py-0.5 rounded
+                            ${tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                              tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                                'bg-blue-500/10 text-blue-400'}
+                          `}>
+                            {tarea.prioridad}
+                          </span>
+                        )}
+                        {tarea.duracionMin > 0 && (
+                          <span className={`
+                            text-[8px] flex items-center gap-0.5
+                            ${esPasada ? 'text-gray-600' : 'text-gray-500'}
+                          `}>
+                            <Clock className="w-2.5 h-2.5" />
+                            {tarea.duracionMin}min
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Preview de la explicación */}
+                      {tarea.explicacionActual && (
+                        <p className={`
+                          text-[8px] leading-tight line-clamp-2 transition-all duration-300
+                          ${esPasada ? 'text-gray-600' : ''}
+                          ${esActual ? 'text-gray-300' : 'text-gray-400'}
+                          ${esFutura ? 'text-gray-400' : ''}
+                        `}>
+                          {tarea.explicacionActual.texto.substring(0, 70)}...
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -795,6 +1043,594 @@ const ModalLecturaVivo = ({
   );
 };
 
+// ==================== MODAL DE LECTURA DE RESÚMENES IA ====================
+const ModalLecturaResumenes = ({
+  isOpen,
+  onClose,
+  actividadId
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  actividadId: string | null;
+}) => {
+  const [actividadActual, setActividadActual] = useState(0);
+  const [velocidad, setVelocidad] = useState(1);
+  const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [actividades, setActividades] = useState<Actividad[]>([]);
+  const [actividadesAgrupadas, setActividadesAgrupadas] = useState<{ [key: string]: Actividad[] }>({});
+  const [cargando, setCargando] = useState(false);
+  const { toast } = useToast();
+
+  const speech = useSpeechSynthesis();
+
+  // Función para agrupar actividades por fecha
+  const agruparPorFecha = (acts: Actividad[]) => {
+    const grupos: { [key: string]: Actividad[] } = {};
+
+    acts.forEach(act => {
+      const fecha = new Date(act.fecha).toLocaleDateString('es-MX', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      if (!grupos[fecha]) {
+        grupos[fecha] = [];
+      }
+      grupos[fecha].push(act);
+    });
+
+    // Ordenar las fechas (más reciente primero)
+    const fechasOrdenadas = Object.keys(grupos).sort((a, b) => {
+      return new Date(b).getTime() - new Date(a).getTime();
+    });
+
+    const gruposOrdenados: { [key: string]: Actividad[] } = {};
+    fechasOrdenadas.forEach(fecha => {
+      // Ordenar actividades dentro de cada fecha
+      grupos[fecha].sort((a, b) => {
+        if (a.horaInicio && b.horaInicio) {
+          return a.horaInicio.localeCompare(b.horaInicio);
+        }
+        return 0;
+      });
+      gruposOrdenados[fecha] = grupos[fecha];
+    });
+
+    return gruposOrdenados;
+  };
+
+  // Cargar datos de la API cuando se abre el modal
+  useEffect(() => {
+    const cargarActividades = async () => {
+      if (!isOpen) return;
+
+      setCargando(true);
+      try {
+        const response = await fetch("http://localhost:4000/api/v1/admin/todas-actividades-resumen-ia", {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.actividades) {
+          let actividadesFiltradas: Actividad[];
+
+          if (actividadId) {
+            const actividadFiltrada = data.actividades.find((a: Actividad) => a.actividadId === actividadId);
+            actividadesFiltradas = actividadFiltrada ? [actividadFiltrada] : [];
+          } else {
+            actividadesFiltradas = data.actividades.filter((a: Actividad) => a.resumenEjecutivo?.texto);
+          }
+
+          setActividades(actividadesFiltradas);
+          setActividadesAgrupadas(agruparPorFecha(actividadesFiltradas));
+        }
+      } catch (error) {
+        console.error("Error cargando actividades:", error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los resúmenes",
+          variant: "destructive",
+          duration: 3000
+        });
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    cargarActividades();
+  }, [isOpen, actividadId]);
+
+  // Actualizar agrupaciones cuando cambian las actividades
+  useEffect(() => {
+    if (actividades.length > 0) {
+      setActividadesAgrupadas(agruparPorFecha(actividades));
+    }
+  }, [actividades]);
+
+  // Efecto para la lectura por voz
+  useEffect(() => {
+    if (isOpen && actividades.length > 0 && !speech.isSpeaking && !cargando) {
+      const actividad = actividades[actividadActual];
+      if (actividad?.resumenEjecutivo?.texto) {
+        const textoALeer = `Actividad: ${actividad.titulo}. ${actividad.resumenEjecutivo.texto}`;
+        speech.hablar(textoALeer, velocidad);
+      }
+    }
+  }, [actividadActual, isOpen, actividades, cargando, speech.isSpeaking, velocidad]);
+
+  if (!isOpen) return null;
+
+  if (cargando) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
+        <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl p-6 max-w-md">
+          <div className="flex flex-col items-center">
+            <div className="w-10 h-10 border-3 border-[#6841ea] border-t-transparent rounded-full animate-spin mb-3"></div>
+            <p className="text-sm text-gray-400">Cargando resúmenes...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (actividades.length === 0) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
+        <div className="bg-[#0a0a0a] border border-yellow-500/30 rounded-xl p-5 max-w-md">
+          <div className="text-center">
+            <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-white mb-1">No hay resúmenes disponibles</h3>
+            <p className="text-xs text-gray-400 mb-3">
+              No se encontraron actividades con resúmenes ejecutivos para leer.
+            </p>
+            <Button onClick={onClose} size="sm" className="bg-[#6841ea] hover:bg-[#7a4cf5] h-8 text-xs px-3">
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!speech.isSupported) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
+        <div className="bg-[#0a0a0a] border border-yellow-500/30 rounded-xl w-full max-w-md p-5">
+          <div className="text-center">
+            <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-white mb-1">Navegador no compatible</h3>
+            <p className="text-xs text-gray-400 mb-3">
+              {speech.error || "Tu navegador no soporta síntesis de voz."}
+            </p>
+            <Button onClick={onClose} size="sm" className="bg-[#6841ea] hover:bg-[#7a4cf5] h-8 text-xs px-3">
+              Entendido
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const actividadAct = actividades[actividadActual];
+  if (!actividadAct) return null;
+
+  const progreso = ((actividadActual + 1) / actividades.length) * 100;
+
+  const pausarReanudar = () => {
+    if (speech.isPaused) {
+      speech.reanudar();
+      toast({
+        title: "Reanudado",
+        description: "Continuando con la lectura",
+        duration: 2000
+      });
+    } else if (speech.isSpeaking) {
+      speech.pausar();
+      toast({
+        title: "Pausado",
+        description: "Lectura pausada",
+        duration: 2000
+      });
+    }
+  };
+
+  const detenerLectura = () => {
+    speech.detener();
+    toast({
+      title: "Lectura detenida",
+      duration: 2000
+    });
+  };
+
+  const siguienteActividad = () => {
+    speech.detener();
+
+    if (actividadActual < actividades.length - 1) {
+      setActividadActual(actividadActual + 1);
+    } else {
+      toast({
+        title: "Lectura completada",
+        description: `Se leyeron ${actividades.length} resúmenes correctamente`,
+        duration: 4000
+      });
+      onClose();
+    }
+  };
+
+  const actividadAnterior = () => {
+    if (actividadActual > 0) {
+      speech.detener();
+      setActividadActual(actividadActual - 1);
+    }
+  };
+
+  const repetirActividad = () => {
+    speech.detener();
+    if (actividadAct.resumenEjecutivo) {
+      const textoALeer = `Actividad: ${actividadAct.titulo}. ${actividadAct.resumenEjecutivo.texto}`;
+      speech.hablar(textoALeer, velocidad);
+    }
+  };
+
+  const cambiarVelocidad = (nuevaVelocidad: number) => {
+    setVelocidad(nuevaVelocidad);
+    if (speech.isSpeaking) {
+      repetirActividad();
+    }
+  };
+
+  const irAActividad = (index: number) => {
+    speech.detener();
+    setActividadActual(index);
+  };
+
+  // Función para obtener el índice global de una actividad
+  const obtenerIndiceGlobal = (actividad: Actividad) => {
+    return actividades.findIndex(a => a.actividadId === actividad.actividadId);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/30">
+      <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl w-full max-w-3xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-[#2a2a2a]">
+          <div className="flex items-center gap-3">
+            <div className={`p-1.5 ${speech.isSpeaking ? 'bg-[#6841ea]/20' : 'bg-[#1a1a1a]'} rounded-lg`}>
+              <Brain className={`w-4 h-4 ${speech.isSpeaking ? 'text-[#6841ea]' : 'text-gray-500'}`} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">
+                Lectura de Resúmenes
+              </h2>
+              <p className="text-xs text-gray-400">
+                Actividad {actividadActual + 1} de {actividades.length}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setMostrarConfig(!mostrarConfig)}
+              className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
+            >
+              <Settings className="w-4 h-4 text-gray-400" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-0.5 bg-[#1a1a1a]">
+          <div
+            className="h-full bg-[#6841ea] transition-all duration-300"
+            style={{ width: `${progreso}%` }}
+          />
+        </div>
+
+        {/* Config panel */}
+        {mostrarConfig && (
+          <div className="p-3 border-b border-[#2a2a2a] bg-[#111]">
+            <h3 className="text-xs font-medium text-gray-300 mb-2">Configuración de voz</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Velocidad</label>
+                <div className="flex items-center gap-2">
+                  <VolumeX className="w-3 h-3 text-gray-500" />
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={velocidad}
+                    onChange={(e) => cambiarVelocidad(parseFloat(e.target.value))}
+                    className="flex-1 h-1.5 bg-[#1a1a1a] rounded-lg appearance-none cursor-pointer"
+                  />
+                  <Volume2 className="w-3 h-3 text-gray-500" />
+                  <span className="text-xs text-white w-12">{velocidad.toFixed(1)}x</span>
+                </div>
+              </div>
+
+              {speech.voces.length > 0 && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Voz</label>
+                  <select
+                    value={speech.vozSeleccionada}
+                    onChange={(e) => speech.cambiarVoz(e.target.value)}
+                    className="w-full h-8 text-xs bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-2 text-gray-300"
+                  >
+                    {speech.voces.map((voz) => (
+                      <option key={voz.name} value={voz.name}>
+                        {voz.name} ({voz.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Contenido principal en dos columnas */}
+        <div className="flex flex-col md:flex-row p-3 gap-3">
+          {/* Columna izquierda - Actividad actual y controles */}
+          <div className="flex-1 space-y-3">
+            {/* Actividad actual */}
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">ACTIVIDAD ACTUAL</h3>
+                <span className="text-xs bg-[#1a1a1a] text-gray-400 px-2 py-0.5 rounded-full">
+                  {new Date(actividadAct.fecha).toLocaleDateString('es-MX')}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-white mb-2">{actividadAct.titulo}</p>
+              {actividadAct.resumenEjecutivo && (
+                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3">
+                  <p className="text-xs text-gray-300 leading-relaxed">{actividadAct.resumenEjecutivo.texto}</p>
+                  {actividadAct.resumenEjecutivo.fechaGeneracion && (
+                    <p className="text-[10px] text-gray-500 mt-2 text-right">
+                      Generado: {new Date(actividadAct.resumenEjecutivo.fechaGeneracion).toLocaleString('es-MX')}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Estado de lectura */}
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</span>
+                {speech.isSpeaking && !speech.isPaused && (
+                  <span className="flex items-center gap-1 text-xs text-[#6841ea]">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#6841ea] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#6841ea]"></span>
+                    </span>
+                    Leyendo...
+                  </span>
+                )}
+                {speech.isPaused && (
+                  <span className="text-xs text-yellow-400">Pausado</span>
+                )}
+              </div>
+              <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-2 min-h-[40px]">
+                <p className="text-xs text-gray-400">
+                  {speech.isSpeaking
+                    ? (speech.isPaused ? "Lectura pausada" : "Reproduciendo...")
+                    : "Listo para leer"}
+                </p>
+              </div>
+            </div>
+
+            {speech.error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+                <p className="text-xs text-red-400 text-center">{speech.error}</p>
+              </div>
+            )}
+
+            {/* Controles de navegación */}
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                onClick={actividadAnterior}
+                disabled={actividadActual === 0}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
+              >
+                ← Anterior
+              </Button>
+
+              <Button
+                onClick={repetirActividad}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]"
+                title="Repetir actividad actual"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </Button>
+
+              <Button
+                onClick={pausarReanudar}
+                disabled={!speech.isSpeaking}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
+              >
+                {speech.isPaused ? <Play className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
+              </Button>
+
+              <Button
+                onClick={detenerLectura}
+                disabled={!speech.isSpeaking}
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
+              >
+                <StopCircle className="w-3.5 h-3.5" />
+              </Button>
+
+              <Button
+                onClick={siguienteActividad}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]"
+              >
+                {actividadActual < actividades.length - 1 ? 'Siguiente →' : 'Finalizar'}
+              </Button>
+            </div>
+
+            {/* Velocidad rápida */}
+            <div className="flex items-center justify-center gap-1 pt-1">
+              {[0.75, 1, 1.25, 1.5, 2].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => cambiarVelocidad(v)}
+                  className={`px-1.5 py-0.5 text-xs rounded transition-colors ${velocidad === v
+                    ? 'bg-[#6841ea] text-white'
+                    : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
+                    }`}
+                >
+                  {v}x
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Columna derecha - Listado de actividades por fecha */}
+          <div className="w-full md:w-72 lg:w-80 bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-medium text-gray-300 flex items-center gap-1">
+                <List className="w-3.5 h-3.5" />
+                Actividades por fecha
+              </h3>
+              <span className="text-xs bg-[#1a1a1a] text-gray-400 px-1.5 py-0.5 rounded-full">
+                {actividadActual + 1}/{actividades.length}
+              </span>
+            </div>
+
+            <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
+              {Object.entries(actividadesAgrupadas).map(([fecha, acts]) => (
+                <div key={fecha} className="space-y-1.5">
+                  {/* Separador de fecha */}
+                  <div className="flex items-center gap-2 sticky top-0 bg-[#111] py-1">
+                    <Calendar className="w-3 h-3 text-[#6841ea]" />
+                    <h4 className="text-[10px] font-medium text-[#6841ea] uppercase tracking-wider">
+                      {fecha}
+                    </h4>
+                    <div className="flex-1 h-px bg-gradient-to-r from-[#6841ea]/30 to-transparent" />
+                    <span className="text-[8px] bg-[#1a1a1a] text-gray-500 px-1.5 py-0.5 rounded-full">
+                      {acts.length} {acts.length === 1 ? 'actividad' : 'actividades'}
+                    </span>
+                  </div>
+
+                  {/* Actividades de esa fecha */}
+                  {acts.map((act) => {
+                    const indexGlobal = obtenerIndiceGlobal(act);
+                    const esPasada = indexGlobal < actividadActual;
+                    const esActual = indexGlobal === actividadActual;
+                    const esFutura = indexGlobal > actividadActual;
+
+                    return (
+                      <motion.div
+                        key={act.actividadId}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: indexGlobal * 0.02 }}
+                        onClick={() => irAActividad(indexGlobal)}
+                        className={`
+                          flex items-start gap-2 p-2 rounded-lg cursor-pointer
+                          transition-all duration-300 group border
+                          ${esActual
+                            ? 'bg-[#6841ea]/20 border-[#6841ea]/50 shadow-sm shadow-[#6841ea]/10'
+                            : 'hover:bg-[#1a1a1a] border-transparent hover:border-[#2a2a2a]'
+                          }
+                        `}
+                      >
+                        {/* Indicador de estado */}
+                        <div className="relative mt-1">
+                          <div className={`
+                            w-2 h-2 rounded-full transition-all duration-300
+                            ${esActual ? 'bg-[#6841ea]' : ''}
+                            ${esPasada ? 'bg-gray-600' : ''}
+                            ${esFutura ? 'bg-gray-400' : ''}
+                          `} />
+                          {esActual && (
+                            <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-75" />
+                          )}
+                        </div>
+
+                        {/* Contenido de la actividad con resumen */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <p className={`
+                              text-xs font-medium truncate max-w-[100px] transition-all duration-300
+                              ${esPasada ? 'text-gray-500' : ''}
+                              ${esActual ? 'text-white' : 'text-gray-300'}
+                              ${esFutura ? 'text-gray-300' : ''}
+                            `}>
+                              {act.titulo}
+                            </p>
+                            <span className={`
+                              text-[8px] px-1 py-0.5 rounded-full whitespace-nowrap transition-all duration-300
+                              ${esPasada ? 'bg-gray-800 text-gray-500' : ''}
+                              ${esActual ? 'bg-[#6841ea]/20 text-[#6841ea]' : ''}
+                              ${esFutura ? 'bg-[#1a1a1a] text-gray-600' : ''}
+                            `}>
+                              {esPasada && 'Leída'}
+                              {esActual && 'Actual'}
+                              {esFutura && 'Pendiente'}
+                            </span>
+                          </div>
+
+                          {/* Hora si está disponible */}
+                          {act.horaInicio && (
+                            <span className={`
+                              text-[8px] block mb-1 transition-all duration-300
+                              ${esPasada ? 'text-gray-600' : ''}
+                              ${esActual ? 'text-gray-400' : 'text-gray-500'}
+                              ${esFutura ? 'text-gray-500' : ''}
+                            `}>
+                              🕒 {act.horaInicio.substring(0, 5)} {act.horaFin && `- ${act.horaFin.substring(0, 5)}`}
+                            </span>
+                          )}
+
+                          {/* Resumen ejecutivo (primeros caracteres) */}
+                          {act.resumenEjecutivo && (
+                            <p className={`
+                              text-[8px] leading-tight line-clamp-2 mt-1 transition-all duration-300
+                              ${esPasada ? 'text-gray-600' : ''}
+                              ${esActual ? 'text-gray-300' : 'text-gray-400'}
+                              ${esFutura ? 'text-gray-400' : ''}
+                            `}>
+                              {act.resumenEjecutivo.texto.substring(0, 80)}...
+                            </p>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== COMPONENTE PRINCIPAL ====================
 export default function PanelAdminActividades() {
   const { toast } = useToast();
   const router = useRouter();
@@ -809,24 +1645,33 @@ export default function PanelAdminActividades() {
     cargarActividades,
   } = useActividadesData();
 
+  // Estados para búsquedas y filtros
+  const [busquedaColaborador, setBusquedaColaborador] = useState("");
   const [filtroFecha, setFiltroFecha] = useState<string>("hoy");
   const [filtroColaborador, setFiltroColaborador] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [busquedaTexto, setBusquedaTexto] = useState<string>("");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [fechaFin, setFechaFin] = useState<string>("");
-  
+  const [fechaExacta, setFechaExacta] = useState<string>("");
+
+  // Ordenamiento
   const [ordenarPor, setOrdenarPor] = useState<string>("fecha");
   const [ordenAsc, setOrdenAsc] = useState<boolean>(false);
-  
-  const [actividadExpandida, setActividadExpandida] = useState<string | null>(null);
-  const [tareaExpandida, setTareaExpandida] = useState<string | null>(null);
-  const [mostrarFiltros, setMostrarFiltros] = useState(true);
-  
+
+  // Estado para la actividad seleccionada (detalle)
+  const [actividadSeleccionada, setActividadSeleccionada] = useState<Actividad | null>(null);
+
+  // Estados para modales de lectura
   const [modalLecturaAbierto, setModalLecturaAbierto] = useState(false);
   const [modalLecturaVivoAbierto, setModalLecturaVivoAbierto] = useState(false);
+  const [modalLecturaResumenesAbierto, setModalLecturaResumenesAbierto] = useState(false);
   const [actividadParaLectura, setActividadParaLectura] = useState<Actividad | null>(null);
   const [tareasParaLectura, setTareasParaLectura] = useState<Tarea[]>([]);
+  const [actividadResumenSeleccionada, setActividadResumenSeleccionada] = useState<string | null>(null);
+
+  // Estado para el tab activo en el aside
+  const [tabActivo, setTabActivo] = useState<"colaboradores" | "actividades" | "fechas">("actividades");
 
   const fechaActual = new Date().toISOString().split("T")[0];
 
@@ -855,7 +1700,7 @@ export default function PanelAdminActividades() {
 
   const abrirConfirmacionLectura = (actividad: Actividad) => {
     const tareasConExplicacion = actividad.tareas.filter(t => t.tieneExplicacion === true);
-    
+
     if (tareasConExplicacion.length === 0) {
       toast({
         title: "No hay tareas para leer",
@@ -869,7 +1714,7 @@ export default function PanelAdminActividades() {
     setActividadParaLectura(actividad);
     setTareasParaLectura(tareasConExplicacion);
     setModalLecturaAbierto(true);
-    
+
     toast({
       title: "Preparando lectura",
       description: `Se encontraron ${tareasConExplicacion.length} tareas con explicaciones`,
@@ -879,7 +1724,7 @@ export default function PanelAdminActividades() {
 
   const iniciarLecturaGlobal = () => {
     const actividadesFiltradasActuales = actividadesFiltradas;
-    
+
     if (actividadesFiltradasActuales.length === 0) {
       toast({
         title: "No hay actividades",
@@ -890,10 +1735,10 @@ export default function PanelAdminActividades() {
       return;
     }
 
-    const tareasConExplicacion = actividadesFiltradasActuales.flatMap(act => 
+    const tareasConExplicacion = actividadesFiltradasActuales.flatMap(act =>
       act.tareas.filter(t => t.tieneExplicacion === true)
     );
-    
+
     if (tareasConExplicacion.length === 0) {
       toast({
         title: "No hay tareas para leer",
@@ -906,11 +1751,11 @@ export default function PanelAdminActividades() {
 
     setModalLecturaAbierto(false);
     setTareasParaLectura(tareasConExplicacion);
-    
+
     setTimeout(() => {
       setModalLecturaVivoAbierto(true);
     }, 100);
-    
+
     toast({
       title: "Iniciando lectura",
       description: `Se leerán ${tareasConExplicacion.length} tareas`,
@@ -918,14 +1763,46 @@ export default function PanelAdminActividades() {
     });
   };
 
+  const iniciarLecturaResumenes = () => {
+    setActividadResumenSeleccionada(null);
+    setModalLecturaResumenesAbierto(true);
+
+    toast({
+      title: "Iniciando lectura de resúmenes",
+      description: "Cargando todos los resúmenes...",
+      duration: 3000
+    });
+  };
+
+  const iniciarLecturaResumenActividad = (actividad: Actividad) => {
+    if (!actividad.resumenEjecutivo?.texto) {
+      toast({
+        title: "No hay resumen disponible",
+        description: "Esta actividad no tiene resumen ejecutivo",
+        variant: "destructive",
+        duration: 3000
+      });
+      return;
+    }
+
+    setActividadResumenSeleccionada(actividad.actividadId);
+    setModalLecturaResumenesAbierto(true);
+
+    toast({
+      title: "Leyendo resumen",
+      description: actividad.titulo,
+      duration: 3000
+    });
+  };
+
   const iniciarLecturaConfirmada = (tareasSeleccionadas: Tarea[]) => {
     setModalLecturaAbierto(false);
     setTareasParaLectura(tareasSeleccionadas);
-    
+
     setTimeout(() => {
       setModalLecturaVivoAbierto(true);
     }, 100);
-    
+
     toast({
       title: "Lectura iniciada",
       description: `Comenzando con ${tareasSeleccionadas.length} tarea${tareasSeleccionadas.length !== 1 ? 's' : ''}`,
@@ -952,93 +1829,103 @@ export default function PanelAdminActividades() {
     return Array.from(status).sort();
   }, [actividades]);
 
+  // Lógica de filtrado combinada
   const actividadesFiltradas = useMemo(() => {
     if (!actividades) return [];
     return actividades.filter(act => {
-      if (filtroFecha !== "todos") {
+      // Filtro por colaborador
+      if (filtroColaborador !== "todos") {
+        if (!act.colaboradores?.includes(filtroColaborador)) return false;
+      }
+
+      // Filtro por status
+      if (filtroStatus !== "todos" && act.status !== filtroStatus) return false;
+
+      // Filtro por búsqueda de texto
+      if (busquedaTexto) {
+        const t = busquedaTexto.toLowerCase();
+        if (!act.titulo.toLowerCase().includes(t) &&
+          !act.tareas.some(ta =>
+            ta.nombre.toLowerCase().includes(t) ||
+            (ta.descripcion && ta.descripcion.toLowerCase().includes(t)) ||
+            (ta.explicacionActual?.texto.toLowerCase().includes(t))
+          )) return false;
+      }
+
+      // Filtro por fecha
+      if (filtroFecha === "exacta" && fechaExacta) {
+        if (act.fecha !== fechaExacta) return false;
+      } else {
         const fechaAct = new Date(act.fecha);
         switch (filtroFecha) {
-          case "hoy": 
-            if (act.fecha !== fechaActual) return false; 
+          case "hoy":
+            if (act.fecha !== fechaActual) return false;
             break;
-          case "ayer": 
-            if (act.fecha !== obtenerFechaPorDias(1)) return false; 
+          case "ayer":
+            if (act.fecha !== obtenerFechaPorDias(1)) return false;
             break;
           case "ultima_semana": {
-            const semanaPasada = new Date(); 
+            const semanaPasada = new Date();
             semanaPasada.setDate(semanaPasada.getDate() - 7);
-            if (fechaAct < semanaPasada) return false; 
+            if (fechaAct < semanaPasada) return false;
             break;
           }
           case "ultimo_mes": {
-            const mesPasado = new Date(); 
+            const mesPasado = new Date();
             mesPasado.setDate(mesPasado.getDate() - 30);
-            if (fechaAct < mesPasado) return false; 
+            if (fechaAct < mesPasado) return false;
             break;
           }
           case "rango":
             if (fechaInicio && act.fecha < fechaInicio) return false;
-            if (fechaFin && act.fecha > fechaFin) return false; 
+            if (fechaFin && act.fecha > fechaFin) return false;
+            break;
+          case "todos":
+          default:
             break;
         }
       }
-      
-      if (filtroColaborador !== "todos") {
-        if (!act.colaboradores?.includes(filtroColaborador)) return false;
-      }
-      
-      if (filtroStatus !== "todos" && act.status !== filtroStatus) return false;
-      
-      if (busquedaTexto) {
-        const t = busquedaTexto.toLowerCase();
-        if (!act.titulo.toLowerCase().includes(t) && 
-            !act.tareas.some(ta => 
-              ta.nombre.toLowerCase().includes(t) || 
-              (ta.descripcion && ta.descripcion.toLowerCase().includes(t)) ||
-              (ta.explicacionActual?.texto.toLowerCase().includes(t))
-            )) return false;
-      }
       return true;
     });
-  }, [actividades, filtroFecha, filtroColaborador, filtroStatus, busquedaTexto, fechaInicio, fechaFin, fechaActual]);
+  }, [actividades, filtroColaborador, filtroStatus, busquedaTexto, filtroFecha, fechaExacta, fechaInicio, fechaFin, fechaActual]);
 
   const actividadesOrdenadas = useMemo(() => {
     return [...actividadesFiltradas].sort((a, b) => {
       let cmp = 0;
       if (ordenarPor === "fecha") cmp = a.fecha.localeCompare(b.fecha);
       else if (ordenarPor === "titulo") cmp = a.titulo.localeCompare(b.titulo);
-      else if (ordenarPor === "tareas") cmp = (a.totalTareas||0) - (b.totalTareas||0);
-      else if (ordenarPor === "explicaciones") cmp = (a.tareasConExplicacion||0) - (b.tareasConExplicacion||0);
+      else if (ordenarPor === "tareas") cmp = (a.totalTareas || 0) - (b.totalTareas || 0);
+      else if (ordenarPor === "explicaciones") cmp = (a.tareasConExplicacion || 0) - (b.tareasConExplicacion || 0);
       return ordenAsc ? cmp : -cmp;
     });
   }, [actividadesFiltradas, ordenarPor, ordenAsc]);
 
-  const toggleOrden = (c: string) => {
-    if (ordenarPor === c) setOrdenAsc(!ordenAsc);
-    else { setOrdenarPor(c); setOrdenAsc(false); }
-  };
-
   const limpiarFiltros = () => {
-    setBusquedaTexto(""); 
+    setBusquedaTexto("");
     setFiltroFecha("hoy");
-    setFiltroColaborador("todos"); 
+    setFiltroColaborador("todos");
     setFiltroStatus("todos");
-    setFechaInicio(""); 
+    setFechaInicio("");
     setFechaFin("");
-    toast({ 
-      title: "Filtros limpiados", 
+    setFechaExacta("");
+    toast({
+      title: "Filtros limpiados",
       description: "Filtros restablecidos",
       duration: 2000
     });
+  };
+
+  const volverALista = () => {
+    setActividadSeleccionada(null);
   };
 
   if (loading) return <LoadingScreen />;
   if (error || !actividades) return <ErrorScreen onRetry={() => cargarActividades(true)} />;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 p-6">
-      {/* Modal de confirmación de lectura */}
-      <ModalConfirmacionLectura 
+    <div className="min-h-screen bg-[#222121] font-sans antialiased">
+      {/* Modales */}
+      <ModalConfirmacionLectura
         isOpen={modalLecturaAbierto}
         onClose={() => setModalLecturaAbierto(false)}
         onConfirm={iniciarLecturaConfirmada}
@@ -1046,8 +1933,7 @@ export default function PanelAdminActividades() {
         tareas={tareasParaLectura}
       />
 
-      {/* Modal de lectura vivo */}
-      <ModalLecturaVivo 
+      <ModalLecturaTareas
         isOpen={modalLecturaVivoAbierto}
         onClose={() => setModalLecturaVivoAbierto(false)}
         tareas={tareasParaLectura}
@@ -1060,467 +1946,666 @@ export default function PanelAdminActividades() {
         }}
       />
 
-      {/* Header */}
-      <div className="max-w-7xl mx-auto mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">
-              Panel de Actividades
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {actividadesOrdenadas.length} actividades · {totalTareas} tareas · {
-                actividades.reduce((acc, act) => acc + act.tareasConExplicacion, 0)
-              } explicaciones
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              size="default"
-              onClick={iniciarLecturaGlobal}
-              className="h-10 px-4 bg-[#6841ea] hover:bg-[#7a4cf5] text-white"
-            >
-              <Volume2 className="w-4 h-4 mr-2" />
-              Leer reportes
-              {actividadesFiltradas.length > 0 && (
-                <span className="ml-2 bg-[#7a4cf5] px-2 py-0.5 rounded-full text-xs">
-                  {actividadesFiltradas.flatMap(act => act.tareas).filter(t => t.tieneExplicacion === true).length}
-                </span>
-              )}
-            </Button>
+      <ModalLecturaResumenes
+        isOpen={modalLecturaResumenesAbierto}
+        onClose={() => {
+          setModalLecturaResumenesAbierto(false);
+          setActividadResumenSeleccionada(null);
+        }}
+        actividadId={actividadResumenSeleccionada}
+      />
 
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setMostrarFiltros(!mostrarFiltros)}
-              className="h-9 px-3 text-gray-400 hover:text-white border border-[#2a2a2a]"
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              {mostrarFiltros ? 'Ocultar' : 'Mostrar'} filtros
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={() => cargarActividades(true)}
-              disabled={refreshing}
-              className="h-9 px-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-white border border-[#2a2a2a]"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Actualizar
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={handleLogout}
-              className="h-9 px-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Salir
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl p-4">
-            <div className="flex items-center justify-between">
+      {/* Header superior */}
+      <header className="sticky top-0 z-40 bg-[#0a0a0a]/10 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
+                <span className="text-white font-semibold text-sm">A</span>
+              </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1">Total actividades</p>
-                <p className="text-2xl font-semibold text-white">{totalActividades}</p>
-              </div>
-              <div className="p-2 bg-[#6841ea]/10 rounded-lg">
-                <FileText className="w-5 h-5 text-[#6841ea]" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Tareas totales</p>
-                <p className="text-2xl font-semibold text-white">{totalTareas}</p>
-              </div>
-              <div className="p-2 bg-green-500/10 rounded-lg">
-                <ListChecks className="w-5 h-5 text-green-400" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Explicaciones</p>
-                <p className="text-2xl font-semibold text-white">
-                  {actividades.reduce((acc, act) => acc + act.tareasConExplicacion, 0)}
+                <h1 className="text-sm font-medium text-white/90">Panel de Actividades</h1>
+                <p className="text-xs text-white/40">
+                  {actividadesFiltradas.length} actividades · {totalTareas} tareas
                 </p>
               </div>
-              <div className="p-2 bg-purple-500/10 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-purple-400" />
-              </div>
             </div>
-          </div>
-          
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Colaboradores</p>
-                <p className="text-2xl font-semibold text-white">
-                  {colaboradoresUnicos.length}
-                </p>
-              </div>
-              <div className="p-2 bg-orange-500/10 rounded-lg">
-                <Users className="w-5 h-5 text-orange-400" />
-              </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={iniciarLecturaResumenes}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg transition-colors border border-purple-500/20"
+              >
+                <Brain className="w-3.5 h-3.5" />
+                <span>Resúmenes IA</span>
+                {actividades.filter(act => act.resumenEjecutivo?.texto).length > 0 && (
+                  <span className="px-1.5 py-0.5 text-[10px] bg-purple-500/20 text-purple-300 rounded-full">
+                    {actividades.filter(act => act.resumenEjecutivo?.texto).length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={iniciarLecturaGlobal}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg transition-colors border border-indigo-500/20"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Leer reportes</span>
+                {actividadesFiltradas.flatMap(act => act.tareas).filter(t => t.tieneExplicacion === true).length > 0 && (
+                  <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/20 text-indigo-300 rounded-full">
+                    {actividadesFiltradas.flatMap(act => act.tareas).filter(t => t.tieneExplicacion === true).length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => cargarActividades(true)}
+                disabled={refreshing}
+                className="p-1.5 text-white/40 hover:text-white/60 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-1.5 text-red-400/40 hover:text-red-400/60 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Filtros */}
-      {mostrarFiltros && (
-        <div className="max-w-7xl mx-auto mb-6">
-          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl p-5">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-              <div className="lg:col-span-3 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <Input
-                  value={busquedaTexto}
-                  onChange={e => setBusquedaTexto(e.target.value)}
-                  placeholder="Buscar actividades, tareas..."
-                  className="pl-9 h-10 text-sm bg-[#0a0a0a] border-[#2a2a2a] text-gray-300 placeholder:text-gray-600"
-                />
-              </div>
-              
-              <div className="lg:col-span-2">
-                <select
-                  value={filtroFecha}
-                  onChange={e => setFiltroFecha(e.target.value)}
-                  className="w-full h-10 text-sm bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 text-gray-300"
-                >
-                  <option value="hoy">Hoy</option>
-                  <option value="ayer">Ayer</option>
-                  <option value="ultima_semana">Última semana</option>
-                  <option value="ultimo_mes">Último mes</option>
-                  <option value="todos">Todas las fechas</option>
-                  <option value="rango">Rango personalizado</option>
-                </select>
-              </div>
-              
-              <div className="lg:col-span-2">
-                <select
-                  value={filtroColaborador}
-                  onChange={e => setFiltroColaborador(e.target.value)}
-                  className="w-full h-10 text-sm bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 text-gray-300"
-                >
-                  <option value="todos">Todos los colaboradores</option>
-                  {colaboradoresUnicos.map(email => (
-                    <option key={email} value={email}>
-                      {email.split('@')[0]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="lg:col-span-2">
-                <select
-                  value={filtroStatus}
-                  onChange={e => setFiltroStatus(e.target.value)}
-                  className="w-full h-10 text-sm bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 text-gray-300"
-                >
-                  <option value="todos">Todos los estados</option>
-                  {statusUnicos.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              
-              <div className="lg:col-span-3 flex gap-2">
-                <Button
-                  variant="ghost"
-                  onClick={limpiarFiltros}
-                  className="flex-1 h-10 text-sm text-gray-400 hover:text-white border border-[#2a2a2a]"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  Limpiar filtros
-                </Button>
-              </div>
+      {/* Layout principal: 2 columnas */}
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="flex gap-6">
+          {/* Sidebar izquierdo - con pestañas */}
+          <aside className="w-80 bg-[#1a1a1a] p-4 rounded-2xl flex-shrink-0">
+            {/* Pestañas */}
+            <div className="flex border-b border-white/5 mb-5">
+              <button
+                onClick={() => setTabActivo("colaboradores")}
+                className={`
+                  flex-1 pb-2 text-xs font-medium transition-colors relative
+                  ${tabActivo === "colaboradores"
+                    ? "text-indigo-400"
+                    : "text-white/40 hover:text-white/60"
+                  }
+                `}
+              >
+                Colaboradores
+                {tabActivo === "colaboradores" && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </button>
+              <button
+                onClick={() => setTabActivo("actividades")}
+                className={`
+                  flex-1 pb-2 text-xs font-medium transition-colors relative
+                  ${tabActivo === "actividades"
+                    ? "text-indigo-400"
+                    : "text-white/40 hover:text-white/60"
+                  }
+                `}
+              >
+                Actividades
+                {tabActivo === "actividades" && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </button>
+              <button
+                onClick={() => setTabActivo("fechas")}
+                className={`
+                  flex-1 pb-2 text-xs font-medium transition-colors relative
+                  ${tabActivo === "fechas"
+                    ? "text-indigo-400"
+                    : "text-white/40 hover:text-white/60"
+                  }
+                `}
+              >
+                Fechas
+                {tabActivo === "fechas" && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </button>
             </div>
-            
-            {filtroFecha === "rango" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <Input
-                  type="date"
-                  value={fechaInicio}
-                  onChange={e => setFechaInicio(e.target.value)}
-                  className="h-10 text-sm bg-[#0a0a0a] border-[#2a2a2a] text-gray-300"
-                />
-                <Input
-                  type="date"
-                  value={fechaFin}
-                  onChange={e => setFechaFin(e.target.value)}
-                  className="h-10 text-sm bg-[#0a0a0a] border-[#2a2a2a] text-gray-300"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Tabla principal */}
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-[#111] border border-[#2a2a2a] overflow-hidden rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#0a0a0a] border-b border-[#2a2a2a]">
-                <tr>
-                  <th className="px-3 py-3 w-6"></th>
-                  <th className="px-3 py-3 text-left cursor-pointer hover:text-white" onClick={() => toggleOrden("fecha")}>
-                    <span className="flex items-center gap-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Fecha
-                      {ordenarPor === "fecha" && (ordenAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                    </span>
-                  </th>
-                  <th className="px-3 py-3 text-left cursor-pointer hover:text-white" onClick={() => toggleOrden("titulo")}>
-                    <span className="flex items-center gap-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Actividad
-                      {ordenarPor === "titulo" && (ordenAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                    </span>
-                  </th>
-                  <th className="px-3 py-3 text-left cursor-pointer hover:text-white" onClick={() => toggleOrden("tareas")}>
-                    <span className="flex items-center gap-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Tareas
-                      {ordenarPor === "tareas" && (ordenAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                    </span>
-                  </th>
-                  <th className="px-3 py-3 text-left cursor-pointer hover:text-white" onClick={() => toggleOrden("explicaciones")}>
-                    <span className="flex items-center gap-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Explicaciones
-                      {ordenarPor === "explicaciones" && (ordenAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-                    </span>
-                  </th>
-                  <th className="px-3 py-3 text-left">
-                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            {/* Contenido según pestaña activa */}
+            {tabActivo === "colaboradores" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-white/40" />
+                    <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider">
                       Colaboradores
-                    </span>
-                  </th>
-                  <th className="px-3 py-3 text-center">
-                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Acciones
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              
-              <tbody className="divide-y divide-[#2a2a2a]">
-                {actividadesOrdenadas.map((act) => (
-                  <React.Fragment key={act.actividadId}>
-                    <tr 
-                      className="hover:bg-[#1a1a1a] cursor-pointer transition-colors"
-                      onClick={() => setActividadExpandida(actividadExpandida === act.actividadId ? null : act.actividadId)}
-                    >
-                      <td className="px-3 py-3">
-                        <div className="p-1">
-                          {actividadExpandida === act.actividadId ? 
-                            <ChevronUp className="w-4 h-4 text-gray-400" /> : 
-                            <ChevronDown className="w-4 h-4 text-gray-500" />
-                          }
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-gray-300">{act.fecha}</td>
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-white">{act.titulo}</div>
-                        <div className="text-xs text-gray-500">{act.status}</div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="text-white font-medium">{act.totalTareas}</span>
-                        {act.totalTareas > 0 && (
-                          <span className="text-xs text-gray-500 ml-1">
-                            ({Math.round((act.tareasConExplicacion / act.totalTareas) * 100)}%)
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        {act.tareasConExplicacion > 0 ? (
-                          <span className="text-[#6841ea] font-medium">{act.tareasConExplicacion}</span>
-                        ) : (
-                          <span className="text-gray-600">-</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex -space-x-2">
-                          {act.colaboradores?.slice(0, 3).map((email, i) => (
-                            <div
-                              key={i}
-                              className="w-7 h-7 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center text-xs font-medium text-gray-300 hover:z-10 transition-transform hover:scale-110"
-                              title={email}
-                            >
-                              {email.charAt(0).toUpperCase()}
-                            </div>
-                          ))}
-                          {(act.colaboradores?.length || 0) > 3 && (
-                            <div className="w-7 h-7 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center text-xs font-medium text-gray-400">
-                              +{(act.colaboradores?.length || 0) - 3}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      
-                      <td className="px-3 py-3 text-center">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            abrirConfirmacionLectura(act);
-                          }}
-                          disabled={act.tareasConExplicacion === 0}
+                    </h2>
+                  </div>
+                  <span className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-full">
+                    {colaboradoresUnicos.length}
+                  </span>
+                </div>
+
+                {/* Buscador */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+                  <input
+                    type="text"
+                    placeholder="Buscar colaborador..."
+                    value={busquedaColaborador}
+                    onChange={(e) => setBusquedaColaborador(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 placeholder:text-white/20 focus:outline-none focus:bg-white/10 transition-colors"
+                  />
+                </div>
+
+                {/* Botón "Todos" */}
+                <button
+                  onClick={() => setFiltroColaborador('todos')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${filtroColaborador === 'todos'
+                      ? 'bg-white/10 text-white'
+                      : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+                    }`}
+                >
+                  <div className="w-7 h-7 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-lg flex items-center justify-center">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-medium">Todos</p>
+                    <p className="text-[10px] text-white/30">{actividades.length} actividades</p>
+                  </div>
+                  {filtroColaborador === 'todos' && (
+                    <Check className="w-3.5 h-3.5 text-indigo-400" />
+                  )}
+                </button>
+
+                {/* Grid de colaboradores en 2 columnas */}
+                <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                  {colaboradoresUnicos
+                    .filter(email => email.toLowerCase().includes(busquedaColaborador.toLowerCase()))
+                    .map(email => {
+                      const actividadesColaborador = actividades.filter(act =>
+                        act.colaboradores?.includes(email)
+                      );
+                      const totalTareasColab = actividadesColaborador.reduce(
+                        (acc, act) => acc + act.tareasConExplicacion, 0
+                      );
+                      const inicial = email.charAt(0).toUpperCase();
+                      const colorClasses = [
+                        'from-blue-500/20 to-cyan-500/20 text-blue-400',
+                        'from-green-500/20 to-emerald-500/20 text-green-400',
+                        'from-orange-500/20 to-amber-500/20 text-orange-400',
+                        'from-pink-500/20 to-rose-500/20 text-pink-400',
+                        'from-purple-500/20 to-indigo-500/20 text-purple-400',
+                      ];
+                      const colorIndex = email.length % colorClasses.length;
+
+                      return (
+                        <button
+                          key={email}
+                          onClick={() => setFiltroColaborador(email)}
                           className={`
-                            h-8 px-2 text-xs
-                            ${act.tareasConExplicacion > 0
-                              ? 'text-[#6841ea] hover:text-white hover:bg-[#6841ea]/20 border border-[#6841ea]/30'
-                              : 'text-gray-600 cursor-not-allowed'
+                            flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all group
+                            ${filtroColaborador === email
+                              ? 'bg-white/10 text-white'
+                              : 'text-white/40 hover:text-white/60 hover:bg-white/5'
                             }
                           `}
                         >
-                          <Volume2 className="w-3.5 h-3.5 mr-1" />
-                          {act.tareasConExplicacion}
-                        </Button>
-                      </td>
-                    </tr>
-
-                    {/* Tareas expandidas */}
-                    {actividadExpandida === act.actividadId && (
-                      <tr>
-                        <td colSpan={7} className="p-0 bg-[#0a0a0a]">
-                          <div className="border-t border-[#2a2a2a]">
-                            <div className="p-4">
-                              <h4 className="text-sm font-medium text-gray-300 mb-3">
-                                Tareas ({act.tareas.length})
-                              </h4>
-                              
-                              <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {act.tareas.map((t) => (
-                                  <div
-                                    key={t.pendienteId}
-                                    className="bg-[#111] border border-[#2a2a2a] rounded-lg overflow-hidden hover:border-[#3a3a3a] transition-colors"
-                                  >
-                                    <div 
-                                      className="p-3 cursor-pointer hover:bg-[#1a1a1a]"
-                                      onClick={() => setTareaExpandida(tareaExpandida === t.pendienteId ? null : t.pendienteId)}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div className="p-1">
-                                          {tareaExpandida === t.pendienteId ? 
-                                            <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : 
-                                            <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
-                                          }
-                                        </div>
-                                        
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-white">
-                                              {t.nombre}
-                                            </span>
-                                            {t.prioridad && (
-                                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                                t.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                                                t.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                                                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                              }`}>
-                                                {t.prioridad}
-                                              </span>
-                                            )}
-                                          </div>
-                                          
-                                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                                            {t.duracionMin > 0 && (
-                                              <>
-                                                <span className="flex items-center gap-1">
-                                                  <Clock className="w-3 h-3" />
-                                                  {t.duracionMin} min
-                                                </span>
-                                                <span>•</span>
-                                              </>
-                                            )}
-                                            <span className={t.terminada ? 'text-green-400' : 'text-yellow-400'}>
-                                              {t.terminada ? 'Completada' : 'Pendiente'}
-                                            </span>
-                                            {t.tieneExplicacion && (
-                                              <>
-                                                <span>•</span>
-                                                <span className="text-[#6841ea] flex items-center gap-1">
-                                                  <CheckCircle className="w-3 h-3" />
-                                                  Con explicación
-                                                </span>
-                                              </>
-                                            )}
-                                          </div>
-
-                                          {t.explicacionActual && tareaExpandida === t.pendienteId && (
-                                            <div className="mt-3 pt-3 border-t border-[#2a2a2a]">
-                                              <p className="text-sm text-gray-300 mb-2">
-                                                {t.explicacionActual.texto}
-                                              </p>
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="text-gray-500">
-                                                  {t.explicacionActual.email?.split('@')[0]}
-                                                </span>
-                                                <span className="text-gray-600">
-                                                  {new Date(t.explicacionActual.fecha).toLocaleDateString('es-ES')}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                          <div className={`w-6 h-6 bg-gradient-to-br ${colorClasses[colorIndex]} rounded-lg flex items-center justify-center text-xs font-medium flex-shrink-0`}>
+                            {inicial}
                           </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {actividadesOrdenadas.length === 0 && (
-            <div className="p-12 text-center">
-              <div className="inline-flex p-3 bg-[#1a1a1a] rounded-lg mb-3">
-                <AlertCircle className="w-6 h-6 text-gray-500" />
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="flex items-center gap-1">
+                              <p className="text-xs font-medium truncate max-w-[70px]">
+                                {email.split('@')[0]}
+                              </p>
+                              {totalTareasColab > 0 && (
+                                <span className="px-1 py-0.5 text-[7px] bg-indigo-500/10 text-indigo-400 rounded-full">
+                                  {totalTareasColab}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[8px] text-white/30 truncate">
+                              {actividadesColaborador.length} actividades
+                            </p>
+                          </div>
+                          {filtroColaborador === email && (
+                            <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
               </div>
-              <p className="text-gray-400 text-sm">No se encontraron actividades</p>
-              <p className="text-xs text-gray-600 mt-1">Intenta ajustar los filtros de búsqueda</p>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Footer */}
-        <div className="mt-4 flex items-center justify-between text-xs">
-          <div className="text-gray-500 bg-[#111] border border-[#2a2a2a] px-3 py-1.5 rounded-lg">
-            {actividadesOrdenadas.length} actividades mostradas · {
-              actividadesOrdenadas.reduce((acc, act) => acc + act.tareasConExplicacion, 0)
-            } explicaciones
-          </div>
+            {tabActivo === "actividades" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-white/60" />
+                    <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">
+                      Lista de actividades
+                    </h3>
+                  </div>
+                  <span className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-full">
+                    {actividadesFiltradas.length}
+                  </span>
+                </div>
+
+                {/* Buscador rápido dentro de actividades */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+                  <input
+                    type="text"
+                    placeholder="Buscar actividad..."
+                    value={busquedaTexto}
+                    onChange={(e) => setBusquedaTexto(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 placeholder:text-white/20 focus:outline-none focus:bg-white/10 transition-colors"
+                  />
+                </div>
+
+                {/* Lista de actividades */}
+                <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                  {actividadesFiltradas.map((act) => (
+                    <button
+                      key={act.actividadId}
+                      onClick={() => setActividadSeleccionada(act)}
+                      className={`
+                        w-full text-left p-3 rounded-lg transition-all
+                        ${actividadSeleccionada?.actividadId === act.actividadId
+                          ? 'bg-indigo-500/20 border border-indigo-500/30'
+                          : 'hover:bg-white/5 border border-transparent'
+                        }
+                      `}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className={`w-2 h-2 rounded-full mt-1.5 ${
+                          act.status === 'Completada' ? 'bg-green-400' :
+                          act.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white/90 truncate">
+                            {act.titulo}
+                          </p>
+                          <div className="flex items-center gap-2 text-[10px] text-white/40 mt-1">
+                            <span>{act.fecha}</span>
+                            {act.horaInicio && (
+                              <>
+                                <span>•</span>
+                                <span>{act.horaInicio.substring(0,5)}</span>
+                              </>
+                            )}
+                            <span>•</span>
+                            <span>{act.totalTareas} tareas</span>
+                            {act.tareasConExplicacion > 0 && (
+                              <>
+                                <span>•</span>
+                                <span className="text-indigo-400">{act.tareasConExplicacion} IA</span>
+                              </>
+                            )}
+                          </div>
+                          {act.colaboradores && act.colaboradores.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Users className="w-3 h-3 text-white/30" />
+                              <span className="text-[8px] text-white/30 truncate">
+                                {act.colaboradores.map(e => e.split('@')[0]).join(', ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                  {actividadesFiltradas.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-xs text-white/30">No hay actividades con los filtros actuales</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {tabActivo === "fechas" && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-white/60" />
+                  <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">
+                    Período
+                  </h3>
+                </div>
+
+                <div className="space-y-1">
+                  {[
+                    { value: 'hoy', label: 'Hoy', icon: Sun },
+                    { value: 'ayer', label: 'Ayer', icon: Calendar },
+                    { value: 'ultima_semana', label: 'Última semana', icon: CalendarDays },
+                    { value: 'ultimo_mes', label: 'Último mes', icon: CalendarRange },
+                    { value: 'todos', label: 'Todas las fechas', icon: HistoryIcon }
+                  ].map((opcion) => {
+                    const Icono = opcion.icon;
+                    return (
+                      <button
+                        key={opcion.value}
+                        onClick={() => {
+                          setFiltroFecha(opcion.value);
+                          setFechaExacta("");
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${filtroFecha === opcion.value
+                            ? 'bg-white/10 text-white'
+                            : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+                          }`}
+                      >
+                        <Icono className="w-3.5 h-3.5" />
+                        <span className="text-sm">{opcion.label}</span>
+                        {filtroFecha === opcion.value && (
+                          <Check className="w-3.5 h-3.5 text-indigo-400 ml-auto" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Filtro por fecha exacta */}
+                <div className="pt-3 border-t border-white/5">
+                  <h4 className="text-xs font-medium text-white/40 mb-2">Fecha exacta</h4>
+                  <input
+                    type="date"
+                    value={fechaExacta}
+                    onChange={(e) => {
+                      setFechaExacta(e.target.value);
+                      setFiltroFecha("exacta");
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+
+                {/* Filtro por rango personalizado */}
+                <div className="pt-3 border-t border-white/5">
+                  <h4 className="text-xs font-medium text-white/40 mb-2">Rango personalizado</h4>
+                  <div className="space-y-2">
+                    <input
+                      type="date"
+                      placeholder="Fecha inicio"
+                      value={fechaInicio}
+                      onChange={(e) => {
+                        setFechaInicio(e.target.value);
+                        setFiltroFecha("rango");
+                        setFechaExacta("");
+                      }}
+                      className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
+                    />
+                    <input
+                      type="date"
+                      placeholder="Fecha fin"
+                      value={fechaFin}
+                      onChange={(e) => {
+                        setFechaFin(e.target.value);
+                        setFiltroFecha("rango");
+                        setFechaExacta("");
+                      }}
+                      className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={limpiarFiltros}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs text-white/40 hover:text-white/60 bg-white/5 hover:bg-white/10 rounded-lg transition-colors mt-2"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Limpiar todos los filtros
+                </button>
+              </div>
+            )}
+          </aside>
+
+          {/* Panel derecho - Detalle de la actividad seleccionada */}
+          <main className="flex-1">
+            <AnimatePresence mode="wait">
+              {actividadSeleccionada ? (
+                <motion.div
+                  key="detalle"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-4"
+                >
+                  {/* Cabecera del detalle */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={volverALista}
+                      className="flex items-center gap-2 text-xs text-white/40 hover:text-white/60 transition-colors"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Volver a lista
+                    </button>
+                    <div className="flex items-center gap-2">
+                      {actividadSeleccionada.resumenEjecutivo?.texto && (
+                        <button
+                          onClick={() => iniciarLecturaResumenActividad(actividadSeleccionada)}
+                          className="p-1.5 text-purple-400/60 hover:text-purple-400 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                          title="Leer resumen IA"
+                        >
+                          <Brain className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => abrirConfirmacionLectura(actividadSeleccionada)}
+                        disabled={actividadSeleccionada.tareasConExplicacion === 0}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          actividadSeleccionada.tareasConExplicacion > 0
+                            ? 'text-indigo-400/60 hover:text-indigo-400 bg-white/5 hover:bg-white/10'
+                            : 'text-white/10 cursor-not-allowed'
+                        }`}
+                        title="Leer tareas con explicación"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de actividad en detalle */}
+                  <div className="bg-white/[0.02] rounded-xl p-6 border border-white/5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={`w-3 h-3 rounded-full ${
+                        actividadSeleccionada.status === 'Completada' ? 'bg-green-400' :
+                        actividadSeleccionada.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'
+                      }`} />
+                      <span className="text-xs text-white/40">{actividadSeleccionada.fecha}</span>
+                      {actividadSeleccionada.horaInicio && (
+                        <>
+                          <span className="text-xs text-white/20">•</span>
+                          <span className="text-xs text-white/40">
+                            {actividadSeleccionada.horaInicio.substring(0,5)}
+                            {actividadSeleccionada.horaFin && ` - ${actividadSeleccionada.horaFin.substring(0,5)}`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <h2 className="text-xl font-semibold text-white/90 mb-4">
+                      {actividadSeleccionada.titulo}
+                    </h2>
+
+                    {/* Resumen ejecutivo si existe */}
+                    {actividadSeleccionada.resumenEjecutivo && (
+                      <div className="mb-6 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Brain className="w-4 h-4 text-purple-400" />
+                          <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider">
+                            Resumen ejecutivo
+                          </h3>
+                        </div>
+                        <p className="text-sm text-white/70 leading-relaxed">
+                          {actividadSeleccionada.resumenEjecutivo.texto}
+                        </p>
+                        {actividadSeleccionada.resumenEjecutivo.fechaGeneracion && (
+                          <p className="text-[10px] text-white/30 mt-2 text-right">
+                            Generado: {new Date(actividadSeleccionada.resumenEjecutivo.fechaGeneracion).toLocaleString('es-MX')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Lista de tareas */}
+                    <h3 className="text-sm font-medium text-white/40 uppercase tracking-wider mb-3">
+                      Tareas ({actividadSeleccionada.tareas.length})
+                    </h3>
+
+                    <div className="space-y-3">
+                      {actividadSeleccionada.tareas.map((tarea, index) => (
+                        <motion.div
+                          key={tarea.pendienteId}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="bg-white/[0.02] rounded-lg p-4 border border-white/5 hover:border-white/10 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-medium ${
+                              tarea.terminada ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-white/90">
+                                  {tarea.nombre}
+                                </span>
+                                {tarea.prioridad && (
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                    tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                                    tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                                    'bg-blue-500/10 text-blue-400'
+                                  }`}>
+                                    {tarea.prioridad}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Metadatos de la tarea */}
+                              <div className="flex items-center gap-3 text-xs text-white/30 mb-2">
+                                {tarea.duracionMin > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {tarea.duracionMin} min
+                                  </span>
+                                )}
+                                <span className={tarea.terminada ? 'text-green-400/60' : 'text-yellow-400/60'}>
+                                  {tarea.terminada ? 'Completada' : 'Pendiente'}
+                                </span>
+                              </div>
+
+                              {/* Explicación de la tarea si existe */}
+                              {tarea.explicacionActual && (
+                                <div className="mt-3 pt-3 border-t border-white/5">
+                                  <p className="text-xs text-white/60 leading-relaxed">
+                                    {tarea.explicacionActual.texto}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-2 text-[10px]">
+                                    <span className="text-white/30">
+                                      {tarea.explicacionActual.email?.split('@')[0]}
+                                    </span>
+                                    <span className="w-1 h-1 rounded-full bg-white/20" />
+                                    <span className="text-white/30">
+                                      {new Date(tarea.explicacionActual.fecha).toLocaleDateString()}
+                                    </span>
+                                    <Brain className="w-2.5 h-2.5 text-indigo-400/40 ml-auto" />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Botón para leer esta tarea individualmente */}
+                            {tarea.explicacionActual && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  iniciarLecturaConfirmada([tarea]);
+                                }}
+                                className="p-1.5 text-indigo-400/40 hover:text-indigo-400 rounded-lg transition-colors"
+                                title="Leer esta tarea"
+                              >
+                                <Volume2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    {/* Colaboradores */}
+                    {actividadSeleccionada.colaboradores && actividadSeleccionada.colaboradores.length > 0 && (
+                      <div className="mt-6 pt-4 border-t border-white/5">
+                        <h4 className="text-xs font-medium text-white/40 mb-2">Colaboradores</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {actividadSeleccionada.colaboradores.map((email, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg text-xs text-white/60"
+                            >
+                              <Users className="w-3 h-3" />
+                              {email.split('@')[0]}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="bienvenida"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center h-full min-h-[500px] text-center"
+                >
+                  <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
+                    <FileText className="w-10 h-10 text-white/20" />
+                  </div>
+                  <h2 className="text-lg font-medium text-white/60 mb-2">Selecciona una actividad</h2>
+                  <p className="text-sm text-white/30 max-w-md">
+                    Elige una actividad de la lista del aside para ver sus detalles, tareas y reportes.
+                  </p>
+                  <DashboardAnalytics />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </main>
         </div>
       </div>
 
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
+          width: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: #1a1a1a;
+          background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #333;
-          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 2px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #444;
+          background: rgba(255, 255, 255, 0.2);
         }
       `}</style>
     </div>

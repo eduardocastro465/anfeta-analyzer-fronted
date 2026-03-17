@@ -125,7 +125,7 @@ export default function PanelAdminCompleto() {
 
     try {
       const response = await fetch(
-        "http://localhost:4001/api/v1/assistant/admin/todas-explicaciones",
+        "http://localhost:4000/api/v1/assistant/admin/todas-explicaciones",
         {
           credentials: "include",
           headers: {
