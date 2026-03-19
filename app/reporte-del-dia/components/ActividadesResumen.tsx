@@ -27,7 +27,7 @@ import {
   Brain
 } from "lucide-react";
 
-// Interfaces (se mantienen igual)
+// Interfaces
 interface Actividad {
   actividadId: string;
   titulo: string;
@@ -72,7 +72,7 @@ interface ApiResponse {
   actividades: Actividad[];
 }
 
-// Hook personalizado para síntesis de voz (se mantiene igual)
+// Hook personalizado para síntesis de voz
 const useSpeechSynthesis = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -212,7 +212,7 @@ const useSpeechSynthesis = () => {
   };
 };
 
-// Modal de lectura en vivo - VERSIÓN OSCURA
+// Modal de lectura en vivo - VERSIÓN CORREGIDA
 const ModalLecturaVivo = ({ 
   isOpen, 
   onClose, 
@@ -230,11 +230,117 @@ const ModalLecturaVivo = ({
   
   const speech = useSpeechSynthesis();
 
+  // Referencia para controlar si el modal está montado
+  const isMounted = useRef(true);
+
+  // Efecto para manejar el montaje/desmontaje
   useEffect(() => {
-    if (isOpen && textos.length > 0 && !speech.isSpeaking) {
-      speech.hablar(textos[textoActual], velocidad);
+    isMounted.current = true;
+    
+    return () => {
+      isMounted.current = false;
+      // Asegurar que se detenga la lectura al desmontar
+      if (speech.isSpeaking) {
+        speech.detener();
+      }
+    };
+  }, [speech]);
+
+  // Efecto separado para iniciar la lectura cuando se abre el modal
+  useEffect(() => {
+    if (isOpen && textos.length > 0 && textoActual < textos.length) {
+      // Pequeño delay para asegurar que todo esté listo
+      const timer = setTimeout(() => {
+        if (isMounted.current) {
+          speech.hablar(textos[textoActual], velocidad);
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [textoActual, isOpen, textos]);
+  }, [isOpen]); // Solo depende de isOpen
+
+  // Efecto para cambiar de texto cuando se actualiza textoActual
+  useEffect(() => {
+    if (isOpen && textos.length > 0 && textoActual < textos.length) {
+      // Detener la lectura actual y comenzar la nueva
+      if (speech.isSpeaking) {
+        speech.detener();
+      }
+      
+      const timer = setTimeout(() => {
+        if (isMounted.current) {
+          speech.hablar(textos[textoActual], velocidad);
+        }
+      }, 50);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [textoActual]); // Depende de textoActual
+
+  // Función mejorada para cerrar que detiene la lectura inmediatamente
+  const handleClose = () => {
+    // Detener la lectura primero
+    if (speech.isSpeaking) {
+      speech.detener();
+    }
+    
+    // Pequeño delay para asegurar que se detenga antes de cerrar
+    setTimeout(() => {
+      if (isMounted.current) {
+        onClose();
+        // Reiniciar el texto actual para la próxima vez
+        setTextoActual(0);
+      }
+    }, 50);
+  };
+
+  // Función para pausar/reanudar
+  const pausarReanudar = () => {
+    if (speech.isPaused) {
+      speech.reanudar();
+    } else if (speech.isSpeaking) {
+      speech.pausar();
+    }
+  };
+
+  // Función para detener la lectura
+  const detenerLectura = () => {
+    speech.detener();
+  };
+
+  // Función para ir al siguiente texto
+  const siguienteTexto = () => {
+    speech.detener();
+    
+    if (textoActual < textos.length - 1) {
+      setTextoActual(textoActual + 1);
+    } else {
+      handleClose();
+    }
+  };
+
+  // Función para ir al texto anterior
+  const textoAnterior = () => {
+    if (textoActual > 0) {
+      speech.detener();
+      setTextoActual(textoActual - 1);
+    }
+  };
+
+  // Función para repetir el texto actual
+  const repetirTexto = () => {
+    speech.detener();
+    speech.hablar(textos[textoActual], velocidad);
+  };
+
+  // Función para cambiar la velocidad
+  const cambiarVelocidad = (nuevaVelocidad: number) => {
+    setVelocidad(nuevaVelocidad);
+    if (speech.isSpeaking) {
+      repetirTexto();
+    }
+  };
 
   if (!isOpen) return null;
   
@@ -245,7 +351,7 @@ const ModalLecturaVivo = ({
           <div className="text-center">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-white mb-2">No hay textos para leer</h3>
-            <Button onClick={onClose} className="mt-4 bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
+            <Button onClick={handleClose} className="mt-4 bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
               Cerrar
             </Button>
           </div>
@@ -255,47 +361,6 @@ const ModalLecturaVivo = ({
   }
 
   const progreso = ((textoActual + 1) / textos.length) * 100;
-
-  const pausarReanudar = () => {
-    if (speech.isPaused) {
-      speech.reanudar();
-    } else if (speech.isSpeaking) {
-      speech.pausar();
-    }
-  };
-
-  const detenerLectura = () => {
-    speech.detener();
-  };
-
-  const siguienteTexto = () => {
-    speech.detener();
-    
-    if (textoActual < textos.length - 1) {
-      setTextoActual(textoActual + 1);
-    } else {
-      onClose();
-    }
-  };
-
-  const textoAnterior = () => {
-    if (textoActual > 0) {
-      speech.detener();
-      setTextoActual(textoActual - 1);
-    }
-  };
-
-  const repetirTexto = () => {
-    speech.detener();
-    speech.hablar(textos[textoActual], velocidad);
-  };
-
-  const cambiarVelocidad = (nuevaVelocidad: number) => {
-    setVelocidad(nuevaVelocidad);
-    if (speech.isSpeaking) {
-      repetirTexto();
-    }
-  };
 
   if (!speech.isSupported) {
     return (
@@ -307,7 +372,7 @@ const ModalLecturaVivo = ({
             <p className="text-sm text-gray-400 mb-4">
               {speech.error || "Tu navegador no soporta síntesis de voz."}
             </p>
-            <Button onClick={onClose} className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
+            <Button onClick={handleClose} className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
               Entendido
             </Button>
           </div>
@@ -342,7 +407,7 @@ const ModalLecturaVivo = ({
               <Settings className="w-5 h-5 text-gray-400" />
             </button>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1 hover:bg-[#333333] rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-gray-400" />
@@ -513,7 +578,7 @@ const ModalLecturaVivo = ({
   );
 };
 
-// Button component reutilizable (actualizado con variante dark)
+// Button component reutilizable
 const Button = ({ children, className = "", variant = "default", ...props }: any) => {
   const baseStyle = "inline-flex items-center justify-center font-medium transition-colors rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#8b5cf6] disabled:opacity-50 disabled:cursor-not-allowed";
   
@@ -575,7 +640,12 @@ export function ActividadesResumen() {
     fetchActividades();
   }, []);
 
-  // Función para leer todos los resúmenes (existente)
+  // Función para cerrar el modal
+  const handleCloseModal = () => {
+    setModalLecturaAbierto(false);
+  };
+
+  // Función para leer todos los resúmenes
   const leerTodosLosResumenes = () => {
     if (!data?.actividades) return;
     
@@ -596,7 +666,7 @@ export function ActividadesResumen() {
     setModalLecturaAbierto(true);
   };
 
-  // NUEVA FUNCIÓN: Leer resúmenes IA (versión morada)
+  // Función para leer resúmenes IA
   const leerResumenesIA = () => {
     if (!data?.actividades) return;
     
@@ -729,10 +799,10 @@ export function ActividadesResumen() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Modal de lectura - VERSIÓN OSCURA */}
+      {/* Modal de lectura */}
       <ModalLecturaVivo 
         isOpen={modalLecturaAbierto}
-        onClose={() => setModalLecturaAbierto(false)}
+        onClose={handleCloseModal}
         textos={textosParaLectura}
         titulo={tituloLectura}
       />
@@ -745,7 +815,7 @@ export function ActividadesResumen() {
               Resumen de Actividades
             </h1>
             <div className="flex items-center gap-2">
-              {/* NUEVO BOTÓN MORADO PARA LEER RESÚMENES IA */}
+              {/* Botón para leer resúmenes IA */}
               <button
                 onClick={leerResumenesIA}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
@@ -760,7 +830,7 @@ export function ActividadesResumen() {
                 )}
               </button>
 
-              {/* Botón existente (se mantiene) */}
+              {/* Botón para leer todos los resúmenes */}
               <button
                 onClick={leerTodosLosResumenes}
                 className="px-4 py-2 bg-[#6841ea] text-white rounded-lg hover:bg-[#7a4cf5] transition-colors flex items-center gap-2"
@@ -817,7 +887,7 @@ export function ActividadesResumen() {
         </div>
       </div>
 
-      {/* Filtros y búsqueda (se mantiene igual) */}
+      {/* Filtros y búsqueda */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -896,7 +966,7 @@ export function ActividadesResumen() {
         </div>
       </div>
 
-      {/* Lista de actividades (se mantiene igual) */}
+      {/* Lista de actividades */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         {actividadesFiltradas.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -988,7 +1058,7 @@ export function ActividadesResumen() {
                   </div>
                 </div>
 
-                {/* Contenido expandido (se mantiene igual) */}
+                {/* Contenido expandido */}
                 {expandedActividades.has(actividad.actividadId) && (
                   <div className="border-t border-gray-200 p-4 bg-gray-50">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
