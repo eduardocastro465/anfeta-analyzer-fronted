@@ -50,7 +50,6 @@ import {
 import { Actividad, Tarea } from "./components/types";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
-import DashboardAnalytics from "./components/DashboardAnalytics";
 
 // ==================== HOOK DE SÍNTESIS DE VOZ ====================
 const useSpeechSynthesis = () => {
@@ -397,7 +396,7 @@ const ModalConfirmacionLectura = ({
                           <input
                             type="checkbox"
                             checked={estaSeleccionada}
-                            onChange={() => { }}
+                            onChange={() => {}}
                             disabled={!tieneExplicacion}
                             className="absolute opacity-0 w-4 h-4 cursor-pointer"
                           />
@@ -567,10 +566,8 @@ const ModalLecturaTareas = ({
   const speech = useSpeechSynthesis();
   const isMounted = useRef(true);
 
-  // Control de montaje/desmontaje
   useEffect(() => {
     isMounted.current = true;
-    
     return () => {
       isMounted.current = false;
       if (speech.isSpeaking) {
@@ -579,7 +576,6 @@ const ModalLecturaTareas = ({
     };
   }, [speech]);
 
-  // Función para obtener el texto a leer según el modo seleccionado
   const obtenerTextoALeer = (tarea: Tarea): string | null => {
     if (modoLectura === 'que-se-hizo') {
       return tarea.explicacionActual ? `${tarea.nombre}. ${tarea.explicacionActual.texto}` : null;
@@ -588,7 +584,6 @@ const ModalLecturaTareas = ({
     }
   };
 
-  // Efecto para iniciar lectura cuando se abre el modal
   useEffect(() => {
     if (isOpen && tareas.length > 0 && tareaActual < tareas.length) {
       const timer = setTimeout(() => {
@@ -607,18 +602,15 @@ const ModalLecturaTareas = ({
           }
         }
       }, 100);
-      
       return () => clearTimeout(timer);
     }
   }, [isOpen, modoLectura]);
 
-  // Efecto para cambiar de tarea
   useEffect(() => {
     if (isOpen && tareas.length > 0 && tareaActual < tareas.length) {
       if (speech.isSpeaking) {
         speech.detener();
       }
-      
       const timer = setTimeout(() => {
         if (isMounted.current) {
           const tarea = tareas[tareaActual];
@@ -628,17 +620,14 @@ const ModalLecturaTareas = ({
           }
         }
       }, 50);
-      
       return () => clearTimeout(timer);
     }
   }, [tareaActual, modoLectura]);
 
-  // Función handleClose
   const handleClose = () => {
     if (speech.isSpeaking) {
       speech.detener();
     }
-    
     setTimeout(() => {
       if (isMounted.current) {
         onClose();
@@ -691,32 +680,20 @@ const ModalLecturaTareas = ({
   const pausarReanudar = () => {
     if (speech.isPaused) {
       speech.reanudar();
-      toast({
-        title: "Reanudado",
-        description: "Continuando con la lectura",
-        duration: 2000
-      });
+      toast({ title: "Reanudado", description: "Continuando con la lectura", duration: 2000 });
     } else if (speech.isSpeaking) {
       speech.pausar();
-      toast({
-        title: "Pausado",
-        description: "Lectura pausada",
-        duration: 2000
-      });
+      toast({ title: "Pausado", description: "Lectura pausada", duration: 2000 });
     }
   };
 
   const detenerLectura = () => {
     speech.detener();
-    toast({
-      title: "Lectura detenida",
-      duration: 2000
-    });
+    toast({ title: "Lectura detenida", duration: 2000 });
   };
 
   const siguienteTarea = () => {
     speech.detener();
-
     if (tareaActual < tareas.length - 1) {
       setTareaActual(tareaActual + 1);
     } else {
@@ -768,38 +745,26 @@ const ModalLecturaTareas = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/30">
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl w-full max-w-3xl shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-[#2a2a2a]">
           <div className="flex items-center gap-3">
             <div className={`p-1.5 ${speech.isSpeaking ? 'bg-[#6841ea]/20' : 'bg-[#1a1a1a]'} rounded-lg`}>
               <Volume2 className={`w-4 h-4 ${speech.isSpeaking ? 'text-[#6841ea]' : 'text-gray-500'}`} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">
-                Lectura de Tareas
-              </h2>
-              <p className="text-xs text-gray-400">
-                Tarea {tareaActual + 1} de {tareas.length}
-              </p>
+              <h2 className="text-base font-semibold text-white">Lectura de Tareas</h2>
+              <p className="text-xs text-gray-400">Tarea {tareaActual + 1} de {tareas.length}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setMostrarConfig(!mostrarConfig)}
-              className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
-            >
+            <button onClick={() => setMostrarConfig(!mostrarConfig)} className="p-1 hover:bg-[#1a1a1a] rounded-lg">
               <Settings className="w-4 h-4 text-gray-400" />
             </button>
-            <button
-              onClick={handleClose}
-              className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
-            >
+            <button onClick={handleClose} className="p-1 hover:bg-[#1a1a1a] rounded-lg">
               <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
         </div>
 
-        {/* Selector de modo de lectura */}
         <div className="px-3 pt-3 pb-1 border-b border-[#2a2a2a] bg-[#0d0d0d]">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Leer:</span>
@@ -828,7 +793,6 @@ const ModalLecturaTareas = ({
               </button>
             </div>
           </div>
-          {/* Indicador de disponibilidad */}
           <div className="flex items-center gap-2 mt-2 text-[8px] text-gray-500">
             <span className="flex items-center gap-1">
               <span className={`w-1.5 h-1.5 rounded-full ${tieneTextoParaLeer(tareaAct) ? 'bg-green-400' : 'bg-red-400'}`} />
@@ -841,15 +805,10 @@ const ModalLecturaTareas = ({
           </div>
         </div>
 
-        {/* Progress bar */}
         <div className="h-0.5 bg-[#1a1a1a]">
-          <div
-            className="h-full bg-[#6841ea] transition-all duration-300"
-            style={{ width: `${progreso}%` }}
-          />
+          <div className="h-full bg-[#6841ea] transition-all duration-300" style={{ width: `${progreso}%` }} />
         </div>
 
-        {/* Config panel */}
         {mostrarConfig && (
           <div className="p-3 border-b border-[#2a2a2a] bg-[#111]">
             <h3 className="text-xs font-medium text-gray-300 mb-2">Configuración de voz</h3>
@@ -871,7 +830,6 @@ const ModalLecturaTareas = ({
                   <span className="text-xs text-white w-12">{velocidad.toFixed(1)}x</span>
                 </div>
               </div>
-
               {speech.voces.length > 0 && (
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Voz</label>
@@ -881,9 +839,7 @@ const ModalLecturaTareas = ({
                     className="w-full h-8 text-xs bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-2 text-gray-300"
                   >
                     {speech.voces.map((voz) => (
-                      <option key={voz.name} value={voz.name}>
-                        {voz.name} ({voz.lang})
-                      </option>
+                      <option key={voz.name} value={voz.name}>{voz.name} ({voz.lang})</option>
                     ))}
                   </select>
                 </div>
@@ -892,49 +848,36 @@ const ModalLecturaTareas = ({
           </div>
         )}
 
-        {/* Contenido principal en dos columnas */}
         <div className="flex flex-col md:flex-row p-3 gap-3">
-          {/* Columna izquierda - Tarea actual y controles */}
           <div className="flex-1 space-y-3">
-            {/* Tarea actual */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">TAREA ACTUAL</h3>
-                <span className="text-xs bg-[#1a1a1a] text-gray-400 px-2 py-0.5 rounded-full">
-                  #{tareaActual + 1}
-                </span>
+                <span className="text-xs bg-[#1a1a1a] text-gray-400 px-2 py-0.5 rounded-full">#{tareaActual + 1}</span>
               </div>
-
-              {/* Título y prioridad */}
               <div className="flex items-center gap-2 mb-2">
                 <p className="text-sm font-medium text-white">{tareaAct.nombre}</p>
                 {tareaAct.prioridad && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${tareaAct.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                    tareaAct.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
                     tareaAct.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
-                      'bg-blue-500/10 text-blue-400'
-                    }`}>
+                    'bg-blue-500/10 text-blue-400'
+                  }`}>
                     {tareaAct.prioridad}
                   </span>
                 )}
               </div>
-
-              {/* Estado de la tarea */}
               <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
                 {tareaAct.duracionMin > 0 && (
                   <>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {tareaAct.duracionMin} min
-                    </span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{tareaAct.duracionMin} min</span>
                     <span>•</span>
                   </>
                 )}
                 <span className={tareaAct.terminada ? 'text-green-400' : 'text-yellow-400'}>
-                  {tareaAct.terminada ? '✓ Completada' : '⏳ Pendiente'}
+                  {tareaAct.terminada ? 'Completada' : 'Pendiente'}
                 </span>
               </div>
-
-              {/* Contenido según modo de lectura */}
               <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3">
                 <div className="flex items-center gap-1 mb-1">
                   {modoLectura === 'que-se-hizo' ? (
@@ -979,7 +922,6 @@ const ModalLecturaTareas = ({
               </div>
             </div>
 
-            {/* Estado de lectura */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</span>
@@ -992,15 +934,11 @@ const ModalLecturaTareas = ({
                     Leyendo...
                   </span>
                 )}
-                {speech.isPaused && (
-                  <span className="text-xs text-yellow-400">Pausado</span>
-                )}
+                {speech.isPaused && <span className="text-xs text-yellow-400">Pausado</span>}
               </div>
               <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-2 min-h-[40px]">
                 <p className="text-xs text-gray-400">
-                  {speech.isSpeaking
-                    ? (speech.isPaused ? "Lectura pausada" : "Reproduciendo...")
-                    : "Listo para leer"}
+                  {speech.isSpeaking ? (speech.isPaused ? "Lectura pausada" : "Reproduciendo...") : "Listo para leer"}
                 </p>
               </div>
             </div>
@@ -1011,68 +949,32 @@ const ModalLecturaTareas = ({
               </div>
             )}
 
-            {/* Controles de navegación */}
             <div className="flex items-center justify-center gap-2">
-              <Button
-                onClick={tareaAnterior}
-                disabled={tareaActual === 0}
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-              >
+              <Button onClick={tareaAnterior} disabled={tareaActual === 0} variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50">
                 ← Anterior
               </Button>
-
-              <Button
-                onClick={repetirTarea}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]"
-                title="Repetir tarea actual"
-              >
+              <Button onClick={repetirTarea} variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]" title="Repetir tarea actual">
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
-
-              <Button
-                onClick={pausarReanudar}
-                disabled={!speech.isSpeaking}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-              >
+              <Button onClick={pausarReanudar} disabled={!speech.isSpeaking} variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50">
                 {speech.isPaused ? <Play className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
               </Button>
-
-              <Button
-                onClick={detenerLectura}
-                disabled={!speech.isSpeaking}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-              >
+              <Button onClick={detenerLectura} disabled={!speech.isSpeaking} variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50">
                 <StopCircle className="w-3.5 h-3.5" />
               </Button>
-
-              <Button
-                onClick={siguienteTarea}
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]"
-              >
+              <Button onClick={siguienteTarea} variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]">
                 {tareaActual < tareas.length - 1 ? 'Siguiente →' : 'Finalizar'}
               </Button>
             </div>
 
-            {/* Velocidad rápida */}
             <div className="flex items-center justify-center gap-1 pt-1">
               {[0.75, 1, 1.25, 1.5, 2].map((v) => (
                 <button
                   key={v}
                   onClick={() => cambiarVelocidad(v)}
-                  className={`px-1.5 py-0.5 text-xs rounded transition-colors ${velocidad === v
-                    ? 'bg-[#6841ea] text-white'
-                    : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
-                    }`}
+                  className={`px-1.5 py-0.5 text-xs rounded transition-colors ${
+                    velocidad === v ? 'bg-[#6841ea] text-white' : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
+                  }`}
                 >
                   {v}x
                 </button>
@@ -1080,7 +982,6 @@ const ModalLecturaTareas = ({
             </div>
           </div>
 
-          {/* Columna derecha - Listado de tareas */}
           <div className="w-full md:w-72 lg:w-80 bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-medium text-gray-300 flex items-center gap-1">
@@ -1091,7 +992,6 @@ const ModalLecturaTareas = ({
                 {tareaActual + 1}/{tareas.length}
               </span>
             </div>
-
             <div className="space-y-1.5 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
               {tareas.map((tarea, index) => {
                 const esPasada = index < tareaActual;
@@ -1106,95 +1006,59 @@ const ModalLecturaTareas = ({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.02 }}
                     onClick={() => irATarea(index)}
-                    className={`
-                      flex items-start gap-2 p-2 rounded-lg cursor-pointer
-                      transition-all duration-300 group border
-                      ${esActual
-                        ? 'bg-[#6841ea]/20 border-[#6841ea]/50 shadow-sm shadow-[#6841ea]/10'
-                        : 'hover:bg-[#1a1a1a] border-transparent hover:border-[#2a2a2a]'
-                      }
-                      ${!tieneContenido && !esActual ? 'opacity-40' : ''}
-                    `}
+                    className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-all duration-300 group border ${
+                      esActual ? 'bg-[#6841ea]/20 border-[#6841ea]/50' : 'hover:bg-[#1a1a1a] border-transparent hover:border-[#2a2a2a]'
+                    } ${!tieneContenido && !esActual ? 'opacity-40' : ''}`}
                   >
-                    {/* Indicador de estado */}
                     <div className="relative mt-1">
-                      <div className={`
-                        w-2 h-2 rounded-full transition-all duration-300
-                        ${esActual ? 'bg-[#6841ea]' : ''}
-                        ${esPasada ? 'bg-gray-600' : ''}
-                        ${esFutura ? 'bg-gray-400' : ''}
-                      `} />
-                      {esActual && (
-                        <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-75" />
-                      )}
+                      <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        esActual ? 'bg-[#6841ea]' : esPasada ? 'bg-gray-600' : 'bg-gray-400'
+                      }`} />
+                      {esActual && <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-75" />}
                     </div>
-
-                    {/* Contenido de la tarea */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <p className={`
-                          text-xs font-medium truncate max-w-[120px] transition-all duration-300
-                          ${esPasada ? 'text-gray-500' : ''}
-                          ${esActual ? 'text-white' : 'text-gray-300'}
-                          ${esFutura ? 'text-gray-300' : ''}
-                        `}>
+                        <p className={`text-xs font-medium truncate max-w-[120px] transition-all duration-300 ${
+                          esPasada ? 'text-gray-500' : esActual ? 'text-white' : 'text-gray-300'
+                        }`}>
                           {tarea.nombre}
                         </p>
-                        <span className={`
-                          text-[8px] px-1 py-0.5 rounded-full whitespace-nowrap transition-all duration-300
-                          ${esPasada ? 'bg-gray-800 text-gray-500' : ''}
-                          ${esActual ? 'bg-[#6841ea]/20 text-[#6841ea]' : ''}
-                          ${esFutura ? 'bg-[#1a1a1a] text-gray-600' : ''}
-                        `}>
-                          {esPasada && 'Leída'}
-                          {esActual && 'Actual'}
-                          {esFutura && 'Pendiente'}
+                        <span className={`text-[8px] px-1 py-0.5 rounded-full whitespace-nowrap transition-all duration-300 ${
+                          esPasada ? 'bg-gray-800 text-gray-500' : esActual ? 'bg-[#6841ea]/20 text-[#6841ea]' : 'bg-[#1a1a1a] text-gray-600'
+                        }`}>
+                          {esPasada ? 'Leída' : esActual ? 'Actual' : 'Pendiente'}
                         </span>
                       </div>
-
-                      {/* Prioridad y duración */}
                       <div className="flex items-center gap-1 mb-1">
                         {tarea.prioridad && (
-                          <span className={`
-                            text-[8px] px-1 py-0.5 rounded
-                            ${tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
-                              tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
-                                'bg-blue-500/10 text-blue-400'}
-                          `}>
+                          <span className={`text-[8px] px-1 py-0.5 rounded ${
+                            tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                            tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                            'bg-blue-500/10 text-blue-400'
+                          }`}>
                             {tarea.prioridad}
                           </span>
                         )}
                         {tarea.duracionMin > 0 && (
-                          <span className={`
-                            text-[8px] flex items-center gap-0.5
-                            ${esPasada ? 'text-gray-600' : 'text-gray-500'}
-                          `}>
+                          <span className={`text-[8px] flex items-center gap-0.5 ${esPasada ? 'text-gray-600' : 'text-gray-500'}`}>
                             <Clock className="w-2.5 h-2.5" />
                             {tarea.duracionMin}min
                           </span>
                         )}
                       </div>
-
-                      {/* Preview según modo de lectura */}
                       {modoLectura === 'que-se-hizo' ? (
                         tarea.explicacionActual && (
-                          <p className={`
-                            text-[8px] leading-tight line-clamp-2 transition-all duration-300
-                            ${esPasada ? 'text-gray-600' : ''}
-                            ${esActual ? 'text-gray-300' : 'text-gray-400'}
-                            ${esFutura ? 'text-gray-400' : ''}
-                          `}>
+                          <p className={`text-[8px] leading-tight line-clamp-2 transition-all duration-300 ${
+                            esPasada ? 'text-gray-600' : esActual ? 'text-gray-300' : 'text-gray-400'
+                          }`}>
                             {tarea.explicacionActual.texto.substring(0, 70)}...
                           </p>
                         )
                       ) : (
                         tarea.descripcion && (
-                          <p className={`
-                            text-[8px] leading-tight line-clamp-2 transition-all duration-300
-                            ${esPasada ? 'text-gray-600' : ''}
-                            ${esActual ? 'text-gray-300' : 'text-gray-400'}
-                            ${esFutura ? 'text-gray-400' : ''}
-                          `}>
+                          <p className={`text-[8px] leading-tight line-clamp-2 transition-all duration-300 ${
+                            esPasada ? 'text-gray-600' : esActual ? 'text-gray-300' : 'text-gray-400'
+                          }`}>
                             {tarea.descripcion.substring(0, 70)}...
                           </p>
                         )
@@ -1227,15 +1091,14 @@ const ModalLecturaResumenes = ({
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [actividadesAgrupadas, setActividadesAgrupadas] = useState<{ [key: string]: Actividad[] }>({});
   const [cargando, setCargando] = useState(false);
+  const [modoLectura, setModoLectura] = useState<'planeado' | 'ejecutado'>('planeado');
   const { toast } = useToast();
 
   const speech = useSpeechSynthesis();
   const isMounted = useRef(true);
 
-  // Control de montaje/desmontaje
   useEffect(() => {
     isMounted.current = true;
-
     return () => {
       isMounted.current = false;
       if (speech.isSpeaking) {
@@ -1244,7 +1107,6 @@ const ModalLecturaResumenes = ({
     };
   }, [speech]);
 
-  // Función para agrupar actividades por fecha
   const agruparPorFecha = (acts: Actividad[]) => {
     const grupos: { [key: string]: Actividad[] } = {};
 
@@ -1262,14 +1124,12 @@ const ModalLecturaResumenes = ({
       grupos[fecha].push(act);
     });
 
-    // Ordenar las fechas (más reciente primero)
     const fechasOrdenadas = Object.keys(grupos).sort((a, b) => {
       return new Date(b).getTime() - new Date(a).getTime();
     });
 
     const gruposOrdenados: { [key: string]: Actividad[] } = {};
     fechasOrdenadas.forEach(fecha => {
-      // Ordenar actividades dentro de cada fecha
       grupos[fecha].sort((a, b) => {
         if (a.horaInicio && b.horaInicio) {
           return a.horaInicio.localeCompare(b.horaInicio);
@@ -1282,7 +1142,14 @@ const ModalLecturaResumenes = ({
     return gruposOrdenados;
   };
 
-  // Cargar datos de la API cuando se abre el modal
+  const obtenerTextoALeer = (actividad: Actividad): string | null => {
+    if (modoLectura === 'planeado') {
+      return actividad.resumenPlaneado?.texto ? `Actividad: ${actividad.titulo}. ${actividad.resumenPlaneado.texto}` : null;
+    } else {
+      return actividad.resumenEjecutado?.texto ? `Actividad: ${actividad.titulo}. ${actividad.resumenEjecutado.texto}` : null;
+    }
+  };
+
   useEffect(() => {
     const cargarActividades = async () => {
       if (!isOpen) return;
@@ -1306,7 +1173,9 @@ const ModalLecturaResumenes = ({
             const actividadFiltrada = data.actividades.find((a: Actividad) => a.actividadId === actividadId);
             actividadesFiltradas = actividadFiltrada ? [actividadFiltrada] : [];
           } else {
-            actividadesFiltradas = data.actividades.filter((a: Actividad) => a.resumenEjecutivo?.texto);
+            actividadesFiltradas = data.actividades.filter((a: Actividad) => 
+              a.resumenPlaneado?.texto || a.resumenEjecutado?.texto
+            );
           }
 
           setActividades(actividadesFiltradas);
@@ -1328,57 +1197,49 @@ const ModalLecturaResumenes = ({
     cargarActividades();
   }, [isOpen, actividadId]);
 
-  // Actualizar agrupaciones cuando cambian las actividades
   useEffect(() => {
     if (actividades.length > 0) {
       setActividadesAgrupadas(agruparPorFecha(actividades));
     }
   }, [actividades]);
 
-  // Efecto para iniciar lectura cuando se abre el modal
   useEffect(() => {
     if (isOpen && actividades.length > 0 && actividadActual < actividades.length && !cargando) {
       const timer = setTimeout(() => {
         if (isMounted.current) {
           const actividad = actividades[actividadActual];
-          if (actividad?.resumenEjecutivo?.texto) {
-            const textoALeer = `Actividad: ${actividad.titulo}. ${actividad.resumenEjecutivo.texto}`;
+          const textoALeer = obtenerTextoALeer(actividad);
+          if (textoALeer) {
             speech.hablar(textoALeer, velocidad);
           }
         }
       }, 100);
-
       return () => clearTimeout(timer);
     }
-  }, [isOpen, actividades, cargando]);
+  }, [isOpen, actividades, cargando, modoLectura]);
 
-  // Efecto para cambiar de actividad
   useEffect(() => {
     if (isOpen && actividades.length > 0 && actividadActual < actividades.length && !cargando) {
       if (speech.isSpeaking) {
         speech.detener();
       }
-
       const timer = setTimeout(() => {
         if (isMounted.current) {
           const actividad = actividades[actividadActual];
-          if (actividad?.resumenEjecutivo?.texto) {
-            const textoALeer = `Actividad: ${actividad.titulo}. ${actividad.resumenEjecutivo.texto}`;
+          const textoALeer = obtenerTextoALeer(actividad);
+          if (textoALeer) {
             speech.hablar(textoALeer, velocidad);
           }
         }
       }, 50);
-
       return () => clearTimeout(timer);
     }
-  }, [actividadActual, actividades, cargando]);
+  }, [actividadActual, actividades, cargando, modoLectura]);
 
-  // Función handleClose corregida
   const handleClose = () => {
     if (speech.isSpeaking) {
       speech.detener();
     }
-
     setTimeout(() => {
       if (isMounted.current) {
         onClose();
@@ -1410,7 +1271,7 @@ const ModalLecturaResumenes = ({
             <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
             <h3 className="text-base font-semibold text-white mb-1">No hay resúmenes disponibles</h3>
             <p className="text-xs text-gray-400 mb-3">
-              No se encontraron actividades con resúmenes ejecutivos para leer.
+              No se encontraron actividades con resúmenes para leer.
             </p>
             <Button onClick={handleClose} size="sm" className="bg-[#6841ea] hover:bg-[#7a4cf5] h-8 text-xs px-3">
               Cerrar
@@ -1448,32 +1309,20 @@ const ModalLecturaResumenes = ({
   const pausarReanudar = () => {
     if (speech.isPaused) {
       speech.reanudar();
-      toast({
-        title: "Reanudado",
-        description: "Continuando con la lectura",
-        duration: 2000
-      });
+      toast({ title: "Reanudado", description: "Continuando con la lectura", duration: 2000 });
     } else if (speech.isSpeaking) {
       speech.pausar();
-      toast({
-        title: "Pausado",
-        description: "Lectura pausada",
-        duration: 2000
-      });
+      toast({ title: "Pausado", description: "Lectura pausada", duration: 2000 });
     }
   };
 
   const detenerLectura = () => {
     speech.detener();
-    toast({
-      title: "Lectura detenida",
-      duration: 2000
-    });
+    toast({ title: "Lectura detenida", duration: 2000 });
   };
 
   const siguienteActividad = () => {
     speech.detener();
-
     if (actividadActual < actividades.length - 1) {
       setActividadActual(actividadActual + 1);
     } else {
@@ -1495,8 +1344,8 @@ const ModalLecturaResumenes = ({
 
   const repetirActividad = () => {
     speech.detener();
-    if (actividadAct.resumenEjecutivo) {
-      const textoALeer = `Actividad: ${actividadAct.titulo}. ${actividadAct.resumenEjecutivo.texto}`;
+    const textoALeer = obtenerTextoALeer(actividadAct);
+    if (textoALeer) {
       speech.hablar(textoALeer, velocidad);
     }
   };
@@ -1513,7 +1362,6 @@ const ModalLecturaResumenes = ({
     setActividadActual(index);
   };
 
-  // Función para obtener el índice global de una actividad
   const obtenerIndiceGlobal = (actividad: Actividad) => {
     return actividades.findIndex(a => a.actividadId === actividad.actividadId);
   };
@@ -1521,46 +1369,72 @@ const ModalLecturaResumenes = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/30">
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl w-full max-w-3xl shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-[#2a2a2a]">
           <div className="flex items-center gap-3">
             <div className={`p-1.5 ${speech.isSpeaking ? 'bg-[#6841ea]/20' : 'bg-[#1a1a1a]'} rounded-lg`}>
               <Brain className={`w-4 h-4 ${speech.isSpeaking ? 'text-[#6841ea]' : 'text-gray-500'}`} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">
-                Lectura de Resúmenes
-              </h2>
-              <p className="text-xs text-gray-400">
-                Actividad {actividadActual + 1} de {actividades.length}
-              </p>
+              <h2 className="text-base font-semibold text-white">Lectura de Resúmenes</h2>
+              <p className="text-xs text-gray-400">Actividad {actividadActual + 1} de {actividades.length}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setMostrarConfig(!mostrarConfig)}
-              className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
-            >
+            <button onClick={() => setMostrarConfig(!mostrarConfig)} className="p-1 hover:bg-[#1a1a1a] rounded-lg">
               <Settings className="w-4 h-4 text-gray-400" />
             </button>
-            <button
-              onClick={handleClose}
-              className="p-1 hover:bg-[#1a1a1a] rounded-lg transition-colors"
-            >
+            <button onClick={handleClose} className="p-1 hover:bg-[#1a1a1a] rounded-lg">
               <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="h-0.5 bg-[#1a1a1a]">
-          <div
-            className="h-full bg-[#6841ea] transition-all duration-300"
-            style={{ width: `${progreso}%` }}
-          />
+        <div className="px-3 pt-3 pb-1 border-b border-[#2a2a2a] bg-[#0d0d0d]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Leer:</span>
+            <div className="flex items-center gap-2 bg-[#1a1a1a] p-1 rounded-lg">
+              <button
+                onClick={() => setModoLectura('planeado')}
+                className={`px-3 py-1 text-[10px] rounded-md transition-colors flex items-center gap-1 ${
+                  modoLectura === 'planeado' 
+                    ? 'bg-indigo-500/20 text-indigo-400' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <FileText className="w-3 h-3" />
+                QUE SE PLANEÓ
+              </button>
+              <button
+                onClick={() => setModoLectura('ejecutado')}
+                className={`px-3 py-1 text-[10px] rounded-md transition-colors flex items-center gap-1 ${
+                  modoLectura === 'ejecutado' 
+                    ? 'bg-indigo-500/20 text-indigo-400' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Brain className="w-3 h-3" />
+                QUE SE HIZO
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2 text-[8px] text-gray-500">
+            <span className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                modoLectura === 'planeado' 
+                  ? (actividadAct.resumenPlaneado?.texto ? 'bg-green-400' : 'bg-red-400')
+                  : (actividadAct.resumenEjecutado?.texto ? 'bg-green-400' : 'bg-red-400')
+              }`} />
+              Actividad actual: {modoLectura === 'planeado' 
+                ? (actividadAct.resumenPlaneado?.texto ? 'disponible' : 'sin resumen')
+                : (actividadAct.resumenEjecutado?.texto ? 'disponible' : 'sin resumen')}
+            </span>
+          </div>
         </div>
 
-        {/* Config panel */}
+        <div className="h-0.5 bg-[#1a1a1a]">
+          <div className="h-full bg-[#6841ea] transition-all duration-300" style={{ width: `${progreso}%` }} />
+        </div>
+
         {mostrarConfig && (
           <div className="p-3 border-b border-[#2a2a2a] bg-[#111]">
             <h3 className="text-xs font-medium text-gray-300 mb-2">Configuración de voz</h3>
@@ -1582,7 +1456,6 @@ const ModalLecturaResumenes = ({
                   <span className="text-xs text-white w-12">{velocidad.toFixed(1)}x</span>
                 </div>
               </div>
-
               {speech.voces.length > 0 && (
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Voz</label>
@@ -1592,9 +1465,7 @@ const ModalLecturaResumenes = ({
                     className="w-full h-8 text-xs bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-2 text-gray-300"
                   >
                     {speech.voces.map((voz) => (
-                      <option key={voz.name} value={voz.name}>
-                        {voz.name} ({voz.lang})
-                      </option>
+                      <option key={voz.name} value={voz.name}>{voz.name} ({voz.lang})</option>
                     ))}
                   </select>
                 </div>
@@ -1603,11 +1474,8 @@ const ModalLecturaResumenes = ({
           </div>
         )}
 
-        {/* Contenido principal en dos columnas */}
         <div className="flex flex-col md:flex-row p-3 gap-3">
-          {/* Columna izquierda - Actividad actual y controles */}
           <div className="flex-1 space-y-3">
-            {/* Actividad actual */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">ACTIVIDAD ACTUAL</h3>
@@ -1616,19 +1484,46 @@ const ModalLecturaResumenes = ({
                 </span>
               </div>
               <p className="text-sm font-medium text-white mb-2">{actividadAct.titulo}</p>
-              {actividadAct.resumenEjecutivo && (
-                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3">
-                  <p className="text-xs text-gray-300 leading-relaxed">{actividadAct.resumenEjecutivo.texto}</p>
-                  {actividadAct.resumenEjecutivo.fechaGeneracion && (
-                    <p className="text-[10px] text-gray-500 mt-2 text-right">
-                      Generado: {new Date(actividadAct.resumenEjecutivo.fechaGeneracion).toLocaleString('es-MX')}
-                    </p>
+              <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3">
+                <div className="flex items-center gap-1 mb-1">
+                  {modoLectura === 'planeado' ? (
+                    <>
+                      <FileText className="w-3 h-3 text-amber-400" />
+                      <p className="text-[10px] text-amber-400 uppercase tracking-wider">QUE SE PLANEÓ</p>
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-3 h-3 text-indigo-400" />
+                      <p className="text-[10px] text-indigo-400 uppercase tracking-wider">QUE SE HIZO</p>
+                    </>
                   )}
                 </div>
-              )}
+                {modoLectura === 'planeado' ? (
+                  actividadAct.resumenPlaneado?.texto ? (
+                    <p className="text-xs text-gray-300 leading-relaxed">{actividadAct.resumenPlaneado.texto}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 italic">No hay resumen disponible</p>
+                  )
+                ) : (
+                  actividadAct.resumenEjecutado?.texto ? (
+                    <p className="text-xs text-gray-300 leading-relaxed">{actividadAct.resumenEjecutado.texto}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 italic">No hay resumen disponible</p>
+                  )
+                )}
+                {modoLectura === 'planeado' && actividadAct.resumenPlaneado?.provider && (
+                  <p className="text-[8px] text-gray-500 mt-2 text-right">
+                    Generado por: {actividadAct.resumenPlaneado.provider}
+                  </p>
+                )}
+                {modoLectura === 'ejecutado' && actividadAct.resumenEjecutado?.provider && (
+                  <p className="text-[8px] text-gray-500 mt-2 text-right">
+                    Generado por: {actividadAct.resumenEjecutado.provider}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* Estado de lectura */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</span>
@@ -1641,15 +1536,11 @@ const ModalLecturaResumenes = ({
                     Leyendo...
                   </span>
                 )}
-                {speech.isPaused && (
-                  <span className="text-xs text-yellow-400">Pausado</span>
-                )}
+                {speech.isPaused && <span className="text-xs text-yellow-400">Pausado</span>}
               </div>
               <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-2 min-h-[40px]">
                 <p className="text-xs text-gray-400">
-                  {speech.isSpeaking
-                    ? (speech.isPaused ? "Lectura pausada" : "Reproduciendo...")
-                    : "Listo para leer"}
+                  {speech.isSpeaking ? (speech.isPaused ? "Lectura pausada" : "Reproduciendo...") : "Listo para leer"}
                 </p>
               </div>
             </div>
@@ -1660,68 +1551,32 @@ const ModalLecturaResumenes = ({
               </div>
             )}
 
-            {/* Controles de navegación */}
             <div className="flex items-center justify-center gap-2">
-              <Button
-                onClick={actividadAnterior}
-                disabled={actividadActual === 0}
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-              >
+              <Button onClick={actividadAnterior} disabled={actividadActual === 0} variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50">
                 ← Anterior
               </Button>
-
-              <Button
-                onClick={repetirActividad}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]"
-                title="Repetir actividad actual"
-              >
+              <Button onClick={repetirActividad} variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a]" title="Repetir actividad actual">
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
-
-              <Button
-                onClick={pausarReanudar}
-                disabled={!speech.isSpeaking}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-              >
+              <Button onClick={pausarReanudar} disabled={!speech.isSpeaking} variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50">
                 {speech.isPaused ? <Play className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
               </Button>
-
-              <Button
-                onClick={detenerLectura}
-                disabled={!speech.isSpeaking}
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50"
-              >
+              <Button onClick={detenerLectura} disabled={!speech.isSpeaking} variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white border border-[#2a2a2a] disabled:opacity-50">
                 <StopCircle className="w-3.5 h-3.5" />
               </Button>
-
-              <Button
-                onClick={siguienteActividad}
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]"
-              >
+              <Button onClick={siguienteActividad} variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-400 hover:text-white border border-[#2a2a2a]">
                 {actividadActual < actividades.length - 1 ? 'Siguiente →' : 'Finalizar'}
               </Button>
             </div>
 
-            {/* Velocidad rápida */}
             <div className="flex items-center justify-center gap-1 pt-1">
               {[0.75, 1, 1.25, 1.5, 2].map((v) => (
                 <button
                   key={v}
                   onClick={() => cambiarVelocidad(v)}
-                  className={`px-1.5 py-0.5 text-xs rounded transition-colors ${velocidad === v
-                    ? 'bg-[#6841ea] text-white'
-                    : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
-                    }`}
+                  className={`px-1.5 py-0.5 text-xs rounded transition-colors ${
+                    velocidad === v ? 'bg-[#6841ea] text-white' : 'bg-[#1a1a1a] text-gray-400 hover:text-white border border-[#2a2a2a]'
+                  }`}
                 >
                   {v}x
                 </button>
@@ -1729,7 +1584,6 @@ const ModalLecturaResumenes = ({
             </div>
           </div>
 
-          {/* Columna derecha - Listado de actividades por fecha */}
           <div className="w-full md:w-72 lg:w-80 bg-[#111] border border-[#2a2a2a] rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-medium text-gray-300 flex items-center gap-1">
@@ -1744,24 +1598,23 @@ const ModalLecturaResumenes = ({
             <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
               {Object.entries(actividadesAgrupadas).map(([fecha, acts]) => (
                 <div key={fecha} className="space-y-1.5">
-                  {/* Separador de fecha */}
                   <div className="flex items-center gap-2 sticky top-0 bg-[#111] py-1">
                     <Calendar className="w-3 h-3 text-[#6841ea]" />
-                    <h4 className="text-[10px] font-medium text-[#6841ea] uppercase tracking-wider">
-                      {fecha}
-                    </h4>
+                    <h4 className="text-[10px] font-medium text-[#6841ea] uppercase tracking-wider">{fecha}</h4>
                     <div className="flex-1 h-px bg-gradient-to-r from-[#6841ea]/30 to-transparent" />
                     <span className="text-[8px] bg-[#1a1a1a] text-gray-500 px-1.5 py-0.5 rounded-full">
                       {acts.length} {acts.length === 1 ? 'actividad' : 'actividades'}
                     </span>
                   </div>
 
-                  {/* Actividades de esa fecha */}
                   {acts.map((act) => {
                     const indexGlobal = obtenerIndiceGlobal(act);
                     const esPasada = indexGlobal < actividadActual;
                     const esActual = indexGlobal === actividadActual;
                     const esFutura = indexGlobal > actividadActual;
+                    const tieneResumen = modoLectura === 'planeado' 
+                      ? act.resumenPlaneado?.texto 
+                      : act.resumenEjecutado?.texto;
 
                     return (
                       <motion.div
@@ -1770,73 +1623,52 @@ const ModalLecturaResumenes = ({
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: indexGlobal * 0.02 }}
                         onClick={() => irAActividad(indexGlobal)}
-                        className={`
-                          flex items-start gap-2 p-2 rounded-lg cursor-pointer
-                          transition-all duration-300 group border
-                          ${esActual
-                            ? 'bg-[#6841ea]/20 border-[#6841ea]/50 shadow-sm shadow-[#6841ea]/10'
-                            : 'hover:bg-[#1a1a1a] border-transparent hover:border-[#2a2a2a]'
-                          }
-                        `}
+                        className={`flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-all duration-300 group border ${
+                          esActual ? 'bg-[#6841ea]/20 border-[#6841ea]/50' : 'hover:bg-[#1a1a1a] border-transparent hover:border-[#2a2a2a]'
+                        } ${!tieneResumen && !esActual ? 'opacity-40' : ''}`}
                       >
-                        {/* Indicador de estado */}
                         <div className="relative mt-1">
-                          <div className={`
-                            w-2 h-2 rounded-full transition-all duration-300
-                            ${esActual ? 'bg-[#6841ea]' : ''}
-                            ${esPasada ? 'bg-gray-600' : ''}
-                            ${esFutura ? 'bg-gray-400' : ''}
-                          `} />
-                          {esActual && (
-                            <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-75" />
-                          )}
+                          <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            esActual ? 'bg-[#6841ea]' : esPasada ? 'bg-gray-600' : 'bg-gray-400'
+                          }`} />
+                          {esActual && <span className="absolute inset-0 rounded-full bg-[#6841ea] animate-ping opacity-75" />}
                         </div>
-
-                        {/* Contenido de la actividad con resumen */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1 mb-0.5">
-                            <p className={`
-                              text-xs font-medium truncate max-w-[100px] transition-all duration-300
-                              ${esPasada ? 'text-gray-500' : ''}
-                              ${esActual ? 'text-white' : 'text-gray-300'}
-                              ${esFutura ? 'text-gray-300' : ''}
-                            `}>
+                            <p className={`text-xs font-medium truncate max-w-[100px] transition-all duration-300 ${
+                              esPasada ? 'text-gray-500' : esActual ? 'text-white' : 'text-gray-300'
+                            }`}>
                               {act.titulo}
                             </p>
-                            <span className={`
-                              text-[8px] px-1 py-0.5 rounded-full whitespace-nowrap transition-all duration-300
-                              ${esPasada ? 'bg-gray-800 text-gray-500' : ''}
-                              ${esActual ? 'bg-[#6841ea]/20 text-[#6841ea]' : ''}
-                              ${esFutura ? 'bg-[#1a1a1a] text-gray-600' : ''}
-                            `}>
-                              {esPasada && 'Leída'}
-                              {esActual && 'Actual'}
-                              {esFutura && 'Pendiente'}
+                            <span className={`text-[8px] px-1 py-0.5 rounded-full whitespace-nowrap transition-all duration-300 ${
+                              esPasada ? 'bg-gray-800 text-gray-500' : esActual ? 'bg-[#6841ea]/20 text-[#6841ea]' : 'bg-[#1a1a1a] text-gray-600'
+                            }`}>
+                              {esPasada ? 'Leída' : esActual ? 'Actual' : 'Pendiente'}
                             </span>
                           </div>
-
-                          {/* Hora si está disponible */}
                           {act.horaInicio && (
-                            <span className={`
-                              text-[8px] block mb-1 transition-all duration-300
-                              ${esPasada ? 'text-gray-600' : ''}
-                              ${esActual ? 'text-gray-400' : 'text-gray-500'}
-                              ${esFutura ? 'text-gray-500' : ''}
-                            `}>
-                              🕒 {act.horaInicio.substring(0, 5)} {act.horaFin && `- ${act.horaFin.substring(0, 5)}`}
+                            <span className={`text-[8px] block mb-1 transition-all duration-300 ${
+                              esPasada ? 'text-gray-600' : esActual ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
+                              {act.horaInicio.substring(0,5)} {act.horaFin && `- ${act.horaFin.substring(0,5)}`}
                             </span>
                           )}
-
-                          {/* Resumen ejecutivo (primeros caracteres) */}
-                          {act.resumenEjecutivo && (
-                            <p className={`
-                              text-[8px] leading-tight line-clamp-2 mt-1 transition-all duration-300
-                              ${esPasada ? 'text-gray-600' : ''}
-                              ${esActual ? 'text-gray-300' : 'text-gray-400'}
-                              ${esFutura ? 'text-gray-400' : ''}
-                            `}>
-                              {act.resumenEjecutivo.texto.substring(0, 80)}...
-                            </p>
+                          {modoLectura === 'planeado' ? (
+                            act.resumenPlaneado?.texto && (
+                              <p className={`text-[8px] leading-tight line-clamp-2 mt-1 transition-all duration-300 ${
+                                esPasada ? 'text-gray-600' : esActual ? 'text-gray-300' : 'text-gray-400'
+                              }`}>
+                                {act.resumenPlaneado.texto.substring(0, 80)}...
+                              </p>
+                            )
+                          ) : (
+                            act.resumenEjecutado?.texto && (
+                              <p className={`text-[8px] leading-tight line-clamp-2 mt-1 transition-all duration-300 ${
+                                esPasada ? 'text-gray-600' : esActual ? 'text-gray-300' : 'text-gray-400'
+                              }`}>
+                                {act.resumenEjecutado.texto.substring(0, 80)}...
+                              </p>
+                            )
                           )}
                         </div>
                       </motion.div>
@@ -1852,7 +1684,7 @@ const ModalLecturaResumenes = ({
   );
 };
 
-// ==================== COMPONENTE DE LECTURA DE ACTIVIDADES (SIN TURNOS) ====================
+// ==================== COMPONENTE DE LECTURA DE ACTIVIDADES ====================
 const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
   const [expandedActividad, setExpandedActividad] = useState<string | null>(null);
 
@@ -1863,15 +1695,15 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
       ) : (
         actividades.map((actividad) => (
           <div key={actividad.actividadId} className="bg-white/[0.02] rounded-lg border border-white/5 overflow-hidden">
-            {/* Header de actividad (clickeable) */}
             <div
               onClick={() => setExpandedActividad(expandedActividad === actividad.actividadId ? null : actividad.actividadId)}
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${actividad.status === 'Completada' ? 'bg-green-400' :
-                    actividad.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'
-                  }`} />
+                <div className={`w-2 h-2 rounded-full ${
+                  actividad.status === 'Completada' ? 'bg-green-400' :
+                  actividad.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'
+                }`} />
                 <div>
                   <h3 className="text-sm font-medium text-white/90">{actividad.titulo}</h3>
                   <div className="flex items-center gap-2 text-[10px] text-white/40 mt-1">
@@ -1879,7 +1711,7 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
                     {actividad.horaInicio && (
                       <>
                         <span>•</span>
-                        <span>{actividad.horaInicio.substring(0, 5)}-{actividad.horaFin?.substring(0, 5)}</span>
+                        <span>{actividad.horaInicio.substring(0,5)}-{actividad.horaFin?.substring(0,5)}</span>
                       </>
                     )}
                     <span>•</span>
@@ -1887,21 +1719,20 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
                     {actividad.tareasConExplicacion > 0 && (
                       <>
                         <span>•</span>
-                        <span className="text-indigo-400">{actividad.tareasConExplicacion}</span>
+                        <span className="text-indigo-400">{actividad.tareasConExplicacion} IA</span>
                       </>
                     )}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {expandedActividad === actividad.actividadId ?
-                  <ChevronUp className="w-4 h-4 text-white/40" /> :
+                {expandedActividad === actividad.actividadId ? 
+                  <ChevronUp className="w-4 h-4 text-white/40" /> : 
                   <ChevronDown className="w-4 h-4 text-white/40" />
                 }
               </div>
             </div>
 
-            {/* Tareas expandidas */}
             <AnimatePresence>
               {expandedActividad === actividad.actividadId && (
                 <motion.div
@@ -1914,18 +1745,19 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
                   <div className="p-3 space-y-2 bg-white/[0.01]">
                     {actividad.tareas.map((tarea, index) => (
                       <div key={tarea.pendienteId} className="space-y-1">
-                        {/* Header de la tarea - más compacto */}
                         <div className="flex items-center gap-1.5 px-2">
-                          <span className={`w-4 h-4 rounded flex items-center justify-center text-[8px] font-medium ${tarea.terminada ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                            }`}>
+                          <span className={`w-4 h-4 rounded flex items-center justify-center text-[8px] font-medium ${
+                            tarea.terminada ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                          }`}>
                             {index + 1}
                           </span>
                           <span className="text-[11px] font-medium text-white/80 truncate max-w-[200px]">{tarea.nombre}</span>
                           {tarea.prioridad && (
-                            <span className={`text-[7px] px-1 py-0.5 rounded ${tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
-                                tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
-                                  'bg-blue-500/10 text-blue-400'
-                              }`}>
+                            <span className={`text-[7px] px-1 py-0.5 rounded ${
+                              tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
+                              tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                              'bg-blue-500/10 text-blue-400'
+                            }`}>
                               {tarea.prioridad}
                             </span>
                           )}
@@ -1937,9 +1769,7 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
                           )}
                         </div>
 
-                        {/* Grid tipo tabla - más compacto */}
                         <div className="grid grid-cols-2 gap-2 pl-6">
-                          {/* Columna QUE SE HARÁ */}
                           <div className="bg-white/[0.02] rounded-md p-2 border border-white/5">
                             <div className="flex items-center gap-1 mb-1">
                               <span className="text-[8px] font-medium text-white/40 uppercase tracking-wider">QUE SE HARÁ</span>
@@ -1954,11 +1784,11 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
                             )}
                           </div>
 
-                          {/* Columna QUE SE HIZO */}
-                          <div className={`rounded-md p-2 border ${tarea.explicacionActual
-                              ? 'bg-indigo-500/[0.02] border-indigo-500/20'
+                          <div className={`rounded-md p-2 border ${
+                            tarea.explicacionActual 
+                              ? 'bg-indigo-500/[0.02] border-indigo-500/20' 
                               : 'bg-white/[0.01] border-white/5'
-                            }`}>
+                          }`}>
                             <div className="flex items-center gap-1 mb-1">
                               <span className="text-[8px] font-medium text-white/40 uppercase tracking-wider">QUE SE HIZO</span>
                               {tarea.explicacionActual && <Brain className="w-2.5 h-2.5 text-indigo-400/60" />}
@@ -1986,7 +1816,6 @@ const LecturaActividades = ({ actividades }: { actividades: Actividad[] }) => {
                           </div>
                         </div>
 
-                        {/* Separador más delgado entre tareas */}
                         {index < actividad.tareas.length - 1 && (
                           <div className="border-t border-white/5 my-2" />
                         )}
@@ -2018,39 +1847,26 @@ export default function PanelAdminActividades() {
     cargarActividades,
   } = useActividadesData();
 
-  // ============ ESTADOS DE FILTROS POR TAB ============
-  // Tab Colaboradores
+  // Estados de filtros
   const [filtroColaborador, setFiltroColaborador] = useState<string>("todos");
   const [busquedaColaborador, setBusquedaColaborador] = useState("");
-
-  // Tab Actividades
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [busquedaTexto, setBusquedaTexto] = useState<string>("");
   const [filtroTareasConIA, setFiltroTareasConIA] = useState<boolean>(false);
-
-  // Tab Fechas
   const [filtroFecha, setFiltroFecha] = useState<string>("hoy");
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const [fechaFin, setFechaFin] = useState<string>("");
   const [fechaExacta, setFechaExacta] = useState<string>("");
-
-  // Ordenamiento
   const [ordenarPor, setOrdenarPor] = useState<string>("fecha");
   const [ordenAsc, setOrdenAsc] = useState<boolean>(false);
-
-  // Estado para la actividad seleccionada (detalle)
   const [actividadSeleccionada, setActividadSeleccionada] = useState<Actividad | null>(null);
-
-  // Estados para modales de lectura
   const [modalLecturaAbierto, setModalLecturaAbierto] = useState(false);
   const [modalLecturaVivoAbierto, setModalLecturaVivoAbierto] = useState(false);
   const [modalLecturaResumenesAbierto, setModalLecturaResumenesAbierto] = useState(false);
   const [actividadParaLectura, setActividadParaLectura] = useState<Actividad | null>(null);
   const [tareasParaLectura, setTareasParaLectura] = useState<Tarea[]>([]);
   const [actividadResumenSeleccionada, setActividadResumenSeleccionada] = useState<string | null>(null);
-
-  // Estado para el tab activo en el aside
-  const [tabActivo, setTabActivo] = useState<"colaboradores" | "actividades" | "fechas">("actividades");
+  const [tabActivo, setTabActivo] = useState<"colaboradores" | "actividades">("colaboradores");
 
   const fechaActual = new Date().toISOString().split("T")[0];
 
@@ -2106,13 +1922,18 @@ export default function PanelAdminActividades() {
   };
 
   const iniciarLecturaResumenActividad = (actividad: Actividad) => {
-    if (!actividad.resumenEjecutivo?.texto) {
-      toast({ title: "No hay resumen disponible", description: "Esta actividad no tiene resumen ejecutivo", variant: "destructive", duration: 3000 });
+    if (!actividad.resumenPlaneado?.texto && !actividad.resumenEjecutado?.texto) {
+      toast({
+        title: "No hay resúmenes disponibles",
+        description: "Esta actividad no tiene resúmenes generados",
+        variant: "destructive",
+        duration: 3000
+      });
       return;
     }
     setActividadResumenSeleccionada(actividad.actividadId);
     setModalLecturaResumenesAbierto(true);
-    toast({ title: "Leyendo resumen", description: actividad.titulo, duration: 3000 });
+    toast({ title: "Leyendo resúmenes", description: actividad.titulo, duration: 3000 });
   };
 
   const iniciarLecturaConfirmada = (tareasSeleccionadas: Tarea[]) => {
@@ -2141,20 +1962,13 @@ export default function PanelAdminActividades() {
     return Array.from(status).sort();
   }, [actividades]);
 
-  // ============ LÓGICA DE FILTRADO ============
   const actividadesFiltradas = useMemo(() => {
     if (!actividades) return [];
-
     return actividades.filter(act => {
-      // Filtro por colaborador
       if (filtroColaborador !== "todos") {
         if (!act.colaboradores?.includes(filtroColaborador)) return false;
       }
-
-      // Filtro por status
       if (filtroStatus !== "todos" && act.status !== filtroStatus) return false;
-
-      // Filtro por búsqueda de texto
       if (busquedaTexto) {
         const t = busquedaTexto.toLowerCase();
         if (!act.titulo.toLowerCase().includes(t) &&
@@ -2164,13 +1978,9 @@ export default function PanelAdminActividades() {
             (ta.explicacionActual?.texto.toLowerCase().includes(t))
           )) return false;
       }
-
-      // Filtro por tareas con IA
       if (filtroTareasConIA) {
         if (act.tareasConExplicacion === 0) return false;
       }
-
-      // Filtro por fecha
       if (filtroFecha === "exacta" && fechaExacta) {
         if (act.fecha !== fechaExacta) return false;
       } else {
@@ -2219,21 +2029,19 @@ export default function PanelAdminActividades() {
   }, [actividadesFiltradas, ordenarPor, ordenAsc]);
 
   const limpiarFiltrosTab = () => {
-    switch (tabActivo) {
+    switch(tabActivo) {
       case "colaboradores":
         setFiltroColaborador("todos");
         setBusquedaColaborador("");
+        setFiltroFecha("hoy");
+        setFechaInicio("");
+        setFechaFin("");
+        setFechaExacta("");
         break;
       case "actividades":
         setFiltroStatus("todos");
         setBusquedaTexto("");
         setFiltroTareasConIA(false);
-        break;
-      case "fechas":
-        setFiltroFecha("hoy");
-        setFechaInicio("");
-        setFechaFin("");
-        setFechaExacta("");
         break;
     }
     toast({ title: "Filtros limpiados", description: `Filtros de ${tabActivo} restablecidos`, duration: 2000 });
@@ -2261,7 +2069,6 @@ export default function PanelAdminActividades() {
 
   return (
     <div className="min-h-screen bg-[#222121] font-sans antialiased">
-      {/* Modales */}
       <ModalConfirmacionLectura
         isOpen={modalLecturaAbierto}
         onClose={() => setModalLecturaAbierto(false)}
@@ -2288,7 +2095,6 @@ export default function PanelAdminActividades() {
         actividadId={actividadResumenSeleccionada}
       />
 
-      {/* Header superior */}
       <header className="sticky top-0 z-40 bg-[#0a0a0a]/10 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-3">
           <div className="flex items-center justify-between">
@@ -2311,9 +2117,9 @@ export default function PanelAdminActividades() {
               >
                 <Brain className="w-3.5 h-3.5" />
                 <span>Resúmenes IA</span>
-                {actividades.filter(act => act.resumenEjecutivo?.texto).length > 0 && (
+                {actividades.filter(act => act.resumenPlaneado?.texto || act.resumenEjecutado?.texto).length > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] bg-purple-500/20 text-purple-300 rounded-full">
-                    {actividades.filter(act => act.resumenEjecutivo?.texto).length}
+                    {actividades.filter(act => act.resumenPlaneado?.texto || act.resumenEjecutado?.texto).length}
                   </span>
                 )}
               </button>
@@ -2350,17 +2156,13 @@ export default function PanelAdminActividades() {
         </div>
       </header>
 
-      {/* Layout principal: 2 columnas */}
       <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="flex gap-6">
-          {/* Sidebar izquierdo - con pestañas */}
           <aside className="w-80 bg-[#1a1a1a] p-4 rounded-2xl flex-shrink-0">
-            {/* Pestañas */}
             <div className="flex border-b border-white/5 mb-5">
               <button
                 onClick={() => setTabActivo("colaboradores")}
-                className={`flex-1 pb-2 text-xs font-medium transition-colors relative ${tabActivo === "colaboradores" ? "text-indigo-400" : "text-white/40 hover:text-white/60"
-                  }`}
+                className={`flex-1 pb-2 text-xs font-medium transition-colors relative ${tabActivo === "colaboradores" ? "text-indigo-400" : "text-white/40 hover:text-white/60"}`}
               >
                 Colaboradores
                 {tabActivo === "colaboradores" && (
@@ -2369,27 +2171,15 @@ export default function PanelAdminActividades() {
               </button>
               <button
                 onClick={() => setTabActivo("actividades")}
-                className={`flex-1 pb-2 text-xs font-medium transition-colors relative ${tabActivo === "actividades" ? "text-indigo-400" : "text-white/40 hover:text-white/60"
-                  }`}
+                className={`flex-1 pb-2 text-xs font-medium transition-colors relative ${tabActivo === "actividades" ? "text-indigo-400" : "text-white/40 hover:text-white/60"}`}
               >
                 Actividades
                 {tabActivo === "actividades" && (
                   <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400" initial={false} transition={{ type: "spring", stiffness: 500, damping: 30 }} />
                 )}
               </button>
-              <button
-                onClick={() => setTabActivo("fechas")}
-                className={`flex-1 pb-2 text-xs font-medium transition-colors relative ${tabActivo === "fechas" ? "text-indigo-400" : "text-white/40 hover:text-white/60"
-                  }`}
-              >
-                Fechas
-                {tabActivo === "fechas" && (
-                  <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-400" initial={false} transition={{ type: "spring", stiffness: 500, damping: 30 }} />
-                )}
-              </button>
             </div>
 
-            {/* Contenido según pestaña activa */}
             {tabActivo === "colaboradores" && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -2399,6 +2189,7 @@ export default function PanelAdminActividades() {
                   </div>
                   <span className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-full">{colaboradoresUnicos.length}</span>
                 </div>
+
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
                   <input
@@ -2409,10 +2200,10 @@ export default function PanelAdminActividades() {
                     className="w-full pl-8 pr-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 placeholder:text-white/20 focus:outline-none focus:bg-white/10 transition-colors"
                   />
                 </div>
+
                 <button
                   onClick={() => setFiltroColaborador('todos')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${filtroColaborador === 'todos' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
-                    }`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${filtroColaborador === 'todos' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
                 >
                   <div className="w-7 h-7 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-lg flex items-center justify-center">
                     <Users className="w-3.5 h-3.5" />
@@ -2423,7 +2214,8 @@ export default function PanelAdminActividades() {
                   </div>
                   {filtroColaborador === 'todos' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                 </button>
-                <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+
+                <div className="grid grid-cols-2 gap-2 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar">
                   {colaboradoresUnicos
                     .filter(email => email.toLowerCase().includes(busquedaColaborador.toLowerCase()))
                     .map(email => {
@@ -2442,8 +2234,7 @@ export default function PanelAdminActividades() {
                         <button
                           key={email}
                           onClick={() => setFiltroColaborador(email)}
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all group ${filtroColaborador === email ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
-                            }`}
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all group ${filtroColaborador === email ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
                         >
                           <div className={`w-6 h-6 bg-gradient-to-br ${colorClasses[colorIndex]} rounded-lg flex items-center justify-center text-xs font-medium flex-shrink-0`}>
                             {inicial}
@@ -2462,6 +2253,63 @@ export default function PanelAdminActividades() {
                       );
                     })}
                 </div>
+
+                <div className="border-t border-white/5 my-2"></div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-white/60" />
+                    <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">Filtrar por fecha</h3>
+                  </div>
+                  <div className="space-y-1">
+                    {[
+                      { value: 'hoy', label: 'Hoy', icon: Sun },
+                      { value: 'ayer', label: 'Ayer', icon: Calendar },
+                      { value: 'ultima_semana', label: 'Última semana', icon: CalendarDays },
+                      { value: 'ultimo_mes', label: 'Último mes', icon: CalendarRange },
+                      { value: 'todos', label: 'Todas las fechas', icon: HistoryIcon }
+                    ].map((opcion) => {
+                      const Icono = opcion.icon;
+                      return (
+                        <button
+                          key={opcion.value}
+                          onClick={() => { setFiltroFecha(opcion.value); setFechaExacta(""); }}
+                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${filtroFecha === opcion.value ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
+                        >
+                          <Icono className="w-3.5 h-3.5" />
+                          <span className="text-sm">{opcion.label}</span>
+                          {filtroFecha === opcion.value && <Check className="w-3.5 h-3.5 text-indigo-400 ml-auto" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-2 border-t border-white/5">
+                    <h4 className="text-xs font-medium text-white/40 mb-2">Fecha exacta</h4>
+                    <input
+                      type="date"
+                      value={fechaExacta}
+                      onChange={(e) => { setFechaExacta(e.target.value); setFiltroFecha("exacta"); }}
+                      className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                  <div className="pt-2 border-t border-white/5">
+                    <h4 className="text-xs font-medium text-white/40 mb-2">Rango personalizado</h4>
+                    <div className="space-y-2">
+                      <input
+                        type="date"
+                        value={fechaInicio}
+                        onChange={(e) => { setFechaInicio(e.target.value); setFiltroFecha("rango"); setFechaExacta(""); }}
+                        className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
+                      />
+                      <input
+                        type="date"
+                        value={fechaFin}
+                        onChange={(e) => { setFechaFin(e.target.value); setFiltroFecha("rango"); setFechaExacta(""); }}
+                        className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -2470,9 +2318,11 @@ export default function PanelAdminActividades() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-white/60" />
-                    <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">Filtros de actividades</h3>
+                    <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">Actividades</h3>
                   </div>
-                  <span className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-full">{actividadesFiltradas.length}</span>
+                  <span className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-full">
+                    {actividades.length}
+                  </span>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
@@ -2489,8 +2339,7 @@ export default function PanelAdminActividades() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setFiltroStatus('todos')}
-                      className={`px-2 py-1 text-[10px] rounded-full transition-colors ${filtroStatus === 'todos' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
-                        }`}
+                      className={`px-2 py-1 text-[10px] rounded-full transition-colors ${filtroStatus === 'todos' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
                     >
                       Todos
                     </button>
@@ -2498,8 +2347,7 @@ export default function PanelAdminActividades() {
                       <button
                         key={status}
                         onClick={() => setFiltroStatus(status)}
-                        className={`px-2 py-1 text-[10px] rounded-full transition-colors ${filtroStatus === status ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
-                          }`}
+                        className={`px-2 py-1 text-[10px] rounded-full transition-colors ${filtroStatus === status ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
                       >
                         {status}
                       </button>
@@ -2518,65 +2366,6 @@ export default function PanelAdminActividades() {
               </div>
             )}
 
-            {tabActivo === "fechas" && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-white/60" />
-                  <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">Período</h3>
-                </div>
-                <div className="space-y-1">
-                  {[
-                    { value: 'hoy', label: 'Hoy', icon: Sun },
-                    { value: 'ayer', label: 'Ayer', icon: Calendar },
-                    { value: 'ultima_semana', label: 'Última semana', icon: CalendarDays },
-                    { value: 'ultimo_mes', label: 'Último mes', icon: CalendarRange },
-                    { value: 'todos', label: 'Todas las fechas', icon: HistoryIcon }
-                  ].map((opcion) => {
-                    const Icono = opcion.icon;
-                    return (
-                      <button
-                        key={opcion.value}
-                        onClick={() => { setFiltroFecha(opcion.value); setFechaExacta(""); }}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${filtroFecha === opcion.value ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
-                          }`}
-                      >
-                        <Icono className="w-3.5 h-3.5" />
-                        <span className="text-sm">{opcion.label}</span>
-                        {filtroFecha === opcion.value && <Check className="w-3.5 h-3.5 text-indigo-400 ml-auto" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="pt-3 border-t border-white/5">
-                  <h4 className="text-xs font-medium text-white/40 mb-2">Fecha exacta</h4>
-                  <input
-                    type="date"
-                    value={fechaExacta}
-                    onChange={(e) => { setFechaExacta(e.target.value); setFiltroFecha("exacta"); }}
-                    className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
-                  />
-                </div>
-                <div className="pt-3 border-t border-white/5">
-                  <h4 className="text-xs font-medium text-white/40 mb-2">Rango personalizado</h4>
-                  <div className="space-y-2">
-                    <input
-                      type="date"
-                      value={fechaInicio}
-                      onChange={(e) => { setFechaInicio(e.target.value); setFiltroFecha("rango"); setFechaExacta(""); }}
-                      className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
-                    />
-                    <input
-                      type="date"
-                      value={fechaFin}
-                      onChange={(e) => { setFechaFin(e.target.value); setFiltroFecha("rango"); setFechaExacta(""); }}
-                      className="w-full px-3 py-2 text-xs bg-white/5 rounded-lg text-white/60 border border-white/10 focus:outline-none focus:border-indigo-500/50"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Botones de limpiar filtros */}
             <div className="mt-4 space-y-2">
               <button
                 onClick={limpiarFiltrosTab}
@@ -2594,10 +2383,9 @@ export default function PanelAdminActividades() {
               </button>
             </div>
 
-            {/* Lista de actividades */}
             <div className="mt-6 pt-4 border-t border-white/5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">Lista de actividades</h3>
+                <h3 className="text-xs font-medium text-white/60 uppercase tracking-wider">Actividades filtradas</h3>
                 <span className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-full">{actividadesFiltradas.length}</span>
               </div>
               <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
@@ -2605,17 +2393,15 @@ export default function PanelAdminActividades() {
                   <button
                     key={act.actividadId}
                     onClick={() => setActividadSeleccionada(act)}
-                    className={`w-full text-left p-3 rounded-lg transition-all ${actividadSeleccionada?.actividadId === act.actividadId ? 'bg-indigo-500/20 border border-indigo-500/30' : 'hover:bg-white/5 border border-transparent'
-                      }`}
+                    className={`w-full text-left p-3 rounded-lg transition-all ${actividadSeleccionada?.actividadId === act.actividadId ? 'bg-indigo-500/20 border border-indigo-500/30' : 'hover:bg-white/5 border border-transparent'}`}
                   >
                     <div className="flex items-start gap-2">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 ${act.status === 'Completada' ? 'bg-green-400' : act.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'
-                        }`} />
+                      <div className={`w-2 h-2 rounded-full mt-1.5 ${act.status === 'Completada' ? 'bg-green-400' : act.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white/90 truncate">{act.titulo}</p>
                         <div className="flex items-center gap-2 text-[10px] text-white/40 mt-1">
                           <span>{act.fecha}</span>
-                          {act.horaInicio && <><span>•</span><span>{act.horaInicio.substring(0, 5)}</span></>}
+                          {act.horaInicio && <><span>•</span><span>{act.horaInicio.substring(0,5)}</span></>}
                           <span>•</span>
                           <span>{act.totalTareas} tareas</span>
                           {act.tareasConExplicacion > 0 && <><span>•</span><span className="text-indigo-400">{act.tareasConExplicacion} IA</span></>}
@@ -2641,7 +2427,6 @@ export default function PanelAdminActividades() {
             </div>
           </aside>
 
-          {/* Panel derecho */}
           <main className="flex-1">
             <AnimatePresence mode="wait">
               {actividadSeleccionada ? (
@@ -2653,18 +2438,17 @@ export default function PanelAdminActividades() {
                   transition={{ duration: 0.2 }}
                   className="space-y-4"
                 >
-                  {/* Cabecera del detalle */}
                   <div className="flex items-center justify-between">
                     <button onClick={volverALista} className="flex items-center gap-2 text-xs text-white/40 hover:text-white/60 transition-colors">
                       <ArrowLeft className="w-4 h-4" />
                       Volver a lista
                     </button>
                     <div className="flex items-center gap-2">
-                      {actividadSeleccionada.resumenEjecutivo?.texto && (
+                      {(actividadSeleccionada.resumenPlaneado?.texto || actividadSeleccionada.resumenEjecutado?.texto) && (
                         <button
                           onClick={() => iniciarLecturaResumenActividad(actividadSeleccionada)}
                           className="p-1.5 text-purple-400/60 hover:text-purple-400 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                          title="Leer resumen IA"
+                          title="Leer resúmenes IA"
                         >
                           <Brain className="w-4 h-4" />
                         </button>
@@ -2672,8 +2456,7 @@ export default function PanelAdminActividades() {
                       <button
                         onClick={() => abrirConfirmacionLectura(actividadSeleccionada)}
                         disabled={actividadSeleccionada.tareasConExplicacion === 0}
-                        className={`p-1.5 rounded-lg transition-colors ${actividadSeleccionada.tareasConExplicacion > 0 ? 'text-indigo-400/60 hover:text-indigo-400 bg-white/5 hover:bg-white/10' : 'text-white/10 cursor-not-allowed'
-                          }`}
+                        className={`p-1.5 rounded-lg transition-colors ${actividadSeleccionada.tareasConExplicacion > 0 ? 'text-indigo-400/60 hover:text-indigo-400 bg-white/5 hover:bg-white/10' : 'text-white/10 cursor-not-allowed'}`}
                         title="Leer tareas con explicación"
                       >
                         <Volume2 className="w-4 h-4" />
@@ -2681,18 +2464,16 @@ export default function PanelAdminActividades() {
                     </div>
                   </div>
 
-                  {/* Tarjeta de actividad en detalle */}
                   <div className="bg-white/[0.02] rounded-xl p-6 border border-white/5">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className={`w-3 h-3 rounded-full ${actividadSeleccionada.status === 'Completada' ? 'bg-green-400' : actividadSeleccionada.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'
-                        }`} />
+                      <div className={`w-3 h-3 rounded-full ${actividadSeleccionada.status === 'Completada' ? 'bg-green-400' : actividadSeleccionada.status === 'En progreso' ? 'bg-yellow-400' : 'bg-gray-400'}`} />
                       <span className="text-xs text-white/40">{actividadSeleccionada.fecha}</span>
                       {actividadSeleccionada.horaInicio && (
                         <>
                           <span className="text-xs text-white/20">•</span>
                           <span className="text-xs text-white/40">
-                            {actividadSeleccionada.horaInicio.substring(0, 5)}
-                            {actividadSeleccionada.horaFin && ` - ${actividadSeleccionada.horaFin.substring(0, 5)}`}
+                            {actividadSeleccionada.horaInicio.substring(0,5)}
+                            {actividadSeleccionada.horaFin && ` - ${actividadSeleccionada.horaFin.substring(0,5)}`}
                           </span>
                         </>
                       )}
@@ -2700,23 +2481,27 @@ export default function PanelAdminActividades() {
 
                     <h2 className="text-xl font-semibold text-white/90 mb-4">{actividadSeleccionada.titulo}</h2>
 
-                    {/* Resumen ejecutivo si existe */}
-                    {actividadSeleccionada.resumenEjecutivo && (
+                    {(actividadSeleccionada.resumenPlaneado?.texto || actividadSeleccionada.resumenEjecutado?.texto) && (
                       <div className="mb-6 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg">
                         <div className="flex items-center gap-2 mb-2">
                           <Brain className="w-4 h-4 text-purple-400" />
-                          <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider">Resumen ejecutivo</h3>
+                          <h3 className="text-xs font-medium text-purple-400 uppercase tracking-wider">Resúmenes IA</h3>
                         </div>
-                        <p className="text-sm text-white/70 leading-relaxed">{actividadSeleccionada.resumenEjecutivo.texto}</p>
-                        {actividadSeleccionada.resumenEjecutivo.fechaGeneracion && (
-                          <p className="text-[10px] text-white/30 mt-2 text-right">
-                            Generado: {new Date(actividadSeleccionada.resumenEjecutivo.fechaGeneracion).toLocaleString('es-MX')}
-                          </p>
+                        {actividadSeleccionada.resumenPlaneado?.texto && (
+                          <div className="mb-3">
+                            <p className="text-[10px] text-amber-400 mb-1">QUE SE PLANEÓ:</p>
+                            <p className="text-sm text-white/70 leading-relaxed">{actividadSeleccionada.resumenPlaneado.texto}</p>
+                          </div>
+                        )}
+                        {actividadSeleccionada.resumenEjecutado?.texto && (
+                          <div>
+                            <p className="text-[10px] text-indigo-400 mb-1">QUE SE HIZO:</p>
+                            <p className="text-sm text-white/70 leading-relaxed">{actividadSeleccionada.resumenEjecutado.texto}</p>
+                          </div>
                         )}
                       </div>
                     )}
 
-                    {/* Lista de tareas */}
                     <h3 className="text-sm font-medium text-white/40 uppercase tracking-wider mb-3">
                       Tareas ({actividadSeleccionada.tareas.length})
                     </h3>
@@ -2731,8 +2516,7 @@ export default function PanelAdminActividades() {
                           className="bg-white/[0.02] rounded-lg p-4 border border-white/5 hover:border-white/10 transition-colors"
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-medium ${tarea.terminada ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                              }`}>
+                            <div className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-medium ${tarea.terminada ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                               {index + 1}
                             </div>
                             <div className="flex-1">
@@ -2740,9 +2524,8 @@ export default function PanelAdminActividades() {
                                 <span className="text-sm font-medium text-white/90">{tarea.nombre}</span>
                                 {tarea.prioridad && (
                                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${tarea.prioridad === 'ALTA' ? 'bg-red-500/10 text-red-400' :
-                                      tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
-                                        'bg-blue-500/10 text-blue-400'
-                                    }`}>
+                                    tarea.prioridad === 'MEDIA' ? 'bg-yellow-500/10 text-yellow-400' :
+                                    'bg-blue-500/10 text-blue-400'}`}>
                                     {tarea.prioridad}
                                   </span>
                                 )}
@@ -2781,7 +2564,6 @@ export default function PanelAdminActividades() {
                       ))}
                     </div>
 
-                    {/* Colaboradores */}
                     {actividadSeleccionada.colaboradores && actividadSeleccionada.colaboradores.length > 0 && (
                       <div className="mt-6 pt-4 border-t border-white/5">
                         <h4 className="text-xs font-medium text-white/40 mb-2">Colaboradores</h4>
